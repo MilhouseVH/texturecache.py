@@ -2091,6 +2091,8 @@ def loadConfig():
 
 def checkConfig(option):
 
+  jsonNeedVersion = 6
+
   if option in ["c","C"]:
     needWeb = True
   else:
@@ -2107,6 +2109,7 @@ def checkConfig(option):
     needDb = False
 
   gotWeb = gotSocket = gotDb = False
+  jsonGotVersion = 0
 
   if needWeb:
     try:
@@ -2137,13 +2140,18 @@ def checkConfig(option):
   if needSocket:
     try:
       jcomms = MyJSONComms(gConfig, gProgress)
-      REQUEST = {}
-      REQUEST["jsonrpc"] = "2.0"
-      REQUEST["method"] = "JSONRPC.Ping"
-      REQUEST["id"] =  "libPing"
+      REQUEST = {"method": "JSONRPC.Ping"}
       data = jcomms.sendJSON(REQUEST, "libPing", timeout=7.5, checkResult=False)
       if "result" in data and data["result"] == "pong":
         gotSocket = True
+
+      REQUEST = {"method": "JSONRPC.Version"}
+      data = jcomms.sendJSON(REQUEST, "libVersion", timeout=7.5, checkResult=False)
+      if "result" in data:
+        if "version" in data["result"]:
+          jsonGotVersion = data["result"]["version"]
+          if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
+            jsonGotVersion = jsonGotVersion["major"]
     except socket.error:
       pass
 
@@ -2154,7 +2162,15 @@ def checkConfig(option):
           "       %s:%s\n\n" \
           "       Check settings in properties file texturecache.cfg" % (gConfig.XBMC_HOST, gConfig.RPC_PORT)
     gProgress.errout(MSG, newLine=True)
-    sys.exit(2)
+    return False
+
+  if needSocket and jsonGotVersion  < jsonNeedVersion :
+    MSG = "FATAL: The task you wish to perform requires that a JSON-RPC server with\n" \
+          "       version %d or above of the XBMC JSON-RPC API is provided.\n\n" \
+          "       The JSON-RPC API version of the connected server is: %d (0 means unknown)\n\n" \
+          "       Check settings in properties file texturecache.cfg" % (jsonNeedVersion, jsonGotVersion)
+    gProgress.errout(MSG, newLine=True)
+    return False
 
   if needDb:
     try:
@@ -2175,8 +2191,9 @@ def checkConfig(option):
           "       %s\n\n" \
           "       Check settings in properties file texturecache.cfg" % gConfig.getDBPath()
     gProgress.errout(MSG, newLine=True)
-    sys.exit(2)
+    return False
 
+  return True
 
 def main(argv):
 
@@ -2184,7 +2201,7 @@ def main(argv):
 
   if len(argv) == 0: usage(1)
 
-  checkConfig(argv[0])
+  if not checkConfig(argv[0]): sys.exit(2)
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")
