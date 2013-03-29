@@ -117,6 +117,11 @@
 #
 # Changelog:
 #
+#  Version 0.3.2 - 29/03/2013
+#  * Return large data objects for garbage collection
+#  * Disabled logging of "Duplicate" items - can be
+#    excessive, and rarely useful.
+#
 #  Version 0.3.1 - 28/03/2013
 #  * Changed cache options (c and C) to be muli-threaded.
 #    Increase number of download threads by modifying
@@ -271,7 +276,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.1"
+    self.VERSION="0.3.2"
 
     config = ConfigParser.SafeConfigParser(defaults={
                                             "format": "%%06d",
@@ -306,7 +311,13 @@ class MyConfiguration(object):
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
-    self.FILENAME = os.path.dirname(__file__) + "/texturecache.cfg"
+    self.CONFIG_NAME = "texturecache.cfg"
+
+    # Try and find a config file in current directory, else look in
+    # same directory as script itself
+    self.FILENAME = "%s%s%s" % (os.getcwd(), os.sep, self.CONFIG_NAME)
+    if not os.path.exists(self.FILENAME):
+      self.FILENAME = "%s%s%s" % (os.path.dirname(__file__), os.sep, self.CONFIG_NAME)
 
     cfg = StringIO.StringIO()
     cfg.write("[xbmc]\n")
@@ -741,6 +752,8 @@ class MyJSONComms(object):
     except socket.timeout:
       self.progress.log("** iotimeout occurred during web request **")
       self.WEB_LAST_STATUS = httplib.REQUEST_TIMEOUT
+      self.myweb.close()
+      self.myweb = None
       return ""
     except:
       if self.config.WEB_SINGLESHOT == False:
@@ -1256,6 +1269,10 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
 
   parseURLData(jcomms, mediatype, mediaitems, imagecache, data["result"][section_name], title_name, id_name)
 
+  # Don't need this data anymore, make it available for garbage collection
+  del data
+  del imagecache
+
   gProgress.errout("Loading database items...")
   dbfiles = {}
   with database:
@@ -1300,6 +1317,9 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
       elif itemCount == ITEMLIMIT:
         gProgress.errout("...and many more! (First %d items shown)" % ITEMLIMIT, newLine=True)
 
+  # Don't need this data anymore, make it available for garbage collection
+  del dbfiles
+
   if nodownload:
     TOTALS.addNotCached()
     for item in mediaitems:
@@ -1319,6 +1339,9 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
       if item.status == 1:
         gProgress.log("QUEUE ITEM: %s" % item)
         work_queue.put(item)
+
+    # Don't need this data anymore, make it available for garbage collection
+    del mediaitems
 
     tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
     THREADCOUNT = tCount if tCount <= itemCount else itemCount
@@ -1434,7 +1457,6 @@ def evaluateURL(imgtype, url, imagecache):
   if url in imagecache:
     TOTALS.bump("Duplicate", imgtype)
     imagecache[url] += 1
-    gProgress.log("DUPLICATE ITEM [%d]: %s, %s" % (imagecache[url], imgtype, url))
     return False
 
   if gConfig.CACHE_IGNORE_TYPES:
@@ -2043,7 +2065,7 @@ def showConfig(EXIT_CODE):
     for i in gConfig.CACHE_IGNORE_TYPES: t.append(i.pattern)
     ignore_types = ", ".join(t)
 
-  print "Current properties (if exists, read from %s%stexturecache.cfg):" % (os.path.dirname(__file__), os.sep)
+  print "Current properties (if exists, read from %s%s%s):" % (os.path.dirname(__file__), os.sep, gConfig.CONFIG_NAME)
   print
   print "  sep = %s" % gConfig.FSEP
   print "  userdata = %s " % gConfig.XBMC_BASE
@@ -2133,7 +2155,7 @@ def checkConfig(option):
           "       enabled and running on the XBMC system you wish to connect.\n\n" \
           "       A connection cannot be established to the following webserver:\n" \
           "       %s:%s\n\n" \
-          "       Check settings in properties file texturecache.cfg" % (gConfig.XBMC_HOST, gConfig.WEB_PORT)
+          "       Check settings in properties file %s" % (gConfig.XBMC_HOST, gConfig.WEB_PORT, gConfig.CONFIG_NAME)
     gProgress.errout(MSG, newLine=True)
     sys.exit(2)
 
@@ -2160,7 +2182,7 @@ def checkConfig(option):
           "       enabled and running on the XBMC system you wish to connect.\n\n" \
           "       A connection cannot be established to the following JSON-RPC server:\n" \
           "       %s:%s\n\n" \
-          "       Check settings in properties file texturecache.cfg" % (gConfig.XBMC_HOST, gConfig.RPC_PORT)
+          "       Check settings in properties file %s" % (gConfig.XBMC_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
     gProgress.errout(MSG, newLine=True)
     return False
 
@@ -2168,7 +2190,7 @@ def checkConfig(option):
     MSG = "FATAL: The task you wish to perform requires that a JSON-RPC server with\n" \
           "       version %d or above of the XBMC JSON-RPC API is provided.\n\n" \
           "       The JSON-RPC API version of the connected server is: %d (0 means unknown)\n\n" \
-          "       Check settings in properties file texturecache.cfg" % (jsonNeedVersion, jsonGotVersion)
+          "       Check settings in properties file %s" % (jsonNeedVersion, jsonGotVersion, gConfig.CONFIG_NAME)
     gProgress.errout(MSG, newLine=True)
     return False
 
@@ -2189,7 +2211,7 @@ def checkConfig(option):
           "       access to the XBMC sqlite3 Texture Cache database.\n\n" \
           "       The following sqlite3 database could not be opened:\n" \
           "       %s\n\n" \
-          "       Check settings in properties file texturecache.cfg" % gConfig.getDBPath()
+          "       Check settings in properties file %s" % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
     gProgress.errout(MSG, newLine=True)
     return False
 
