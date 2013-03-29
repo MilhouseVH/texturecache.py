@@ -1089,6 +1089,8 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
     for item in mediaitems:
       if item.status == 1: TOTALS.bump("Not in Cache", item.itype)
 
+  gLogger.progress("")
+
   if itemCount > 0 and not nodownload:
     work_queue = Queue.Queue()
     error_queue = Queue.Queue()
