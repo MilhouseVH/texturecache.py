@@ -21,6 +21,8 @@
 #
 # Simple utility to query, validate, clean and refresh the XBMC texture cache.
 #
+# https://github.com/MilhouseVH/texturecache.py
+#
 # Usage:
 #
 #  x) Extract - dump - all or filtered cached textures information. Default
@@ -120,6 +122,10 @@
 #    Increase number of download threads by modifying
 #    download.threads in properties. Default is 2.
 #  * Added "nc" option, dry-run version of c.
+#  * Better error detection - will determine at startup what
+#    resources are required by each option, and abort when
+#    not available.
+#  * Move to github.
 #
 #  Version 0.3.0 - 26/03/2013
 #  * Added support for multiple tags, combine with "and"/"or".
@@ -259,6 +265,9 @@ import os, sys, ConfigParser, StringIO, json, re, datetime, time
 import httplib, urllib, socket, base64
 import Queue, threading
 
+#
+# Config class. Will be a global object.
+#
 class MyConfiguration(object):
   def __init__( self ):
 
@@ -308,9 +317,12 @@ class MyConfiguration(object):
     self.IDFORMAT = config.get("xbmc", "format")
     self.FSEP = config.get("xbmc", "sep")
 
-    self.XBMC_BASE = os.path.expanduser(config.get("xbmc", "userdata")) + "/"
+    self.XBMC_BASE = os.path.expanduser(config.get("xbmc", "userdata"))
     self.TEXTUREDB = config.get("xbmc", "dbfile")
-    self.THUMBNAILS = config.get("xbmc", "thumbnails") + "/"
+    self.THUMBNAILS = config.get("xbmc", "thumbnails")
+
+    if self.XBMC_BASE[-1:] != "/": self.XBMC_BASE += "/"
+    if self.THUMBNAILS[-1:] != "/": self.THUMBNAILS += "/"
 
     self.XBMC_BASE = self.XBMC_BASE.replace("/", os.sep)
     self.TEXTUREDB = self.TEXTUREDB.replace("/", os.sep)
@@ -383,6 +395,15 @@ class MyConfiguration(object):
     else:
       return "%s%s" % (self.XBMC_BASE, self.TEXTUREDB)
 
+#
+# Very simple logging class. Will be a global object, also passed to threads
+# hence the Lock() methods..
+#
+# Writes progress information to stderr so that
+# information can still be grepp'ed easily (stdout).
+#
+# Prefix logfilename with + to enable flushing after each write.
+#
 class MyLogger():
   def __init__( self ):
     self.lastlen = 0
@@ -469,6 +490,9 @@ class MyLogger():
     else:
       return  "".join([x if ord(x) < 128 else replaceWith for x in s])
 
+#
+# Image loader thread class.
+#
 class MyImageLoader(threading.Thread):
   def __init__(self, work_queue, error_queue, maxItems, config, progress, totals, force=False, retry=10):
     threading.Thread.__init__(self)
@@ -545,6 +569,9 @@ class MyImageLoader(threading.Thread):
 
     return ATTEMPT != 0
 
+#
+# Simple database wrapper class.
+#
 class MyDB(object):
   def __init__(self, config, progress):
     self.config = config
@@ -565,10 +592,8 @@ class MyDB(object):
   def getDB(self):
     if not self.mydb:
       if not os.path.exists(self.config.getDBPath()):
-        self.progress.stdout("\n*** Local texture database does not exist: %s ***\n" % self.config.getDBPath())
-        sys.exit(2)
+        raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
       self.mydb = lite.connect(self.config.getDBPath())
-#      self.DBVERSION = self.mydb.execute("SELECT idVersion FROM version").fetchone()[0]
       self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
@@ -656,6 +681,12 @@ class MyDB(object):
            self.config.FSEP)).encode("utf-8") + \
           row[3].encode("utf-8")
 
+#
+# Handle all JSON RPC communication.
+#
+# Mostly uses sockets, etc. for those methods (Files.*) that must
+# use HTTP.
+#
 class MyJSONComms(object):
   def __init__(self, config, progress):
     self.config = config
@@ -694,7 +725,9 @@ class MyJSONComms(object):
       headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
 
     web = self.getWeb()
+
     web.request(request_type, url, request, headers)
+
     if timeout == None: web.sock.setblocking(1)
     else: web.sock.settimeout(timeout)
 
@@ -1018,6 +1051,9 @@ class MyJSONComms(object):
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
 
+#
+# Hold and print some pretty totals.
+#
 class MyTotals(object):
   def __init__(self):
     self.TOTALS = {}
@@ -1107,6 +1143,14 @@ class MyTotals(object):
         line = "%s| %s" % (line, value.center(width))
       print line
 
+#
+# Simple container for media items under consideration for processing
+#
+# status is 0 (not to be loaded) or 1 (to be loaded).
+#
+# missingOK is used to specify that if an image cannot be loaded,
+# don't complain (ie. speculative loading, eg. season-all.tbn)
+#
 class MyMediaItem(object):
   def __init__(self, mediaType, imageType, name, season, episode, filename, dbid, cachedurl, libraryid, missingOK):
     self.status = 1 # 0=OK, 0=Ignore
@@ -1146,6 +1190,12 @@ def removeNonAscii(s, replaceWith = ""):
   else:
     return  "".join([x if ord(x) < 128 else replaceWith for x in s])
 
+#
+# Load data using JSON-RPC. In the case of TV Shows, also load Seasons
+# and Episodes into a single data structure.
+#
+# Sets doesn't support filters, so filter this list after retrieval.
+#
 def processData(action, mediatype, filter, force, extraFields=False, nodownload=False):
   jcomms = MyJSONComms(gConfig, gProgress)
   database = MyDB(gConfig, gProgress)
@@ -1160,6 +1210,7 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
   gProgress.errout("Loading %s..." % mediatype, every = 1)
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, secondaryFields)
+
   limits = data["result"]["limits"]
   if limits["total"] == 0: return
 
@@ -1188,6 +1239,16 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
 
   cacheImages(mediatype, jcomms, database, force, nodownload, data, section_name, title_name, id_name)
 
+#
+# Parse the supplied JSON data, turning it into a list of artwork urls
+# (mediaitems) that should be matched against the database (cached files)
+# to determine which should be skipped (those in the cache, unless
+# force update is true).
+#
+# Those that are not skipped will be added to a queueu for processing by
+# 1..n threads. Errors will be added to an error queue by the threads, and
+# subsueqently displayed to the user at the end.
+#
 def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_name, title_name, id_name):
 
   mediaitems = []
@@ -1297,6 +1358,10 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
         gProgress.log("ERROR ITEM: %s" % item)
         error_queue.task_done()
 
+#
+# Iterate over all the elements, seeking out artwork to be stored in a list.
+# Use recursion to process season and episode sub-elements.
+#
 def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName = None, season = None):
   gProgress.reset()
 
@@ -1356,6 +1421,13 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
       parseURLData(jcomms, "episodes", mediaitems, imagecache, item["episodes"]["episodes"], "label", "episodeid", showName = showName, season = title)
       season = None
 
+# Include or exclude url depending on basic properties - has it
+# been "seen" before (in which case, discard as no point caching
+# it twice. Or discard if matches an "ignore" rule.
+#
+# Otherwise include it, and add it to the "seen" cache so it can
+# be excluded in future if seen again.
+#
 def evaluateURL(imgtype, url, imagecache):
   if url == "": return False
 
@@ -1651,6 +1723,7 @@ def libraryTVSeason(jcomms, database, action, force, extraFields, rescan, showNa
 
   return episodes
 
+# Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter=""):
   database = MyDB(gConfig, gProgress)
 
@@ -1688,7 +1761,8 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
 
     if (search != "" or filter != ""): gProgress.errout("Matching row ids:%s\n" % IDS)
 
-def sqlDelete(ids=[]):
+# Delete row by id, and corresponding file item
+def sqlDelete( ids=[] ):
   database = MyDB(gConfig, gProgress)
   with database:
     for id in ids:
@@ -1816,18 +1890,29 @@ def getAllFiles(keyFunction):
   files = {}
 
   REQUEST = [
-              {"method":"AudioLibrary.GetAlbums", "params":{"sort": {"order": "ascending", "method": "label"},
-                                                            "properties":["title", "fanart", "thumbnail"]}},
-              {"method":"AudioLibrary.GetArtists", "params":{"sort": {"order": "ascending", "method": "artist"},
-                                                             "properties":["fanart", "thumbnail"], "albumartistsonly": False}},
-              {"method":"AudioLibrary.GetSongs", "params":{"sort": {"order": "ascending", "method": "title"},
-                                                           "properties":["title", "fanart", "thumbnail"]}},
-              {"method":"VideoLibrary.GetMusicVideos", "params":{"sort": {"order": "ascending", "method": "title"},
-                                                                 "properties":["title", "art"]}},
-              {"method":"VideoLibrary.GetMovies", "params":{"sort": {"order": "ascending", "method": "title"},
-                                                            "properties":["title", "cast", "art"]}},
-              {"method":"VideoLibrary.GetMovieSets", "params":{"sort": {"order": "ascending", "method": "title"},
-                                                               "properties":["title", "art"]}}
+              {"method":"AudioLibrary.GetAlbums",
+                "params":{"sort": {"order": "ascending", "method": "label"},
+                          "properties":["title", "fanart", "thumbnail"]}},
+
+              {"method":"AudioLibrary.GetArtists",
+               "params":{"sort": {"order": "ascending", "method": "artist"},
+                         "properties":["fanart", "thumbnail"], "albumartistsonly": False}},
+
+              {"method":"AudioLibrary.GetSongs",
+               "params":{"sort": {"order": "ascending", "method": "title"},
+                         "properties":["title", "fanart", "thumbnail"]}},
+
+              {"method":"VideoLibrary.GetMusicVideos",
+               "params":{"sort": {"order": "ascending", "method": "title"},
+                         "properties":["title", "art"]}},
+
+              {"method":"VideoLibrary.GetMovies",
+               "params":{"sort": {"order": "ascending", "method": "title"},
+                         "properties":["title", "cast", "art"]}},
+
+              {"method":"VideoLibrary.GetMovieSets",
+               "params":{"sort": {"order": "ascending", "method": "title"},
+                         "properties":["title", "art"]}}
              ]
 
   for r in REQUEST:
@@ -1854,10 +1939,12 @@ def getAllFiles(keyFunction):
                 files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
         if title != "": gProgress.errout("Parsing: %s [%s]..." % (mediatype, title))
 
-  REQUEST = {"method":"VideoLibrary.GetTVShows", "params": {"sort": {"order": "ascending", "method": "title"},
-                                                            "properties":["title", "cast", "art"]}}
-
   gProgress.errout("Loading: TVShows...")
+
+  REQUEST = {"method":"VideoLibrary.GetTVShows",
+             "params": {"sort": {"order": "ascending", "method": "title"},
+                        "properties":["title", "cast", "art"]}}
+
   tvdata = jcomms.sendJSON(REQUEST, "libTV")
 
   for tvshow in tvdata["result"]["tvshows"]:
@@ -1870,7 +1957,10 @@ def getAllFiles(keyFunction):
         if "thumbnail" in c:
           files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
 
-    REQUEST = {"method":"VideoLibrary.GetSeasons","params":{"tvshowid": tvshowid, "properties":["season", "art"]}}
+    REQUEST = {"method":"VideoLibrary.GetSeasons",
+               "params":{"tvshowid": tvshowid,
+                         "properties":["season", "art"]}}
+
     seasondata = jcomms.sendJSON(REQUEST, "libTV")
 
     if "seasons" in seasondata["result"]:
@@ -1890,7 +1980,10 @@ def getAllFiles(keyFunction):
             if banner_url: files[keyFunction(banner_url)] = "banner"
           files[keyFunction(season["art"][a])] = a
 
-        REQUEST = {"method":"VideoLibrary.GetEpisodes","params":{"tvshowid": tvshowid, "season": seasonid, "properties":["cast", "art"]}}
+        REQUEST = {"method":"VideoLibrary.GetEpisodes",
+                   "params":{"tvshowid": tvshowid, "season": seasonid,
+                             "properties":["cast", "art"]}}
+
         episodedata = jcomms.sendJSON(REQUEST, "libTV")
 
         for episode in episodedata["result"]["episodes"]:
@@ -1909,75 +2002,6 @@ def pruneCache( purge_nonlibrary_artwork=False ):
   files = getAllFiles(keyFunction=getKeyFromFilename)
 
   dirScan("N", purge_nonlibrary_artwork, libraryFiles=files, keyIsHash=False)
-
-def libraryGetDetailsByID(jcomms, media_class, libraryid):
-  if media_class == "movie":
-    method = "VideoLibrary.GetMovieDetails"
-    identifier = "movieid"
-  elif media_class == "tvshow":
-    method = "VideoLibrary.GetTVShowDetails"
-    identifier = "tvshowid"
-  elif media_class == "episode":
-    method = "VideoLibrary.GetEpisodeDetails"
-    identifier = "episodeid"
-  elif media_class == "artist":
-    method = "AudioLibrary.GetArtistDetails"
-    identifier = "artistid"
-  elif media_class == "album":
-    method = "AudioLibrary.GetAlbumDetails"
-    identifier = "albumid"
-  elif media_class == "song":
-    method = "AudioLibrary.GetSongDetails"
-    identifier = "songid"
-  else:
-    raise Exception("invalid class for Get<type>Details: artist, album, song, movie, tvshow, episode")
-
-  REQUEST = {"method": method,
-             "params": {identifier: libraryid,
-                        "properties":["streamdetails", "runtime", "resume"]}}
-  print REQUEST
-  jcomms.data = sendJSON(REQUEST, "libMovies")
-  print data
-
-# eg. libraryModify("movie", 661, "playcount", "", "0")
-# eg. libraryModify("movie", 661, "art", "clearlogo", "nfs://192.168.0.3/mnt/share/media/Video/Movies HD/Senna (2010) [BDRip]-clearlogo.png")
-def libraryModify(jcomms, media_class, id, item, subitem, value):
-  if media_class == "movie":
-    method = "VideoLibrary.SetMovieDetails"
-    identifier = "movieid"
-  elif media_class == "tvshow":
-    method = "VideoLibrary.SetTVShowDetails"
-    identifier = "tvshowid"
-  elif media_class == "episode":
-    method = "VideoLibrary.SetEpisodeDetails"
-    identifier = "episodeid"
-  elif media_class == "artist":
-    method = "AudioLibrary.SetArtistDetails"
-    identifier = "artistid"
-  elif media_class == "album":
-    method = "AudioLibrary.SetAlbumDetails"
-    identifier = "albumid"
-  elif media_class == "song":
-    method = "AudioLibrary.SetSongDetails"
-    identifier = "songid"
-  else:
-    raise Exception("invalid class for modification: artist, album, song, movie, tvshow, episode")
-
-  REQUEST = {"method": method}
-
-  if item == "art":
-    newvalue = URL="image://%s/" % urllib.quote(value, "()")
-  else:
-    newvalue = int(value) if re.match("[0-9]*", value) else value
-
-  if subitem == "":
-    REQUEST["params"] = {identifier: id, item: newvalue}
-  else:
-    REQUEST["params"] = {identifier: id, item:{ subitem: newvalue }}
-
-  print REQUEST
-  jcomms.data = sendJSON(REQUEST, "libMovies", timeout=10)
-  print data
 
 def usage(EXIT_CODE):
 
@@ -2051,7 +2075,7 @@ def showConfig(EXIT_CODE):
 
   sys.exit(EXIT_CODE)
 
-def doInit():
+def loadConfig():
   global DBVERSION, MYWEB, MYSOCKET, MYDB
   global TOTALS
   global gConfig, gProgress
@@ -2065,11 +2089,102 @@ def doInit():
   gProgress.DEBUG = gConfig.DEBUG
   gProgress.setLogFile(gConfig.LOGFILE)
 
+def checkConfig(option):
+
+  if option in ["c","C"]:
+    needWeb = True
+  else:
+    needWeb = False
+
+  if option in ["c","C","nc","j","jd","J","Jd","qa","qax","p","P" ]:
+    needSocket = True
+  else:
+    needSocket = False
+
+  if option in ["s","S","x","X","f","c","C","nc","qa","qax","d","r","R","p","P" ]:
+    needDb = True
+  else:
+    needDb = False
+
+  gotWeb = gotSocket = gotDb = False
+
+  if needWeb:
+    try:
+      defaultTimeout = socket.getdefaulttimeout()
+      socket.setdefaulttimeout(7.5)
+      jcomms = MyJSONComms(gConfig, gProgress)
+      REQUEST = {}
+      REQUEST["jsonrpc"] = "2.0"
+      REQUEST["method"] = "JSONRPC.Ping"
+      REQUEST["id"] =  "libPing"
+      data = json.loads(jcomms.sendWeb("POST", "/jsonrpc", json.dumps(REQUEST), timeout=5))
+      if "result" in data and data["result"] == "pong":
+        gotWeb = True
+
+      socket.setdefaulttimeout(defaultTimeout)
+    except socket.error:
+      pass
+
+  if needWeb and not gotWeb:
+    MSG = "FATAL: The task you wish to perform requires that the web server is\n" \
+          "       enabled and running on the XBMC system you wish to connect.\n\n" \
+          "       A connection cannot be established to the following webserver:\n" \
+          "       %s:%s\n\n" \
+          "       Check settings in properties file texturecache.cfg" % (gConfig.XBMC_HOST, gConfig.WEB_PORT)
+    gProgress.errout(MSG, newLine=True)
+    sys.exit(2)
+
+  if needSocket:
+    try:
+      jcomms = MyJSONComms(gConfig, gProgress)
+      REQUEST = {}
+      REQUEST["jsonrpc"] = "2.0"
+      REQUEST["method"] = "JSONRPC.Ping"
+      REQUEST["id"] =  "libPing"
+      data = jcomms.sendJSON(REQUEST, "libPing", timeout=7.5, checkResult=False)
+      if "result" in data and data["result"] == "pong":
+        gotSocket = True
+    except socket.error:
+      pass
+
+  if needSocket and not gotSocket:
+    MSG = "FATAL: The task you wish to perform requires that the JSON-RPC server is\n" \
+          "       enabled and running on the XBMC system you wish to connect.\n\n" \
+          "       A connection cannot be established to the following JSON-RPC server:\n" \
+          "       %s:%s\n\n" \
+          "       Check settings in properties file texturecache.cfg" % (gConfig.XBMC_HOST, gConfig.RPC_PORT)
+    gProgress.errout(MSG, newLine=True)
+    sys.exit(2)
+
+  if needDb:
+    try:
+      database = MyDB(gConfig, gProgress)
+      con = database.getDB()
+      if database.DBVERSION < 13:
+        MSG = "WARNING: The sqlite3 database pre-dates Frodo (v12), some problems may be encountered!"
+        gProgress.errout(MSG, newLine=True)
+        gProgress.log(MSG)
+      gotDb = True
+    except lite.OperationalError:
+      pass
+
+  if needDb and not gotDb:
+    MSG = "FATAL: The task you wish to perform requires read/write file\n" \
+          "       access to the XBMC sqlite3 Texture Cache database.\n\n" \
+          "       The following sqlite3 database could not be opened:\n" \
+          "       %s\n\n" \
+          "       Check settings in properties file texturecache.cfg" % gConfig.getDBPath()
+    gProgress.errout(MSG, newLine=True)
+    sys.exit(2)
+
+
 def main(argv):
 
-  doInit()
+  loadConfig()
 
   if len(argv) == 0: usage(1)
+
+  checkConfig(argv[0])
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")
