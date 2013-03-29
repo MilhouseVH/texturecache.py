@@ -1,5 +1,10 @@
 Changelog:
 
+  Version 0.3.3 - 29/03/2013
+  * Fix length bug in MyLogger.progress()
+  * Change print to print()
+  * Use MyLogger.out to replace print() where necessary.
+
   Version 0.3.2 - 29/03/2013
   * Return large data objects for garbage collection
   * Disabled logging of "Duplicate" items - can be
