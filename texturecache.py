@@ -115,154 +115,6 @@
 #
 #  rowid, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url
 #
-# Changelog:
-#
-#  Version 0.3.2 - 29/03/2013
-#  * Return large data objects for garbage collection
-#  * Disabled logging of "Duplicate" items - can be
-#    excessive, and rarely useful.
-#
-#  Version 0.3.1 - 28/03/2013
-#  * Changed cache options (c and C) to be muli-threaded.
-#    Increase number of download threads by modifying
-#    download.threads in properties. Default is 2.
-#  * Added "nc" option, dry-run version of c.
-#  * Better error detection - will determine at startup what
-#    resources are required by each option, and abort when
-#    not available.
-#  * Move to github.
-#
-#  Version 0.3.0 - 26/03/2013
-#  * Added support for multiple tags, combine with "and"/"or".
-#    Example: c tags "comedy and standup"
-#    Example: c tags "action or adventure"
-#
-#    Combinations of "and" and "or" will be accepted, but may or may not
-#    return valid results.
-#
-#  Version 0.2.9 - 26/03/2013
-#  * Added tag support..
-#    Tag supporting options: j, J, jd, Jd, c, C, qa and qax.
-#    For example "c tags live-comedy", to re-cache movies with the
-#    "live-comedy" tag. Partial tag matches will also succeed.
-#
-#  Version 0.2.8 - 25/03/2013
-#  * Add url decode functionality (jd, Jd)
-#
-#  Version 0.2.7 - 25/03/2013
-#  * Add "Duplicate" statistic for images that are cached
-#    more than once - only first cache attempt will succeed,
-#    subsequent attempts will be ignored and account for as
-#    a duplicate.
-#  * Use classes for configuration and logging.
-#  * Allow absolute paths to be used for thumbnails and dbfile properties.
-#  * Add qa.file = yes/no (default:no) property, to verify existence of
-#    media file (will not initiate remove/rescan in qax option, obviously).
-#
-#  Version 0.2.6 - 24/03/2013
-#  * Remove media items (movies, episodes) that fail QA when
-#    during qax operation - this should result in the items being
-#    correctly re-scraped.
-#
-#  Version 0.2.5 - 24/03/2013
-#  * Fix hash calculation error in R option (sorry charrua!)
-#  * Apply 5% limit when identifying orphaned files (option R). Abort
-#    file orphaned file removal if limit is exceeded.
-#
-#  Version 0.2.4 - 24/03/2013
-#  * Added cache.ignore.types property, to ignore (don't delete,
-#    don't cache) certain image types, such as image://video and
-#    image://music (both the default).
-#    Use comma delimited patterns, eg. "image://video, ^nfs.*". Set
-#    to None to process all URLs. Matches anywhere within URL.
-#  * Added extra QA rule, "[artwork] (uncached)", which is a warning
-#    only, and won't cause a directory re-scan by itself, mostly
-#    because it's usually pointless.
-#
-#  Version 0.2.3 - 24/03/2013
-#  * Add logfile property, eg. logfile=/tmp/cache.log
-#
-#  Version 0.2.2 - 24/03/2013
-#  * Fix pre-Python 2.7.3 incompatibility.
-#
-#  Version 0.2.1 - 23/03/2013
-#  * Added webserver.username/webserver.password authentication.
-#  * Summary of processing for c/C options
-#
-#  Version 0.2.0 - 23/03/2013
-#  * Auto-detect webserver.singleshot - unless already enabled
-#    in properties, will be automatically enabled when first web
-#    connection request fails, with the request being attempted a
-#    second time. Best to leave disabled, and only used when required.
-#
-#  Version 0.1.9 - 23/03/2013
-#  * Add webserver.singleshot = yes/no property to prevent web server
-#    connection from being reused, as this seems to cause a problem for
-#    some users. Default behaviour is to reuse the connection.
-#
-#  Version 0.1.8 - 22/03/2013
-#  * Optionally cache cast thumbnails - add cache.castthumb = yes/no/true/false
-#    to properties file. Default is no/false.
-#
-#  Version 0.1.7 - 21/03/2013
-#  * When pruning the texture cache, don't consider files that are
-#    stored in the local filesystem as these are most likely add-on
-#    related.
-#
-#  Version 0.1.6 - 20/03/2013
-#  * Add support for season-all-(fanart|banner).
-#
-#  Version 0.1.5 - 17/03/2013
-#  * Add prune (p) option.
-#  * Significantly improved performance of r/R option
-#
-#  Version 0.1.4 - 16/03/2013
-#  * Refactor connection code
-#  * Add keyboard interrupt exception handler
-#
-#  Version 0.1.3 - 15/03/2013
-#  * Switch JSON to use tcp sockets.
-#  * Add xbmc_host (localhost) and rpc_port (9090) properties
-#
-#  Version 0.1.2 - 13/03/2013
-#  * Restrict qa to consider only movies/tvshows added within qaperiod days.
-#
-#  Version 0.1.1 - 13/03/2013
-#  * Add qa option to identify missing artwork and plots (movies and tvshows only)
-#
-#  Version 0.1.0 - 13/03/2013
-#  * Add JSON additional field support
-#  * Use File.PrepareDownload method to obtain correct image download URL
-#
-#  Version 0.0.9 - 10/03/2013
-#  * Add JSON query option (j)
-#
-#  Version 0.0.8 - 10/03/2013
-#  * Clarify licensing with addition of GPLv2 license
-#
-#  Version 0.0.7 - 10/03/2013
-#  * Default value of userdata property changed to ~/.xbmc/userdata, with user expansion
-#
-#  Version 0.0.6 - 09/03/2013
-#  * Add function to forcibly cache artwork, even when already present in texture cache (C)
-#  * Add season-all.[tbn|png|jpg] TV Sshow poster support
-#
-#  Version 0.0.5 - 08/03/2013
-#  * Add function to cache artwork missing from texture cache (c)
-#
-#  Version 0.0.4 - 06/03/2013
-#  * Improve unicode handling
-#
-#  Version 0.0.3 - 06/03/2013
-#  * Add file summary option (f)
-#
-#  Version 0.0.2 - 05/03/2013
-#  * Add support for older Dharma version 6 database
-#  * Fix unicode conversion
-#
-#  Version 0.0.1 - 05/03/2013
-#  * First release
-#
 ################################################################################
 
 import sqlite3 as lite
@@ -276,7 +128,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.2"
+    self.VERSION="0.3.3"
 
     config = ConfigParser.SafeConfigParser(defaults={
                                             "format": "%%06d",
@@ -411,7 +263,7 @@ class MyConfiguration(object):
 # hence the Lock() methods..
 #
 # Writes progress information to stderr so that
-# information can still be grepp'ed easily (stdout).
+# information can still be grep'ed easily (stdout).
 #
 # Prefix logfilename with + to enable flushing after each write.
 #
@@ -419,7 +271,7 @@ class MyLogger():
   def __init__( self ):
     self.lastlen = 0
     self.now = 0
-    self.LOG = False
+    self.LOGGING = False
     self.LOGFILE = None
     self.LOGFLUSH = False
     self.DEBUG = False
@@ -427,7 +279,7 @@ class MyLogger():
   def __del__( self ):
     if self.LOGFILE: self.LOGFILE.close()
 
-  def errout(self, data, every=0, newLine=False):
+  def progress(self, data, every=0, newLine=False):
     with threading.Lock():
       if every != 0:
         self.now += 1
@@ -446,17 +298,17 @@ class MyLogger():
         sys.stderr.write("%-s\r" % udata)
       if newLine:
         sys.stderr.write("\n")
-        self.last = 0
+        self.lastlen = 0
       sys.stderr.flush()
 
   def reset(self, initialValue=0):
     self.now = initialValue
 
-  def stdout( self, data):
+  def out( self, data, pure=False ):
     with threading.Lock():
-      udata = self.removeNonAscii(data, "?")
+      udata = data if pure else self.removeNonAscii(data, "?")
       spaces = self.lastlen - len(udata)
-      self.lastlen = len(udata)
+      self.lastlen = len(udata) if udata.rfind("\n") == -1 else 0
       if spaces > 0:
         sys.stdout.write("%-s%*s" % (udata, spaces, " "))
       else:
@@ -467,25 +319,25 @@ class MyLogger():
     if self.DEBUG:
       with threading.Lock():
         if newLineBefore: sys.stderr.write("\n")
-        self.errout("%s: %s" % (datetime.datetime.now(), data), every, newLine)
+        self.progress("%s: %s" % (datetime.datetime.now(), data), every, newLine)
     self.log(data, jsonrequest=jsonrequest)
 
   def setLogFile(self, filename):
     with threading.Lock():
       if filename:
-        self.LOG = True
+        self.LOGGING = True
         self.LOGFLUSH = filename.startswith("+")
         if self.LOGFLUSH: filename = filename[1:]
 
         self.LOGFILE = open(filename, "w")
       else:
-        self.LOG = False
+        self.LOGGING = False
         if self.LOGFILE:
           self.LOGFILE.close()
           self.LOGFILE = None
 
   def log(self, data, jsonrequest = None):
-    if self.LOG:
+    if self.LOGGING:
       with threading.Lock():
         t = threading.current_thread().name
         if jsonrequest == None:
@@ -505,16 +357,16 @@ class MyLogger():
 # Image loader thread class.
 #
 class MyImageLoader(threading.Thread):
-  def __init__(self, work_queue, error_queue, maxItems, config, progress, totals, force=False, retry=10):
+  def __init__(self, work_queue, error_queue, maxItems, config, logger, totals, force=False, retry=10):
     threading.Thread.__init__(self)
     self.work_queue = work_queue
     self.error_queue = error_queue
     self.maxItems = maxItems
 
     self.config = config
-    self.progress = progress
-    self.database = MyDB(config, progress)
-    self.json = MyJSONComms(config, progress)
+    self.logger = logger
+    self.database = MyDB(config, logger)
+    self.json = MyJSONComms(config, logger)
     self.totals = totals
 
     self.force = force
@@ -537,7 +389,7 @@ class MyImageLoader(threading.Thread):
         wqs = self.work_queue.qsize()
         eqs = self.error_queue.qsize()
         tac = threading.activeCount() - 1
-        self.progress.errout("Caching artwork: %d item%s remaining of %d, %d error%s, %d thread%s active" % \
+        self.logger.progress("Caching artwork: %d item%s remaining of %d, %d error%s, %d thread%s active" % \
                           (wqs, "s"[wqs==1:],
                            self.maxItems,
                            eqs, "s"[eqs==1:],
@@ -550,28 +402,28 @@ class MyImageLoader(threading.Thread):
     self.LAST_URL = self.json.getDownloadURL(filename)
 
     if self.LAST_URL != None:
-      self.progress.log("Proceeding with download of URL [%s]" % self.LAST_URL)
+      self.logger.log("Proceeding with download of URL [%s]" % self.LAST_URL)
       ATTEMPT = retry
       if rowid != 0 and force:
-        self.progress.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]" % (rowid, cachedurl, filename))
+        self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]" % (rowid, cachedurl, filename))
         self.database.deleteItem(rowid, cachedurl)
         self.totals.bump("Deleted", imgtype)
     else:
-      self.progress.log("Image not available for download - uncacheable (embedded?), or doesn't exist.Filename [%s]" % filename)
+      self.logger.log("Image not available for download - uncacheable (embedded?), or doesn't exist.Filename [%s]" % filename)
       ATTEMPT = 0
 
     while ATTEMPT > 0:
       try:
         PAYLOAD = self.json.sendWeb("GET", self.LAST_URL)
         if self.json.WEB_LAST_STATUS == httplib.OK:
-          self.progress.log("Succesfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
+          self.logger.log("Succesfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
                         % (len(PAYLOAD), (retry - ATTEMPT + 1), filename))
           self.totals.bump("Cached", imgtype)
           break
       except:
         pass
       ATTEMPT -= 1
-      self.progress.log("Failed to download image URL [%s], status [%d], " \
+      self.logger.log("Failed to download image URL [%s], status [%d], " \
                    "attempts remaining [%d]" % (self.LAST_URL, self.json.WEB_LAST_STATUS, ATTEMPT))
       if stopped.is_set(): ATTEMPT = 0
 
@@ -584,9 +436,9 @@ class MyImageLoader(threading.Thread):
 # Simple database wrapper class.
 #
 class MyDB(object):
-  def __init__(self, config, progress):
+  def __init__(self, config, logger):
     self.config = config
-    self.progress = progress
+    self.logger = logger
 
     self.mydb = None
     self.DBVERSION = None
@@ -610,7 +462,7 @@ class MyDB(object):
 
   def execute(self, SQL):
     self.cursor = self.getDB().cursor()
-    self.progress.log("EXECUTING SQL: %s" % SQL)
+    self.logger.log("EXECUTING SQL: %s" % SQL)
     self.cursor.execute(SQL)
     return self.cursor
 
@@ -636,7 +488,7 @@ class MyDB(object):
       row = self.execute(SQL).fetchone()
 
       if row == None:
-        print "id " + self.config.IDFORMAT % int(id) + " is not valid"
+        self.logger.out("id %s is not valid\n" % (self.config.IDFORMAT % int(id)))
         return
       else:
         localFile = row[1]
@@ -646,7 +498,7 @@ class MyDB(object):
     if os.path.exists(self.config.getFilePath(localFile)):
       os.remove(self.config.getFilePath(localFile))
     else:
-      print "WARNING: id %s, cached thumbnail file %s not found" % ((self.config.IDFORMAT % id), localFile)
+      self.logger.out("WARNING: id %s, cached thumbnail file %s not found\n" % ((self.config.IDFORMAT % id), localFile))
 
     self.execute("DELETE FROM texture WHERE id=%d" % id)
     self.commit()
@@ -657,7 +509,7 @@ class MyDB(object):
 
   # Didn't find anyhing so try again, this time leave filename quoted, and don't truncate
     if not row:
-      self.progress.log("Failed to find row by filename with the expected formatting, trying again (with prefix, quoted)")
+      self.logger.log("Failed to find row by filename with the expected formatting, trying again (with prefix, quoted)")
       row = self.getRowByFilename_Impl(filename, unquote=False)
 
     return row
@@ -670,12 +522,12 @@ class MyDB(object):
     if ufilename.encode("ascii", "ignore") == ufilename.encode("utf-8"):
       SQL = "SELECT id, cachedurl from texture where url = \"%s\"" % ufilename
     else:
-      self.progress.log("Removing ASCII from filename: [%s]" % ufilename)
+      self.logger.log("Removing ASCII from filename: [%s]" % ufilename)
       SQL = "SELECT id, cachedurl from texture where url like \"%s\"" % removeNonAscii(ufilename, "%")
 
-    self.progress.log("SQL EXECUTE: [%s]" % SQL)
+    self.logger.log("SQL EXECUTE: [%s]" % SQL)
     row = self.execute(SQL).fetchone()
-    self.progress.log("SQL RESULT : [%s]" % (row,))
+    self.logger.log("SQL RESULT : [%s]" % (row,))
 
     return row if row else None
 
@@ -686,11 +538,11 @@ class MyDB(object):
       return  "".join([x if ord(x) < 128 else replaceWith for x in s])
 
   def dumpRow(self, row):
-    print (self.config.IDFORMAT % row[0] + "%s%14s%s%04d%s%04d%s%04d%s%19s%s%19s%s" % \
-          (self.config.FSEP, row[1], self.config.FSEP, row[4], self.config.FSEP, row[5],
-           self.config.FSEP, row[6], self.config.FSEP, row[7], self.config.FSEP, row[2],
-           self.config.FSEP)).encode("utf-8") + \
-          row[3].encode("utf-8")
+    line= ("%s%s%14s%s%04d%s%04d%s%04d%s%19s%s%19s%s%s\n" % \
+           ((self.config.IDFORMAT % row[0]), self.config.FSEP, row[1], self.config.FSEP, row[4],
+             self.config.FSEP,      row[5],  self.config.FSEP, row[6], self.config.FSEP, row[7],
+             self.config.FSEP,      row[2],  self.config.FSEP, row[3])).encode("utf-8")
+    self.logger.out(line, pure=True)
 
 #
 # Handle all JSON RPC communication.
@@ -699,9 +551,9 @@ class MyDB(object):
 # use HTTP.
 #
 class MyJSONComms(object):
-  def __init__(self, config, progress):
+  def __init__(self, config, logger):
     self.config = config
-    self.progress = progress
+    self.logger = logger
     self.mysocket = None
     self.myweb = None
     self.WEB_LAST_STATUS = -1
@@ -750,14 +602,14 @@ class MyJSONComms(object):
       if readAmount == 0: return response.read()
       else: return response.read(readAmount)
     except socket.timeout:
-      self.progress.log("** iotimeout occurred during web request **")
+      self.logger.log("** iotimeout occurred during web request **")
       self.WEB_LAST_STATUS = httplib.REQUEST_TIMEOUT
       self.myweb.close()
       self.myweb = None
       return ""
     except:
       if self.config.WEB_SINGLESHOT == False:
-        self.progress.debug("SWITCHING TO WEBSERVER.SINGLESHOT MODE", newLine=True)
+        self.logger.debug("SWITCHING TO WEBSERVER.SINGLESHOT MODE", newLine=True)
         self.config.WEB_SINGLESHOT = True
         return self.sendWeb(request_type, url, request, headers)
       raise
@@ -770,14 +622,14 @@ class MyJSONComms(object):
 
     # Following methods don't work over sockets - by design.
     if request["method"] in ["Files.PrepareDownload", "Files.Download"]:
-      self.progress.debug("SENDING JSON WEB REQUEST", jsonrequest=request, newLine=True, newLineBefore=True)
+      self.logger.debug("SENDING JSON WEB REQUEST", jsonrequest=request, newLine=True, newLineBefore=True)
       data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"})
-      if self.progress.LOGFILE:
-        self.progress.log("RESPONSE%s: %s" % (" (truncated)" if len(data)>256 else "", self.removeNonAscii(data[:256])))
+      if self.logger.LOGGING:
+        self.logger.log("RESPONSE%s: %s" % (" (truncated)" if len(data)>256 else "", self.removeNonAscii(data[:256])))
       return json.loads(data) if data != "" else ""
 
     s = self.getSocket()
-    self.progress.debug("SENDING JSON SOCKET REQUEST", jsonrequest=request, newLine=True, newLineBefore=True)
+    self.logger.debug("SENDING JSON SOCKET REQUEST", jsonrequest=request, newLine=True, newLineBefore=True)
     START_TIME=time.time()
     s.send(json.dumps(request))
 
@@ -795,17 +647,17 @@ class MyJSONComms(object):
         if data == []: s.setblocking(0)
         data.append(newdata)
         LASTIO=time.time()
-        self.progress.debug("BUFFER RECEIVED (len %d)" % len(newdata), newLine=True)
+        self.logger.debug("BUFFER RECEIVED (len %d)" % len(newdata), newLine=True)
       except socket.error:
         if newdata[-1:] == "}" or newdata[-2:] == "}\n":
           try:
-            self.progress.debug("CONVERTING RESPONSE", newLine=True)
+            self.logger.debug("CONVERTING RESPONSE", newLine=True)
             jdata = json.loads("".join(data))
-            self.progress.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
+            self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
             if ("result" in jdata and "limits" in jdata["result"]):
-              self.progress.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
-            if self.progress.LOGFILE:
-              self.progress.log("RESPONSE%s: %s" % (" (truncated)" if len(data[0]) > 256 else "", removeNonAscii(data[0][:256])))
+              self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
+            if self.logger.LOGGING:
+              self.logger.log("RESPONSE%s: %s" % (" (truncated)" if len(data[0]) > 256 else "", removeNonAscii(data[0][:256])))
             ENDOFDATA = True
           except ValueError:
             pass
@@ -826,11 +678,12 @@ class MyJSONComms(object):
         if callback:
           method = jdata["method"] if "method" in jdata else jdata["result"]
           params = jdata["params"] if "params" in jdata else None
-          self.progress.log("Calling callback function: [%s] notification with params [%s]" % (method, params))
+          self.logger.log("Calling callback function: [%s] notification with params [%s]" % (method, params))
           if callback(id, method, params): break
         elif id: break
 
-    if checkResult and not "result" in jdata: print "ERROR: JSON response has no result!\n%s" % jdata
+    if checkResult and not "result" in jdata:
+      self.logger.out("ERROR: JSON response has no result!\n%s\n" % jdata)
 
     return jdata
 
@@ -838,7 +691,7 @@ class MyJSONComms(object):
     if method == "VideoLibrary.OnUpdate" and "data" in params:
       if "item" in params["data"]:
         item = params["data"]["item"]
-        self.progress.errout("Updating Library: %s id %d" % (item["type"], item["id"]), newLine=True)
+        self.logger.out("Updating Library: %s id %d\n" % (item["type"], item["id"]))
       return False
 
     if method.endswith("Library.OnScanFinished"): return True
@@ -883,12 +736,12 @@ class MyJSONComms(object):
       raise ValueError("mediatype [%s] not yet implemented" % mediatype)
 
     for libraryid in libraryids:
-      self.progress.log("Removing %s %d from media library." % (idName, libraryid))
+      self.logger.log("Removing %s %d from media library." % (idName, libraryid))
       REQUEST = {"method": removeMethod, "params":{idName: libraryid}}
       self.sendJSON(REQUEST, "libRemove")
 
     for directory in directories:
-      self.progress.stdout("Rescanning directory: %s...\n" % directory)
+      self.logger.out("Rescanning directory: %s...\n" % directory)
       REQUEST = {"method": scanMethod, "params":{"directory": directory}}
       self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
 
@@ -935,7 +788,7 @@ class MyJSONComms(object):
       return "/%s" % data["result"]["details"]["path"]
     else:
       if filename[8:12].lower() != "http":
-        self.progress.log("Files.PrepareDownload failed. It's a local file, what the heck... trying anyway.")
+        self.logger.log("Files.PrepareDownload failed. It's a local file, what the heck... trying anyway.")
         return "/image/%s" % urllib.quote(filename, "()")
       return None
 
@@ -953,12 +806,10 @@ class MyJSONComms(object):
 
   def dumpJSON(self, data, decode=False):
     if decode:
-      self.progress.errout("Decoding URLs...")
+      self.logger.progress("Decoding URLs...")
       self.unquoteArtwork(data)
-
-    self.progress.errout("")
-
-    print json.dumps(data, indent=2, ensure_ascii=True, sort_keys=False)
+    self.logger.progress("")
+    print(json.dumps(data, indent=2, ensure_ascii=True, sort_keys=False))
 
   def unquoteArtwork(self, items):
     for item in items:
@@ -1129,16 +980,16 @@ class MyTotals(object):
       line1 = "%s| %s" % (line1, i.center(width))
       line2 = "%s+-%s" % (line2, "-" * width)
 
-    print
-    print line0
-    print
-    print line1
-    print line2
+    print("")
+    print(line0)
+    print("")
+    print(line1)
+    print(line2)
 
     for a in sortedTOTALS:
       a = a[0]
       self.TOTALS[a]["TOTAL"] = 0
-      if a == "TOTAL": print line2.replace("-","=").replace("+","=")
+      if a == "TOTAL": print(line2.replace("-","=").replace("+","="))
       line = "%-12s " % a
       for i in sortedItems:
         i = i[0]
@@ -1154,7 +1005,7 @@ class MyTotals(object):
           value = "-"
         width = 10 if len(i) < 10 else len(i)+1
         line = "%s| %s" % (line, value.center(width))
-      print line
+      print(line)
 
 #
 # Simple container for media items under consideration for processing
@@ -1210,8 +1061,8 @@ def removeNonAscii(s, replaceWith = ""):
 # Sets doesn't support filters, so filter this list after retrieval.
 #
 def processData(action, mediatype, filter, force, extraFields=False, nodownload=False):
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   if mediatype in ["movies", "tags", "tvshows", "episodes"] and gConfig.CACHE_CAST_THUMB:
     secondaryFields= "cast"
@@ -1220,7 +1071,7 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
 
   if mediatype == "tvshows": TOTALS.addSeasonAll()
 
-  gProgress.errout("Loading %s..." % mediatype, every = 1)
+  gLogger.progress("Loading %s..." % mediatype, every = 1)
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, secondaryFields)
 
@@ -1237,14 +1088,14 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
   if mediatype == "tvshows":
     for tvshow in data["result"][section_name]:
       title = tvshow["title"]
-      gProgress.errout("Loading TV Show: [%s]..." % title.encode("utf-8"), every = 1)
+      gLogger.progress("Loading TV Show: [%s]..." % title.encode("utf-8"), every = 1)
       (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name])
       limits = data2["result"]["limits"]
       if limits["total"] == 0: return
       tvshow[s2] = data2["result"]
       for season in data2["result"][s2]:
         seasonid = season["season"]
-        gProgress.errout("Loading TV Show: [%s, Season %d]..." % (title.encode("utf-8"), seasonid), every = 1)
+        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title.encode("utf-8"), seasonid), every = 1)
         (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, secondaryFields, showid=tvshow[id_name], seasonid=season[i2])
         limits = data3["result"]["limits"]
         if limits["total"] == 0: return
@@ -1273,16 +1124,16 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
   del data
   del imagecache
 
-  gProgress.errout("Loading database items...")
+  gLogger.progress("Loading database items...")
   dbfiles = {}
   with database:
     rows = database.getAllColumns().fetchall()
     for r in rows:
       dbfiles[r[3].encode("ascii", "ignore")] = r
 
-  gProgress.log("Loaded %d items from texture cache database" % len(dbfiles))
+  gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
 
-  gProgress.errout("Matching database items...")
+  gLogger.progress("Matching database items...")
 
   ITEMLIMIT = 1e9 if nodownload else 100
 
@@ -1304,7 +1155,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
         item.dbid = db[0]
         item.cachedurl = db[1]
       else:
-        gProgress.log("ITEM SKIPPED: %s" % item)
+        gLogger.log("ITEM SKIPPED: %s" % item)
         TOTALS.bump("Skipped", item.itype)
         item.status = 0
     # These items we are missing from the cache...
@@ -1312,10 +1163,10 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
       itemCount += 1
       item.status = 1
       if itemCount < ITEMLIMIT:
-        MSG = "Need to cache: [%-10s] for %s: %s" % (item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
-        gProgress.errout(MSG, newLine=True)
+        MSG = "Need to cache: [%-10s] for %s: %s\n" % (item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
+        gLogger.out(MSG)
       elif itemCount == ITEMLIMIT:
-        gProgress.errout("...and many more! (First %d items shown)" % ITEMLIMIT, newLine=True)
+        gLogger.out("...and many more! (First %d items shown)\n" % ITEMLIMIT)
 
   # Don't need this data anymore, make it available for garbage collection
   del dbfiles
@@ -1325,19 +1176,17 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
     for item in mediaitems:
       if item.status == 1: TOTALS.bump("Not in Cache", item.itype)
 
-  gProgress.errout("")
-
   if itemCount > 0 and not nodownload:
     work_queue = Queue.Queue()
     error_queue = Queue.Queue()
 
-    gProgress.errout("", newLine=True)
-    gProgress.errout("Caching artwork: %d item%s remaining of %d, 0 errors" % \
+    gLogger.out("\n")
+    gLogger.progress("Caching artwork: %d item%s remaining of %d, 0 errors" % \
                       (itemCount, "s"[itemCount==1:], itemCount))
 
     for item in mediaitems:
       if item.status == 1:
-        gProgress.log("QUEUE ITEM: %s" % item)
+        gLogger.log("QUEUE ITEM: %s" % item)
         work_queue.put(item)
 
     # Don't need this data anymore, make it available for garbage collection
@@ -1345,11 +1194,11 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
 
     tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
     THREADCOUNT = tCount if tCount <= itemCount else itemCount
-    gProgress.log("Creating %d image download threads" % THREADCOUNT)
+    gLogger.log("Creating %d image download threads" % THREADCOUNT)
 
     THREADS = []
     for i in range(THREADCOUNT):
-      t = MyImageLoader(work_queue, error_queue, itemCount, gConfig, gProgress, TOTALS, force, 10)
+      t = MyImageLoader(work_queue, error_queue, itemCount, gConfig, gLogger, TOTALS, force, 10)
       THREADS.append(t)
       t.setDaemon(True)
       t.start()
@@ -1362,23 +1211,22 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
         if ALIVE: time.sleep(1.0)
     except (KeyboardInterrupt, SystemExit):
       stopped.set()
-      gProgress.errout("Please wait while threads terminate...")
+      gLogger.progress("Please wait while threads terminate...")
       ALIVE = True
       while ALIVE:
         ALIVE = False
         for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
         if ALIVE: time.sleep(0.1)
 
-    gProgress.errout("\n")
+    gLogger.progress("\n")
 
     if not error_queue.empty():
-      gProgress.errout("\n")
-      gProgress.errout("The following items could not be downloaded:\n", newLine=True)
+      gLogger.out("\nThe following items could not be downloaded:\n\n")
       while not error_queue.empty():
         item = error_queue.get()
         name = item.getFullName()[:40]
-        gProgress.errout("[%-10s] [%-40s] %s" % (item.itype, name, urllib.unquote(item.filename)), newLine=True)
-        gProgress.log("ERROR ITEM: %s" % item)
+        gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, urllib.unquote(item.filename)))
+        gLogger.log("ERROR ITEM: %s" % item)
         error_queue.task_done()
 
 #
@@ -1386,7 +1234,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
 # Use recursion to process season and episode sub-elements.
 #
 def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName = None, season = None):
-  gProgress.reset()
+  gLogger.reset()
 
   SEASON_ALL = True
 
@@ -1409,7 +1257,7 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
         season = None
       episode = None
 
-    gProgress.errout("Parsing [%s]..." % name, every = 25)
+    gLogger.progress("Parsing [%s]..." % name, every = 25)
 
     for a in ["fanart", "poster", "thumb", "thumbnail"]:
       if a in item and evaluateURL(a, item[a], imagecache):
@@ -1462,7 +1310,7 @@ def evaluateURL(imgtype, url, imagecache):
   if gConfig.CACHE_IGNORE_TYPES:
     for ignore in gConfig.CACHE_IGNORE_TYPES:
       if re.search(ignore, url):
-        gProgress.log("Ignored image due to rule [%s]" % ignore)
+        gLogger.log("Ignored image due to rule [%s]" % ignore)
         TOTALS.bump("Ignored", imgtype)
         imagecache[url] = 1
         return False
@@ -1488,15 +1336,15 @@ def libraryQuery(action, item, filter="", force=False, extraFields=False, rescan
   elif item == "tvshows":
     libraryAllTVShows(action, filter, force, extraFields, rescan, decode)
   else:
-    print "item [%s] is not a valid library class to be queried" % item
+    print("item [%s] is not a valid library class to be queried" % item)
     sys.exit(2)
 
-  gProgress.errout("")
+  gLogger.progress("")
 
 def libraryAllAlbums(action, filter, force, extraFields, rescan, decode):
 
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, "albums", filter, extraFields)
 
@@ -1509,14 +1357,14 @@ def libraryAllAlbums(action, filter, force, extraFields, rescan, decode):
     title = album["title"]
     artist = album["artist"]
 
-    if action in ["qa", "dump"]: gProgress.errout("Parsing Album: [%s]..." % title.encode("utf-8"), every = 1)
+    if action in ["qa", "dump"]: gLogger.progress("Parsing Album: [%s]..." % title.encode("utf-8"), every = 1)
 
   if action == "dump": jcomms.dumpJSON(albums, decode)
 
 def libraryAllArtists(action, filter, force, extraFields, rescan, decode):
 
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, "artists", filter, extraFields)
 
@@ -1528,14 +1376,14 @@ def libraryAllArtists(action, filter, force, extraFields, rescan, decode):
   for artist in artists:
     name = artist["artist"]
 
-    if action in ["qa", "dump"]: gProgress.errout("Parsing Artist: [%s]..." % name.encode("utf-8"), every = 1)
+    if action in ["qa", "dump"]: gLogger.progress("Parsing Artist: [%s]..." % name.encode("utf-8"), every = 1)
 
   if action == "dump": jcomms.dumpJSON(artists, decode)
 
 def libraryAllSongs(action, filter, force, extraFields, rescan, decode):
 
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, "songs", filter, extraFields)
 
@@ -1548,15 +1396,15 @@ def libraryAllSongs(action, filter, force, extraFields, rescan, decode):
 
     title = song["title"]
 
-    if action in ["qa", "dump"]: gProgress.errout("Parsing Song: [%s]..." % title.encode("utf-8"), every = 1)
+    if action in ["qa", "dump"]: gLogger.progress("Parsing Song: [%s]..." % title.encode("utf-8"), every = 1)
 
   if action == "dump": jcomms.dumpJSON(songs, decode)
 
 def libraryAllMovies(action, filter, force, extraFields, rescan, decode, isTag=False):
   mediaType = "Tag" if isTag else "Movie"
 
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   secondaryFields = None
 
@@ -1580,7 +1428,7 @@ def libraryAllMovies(action, filter, force, extraFields, rescan, decode, isTag=F
     title = movie["title"]
     movieid = movie["movieid"]
 
-    if action in ["qa","dump"]: gProgress.errout("Parsing %s: [%s]..." % (mediaType, title.encode("utf-8")), every = 1)
+    if action in ["qa","dump"]: gLogger.progress("Parsing %s: [%s]..." % (mediaType, title.encode("utf-8")), every = 1)
 
     if action == "qa":
       missing = {}
@@ -1598,7 +1446,7 @@ def libraryAllMovies(action, filter, force, extraFields, rescan, decode, isTag=F
       if gConfig.QA_FILE and not ("file" in movie and jcomms.getFileDetails(movie["file"])): missing["file"] = False
 
       if missing != {}:
-        gProgress.stdout("%s [%-50s]: Missing %s\n" % (mediaType, title.encode("utf-8")[0:50], ", ".join(missing)))
+        gLogger.out("%s [%-50s]: Missing %s\n" % (mediaType, title.encode("utf-8")[0:50], ", ".join(missing)))
         if "".join(["Y" if missing[m] else "" for m in missing]) != "":
           libraryids.append(movieid)
           dir = os.path.dirname(movie["file"])
@@ -1610,8 +1458,8 @@ def libraryAllMovies(action, filter, force, extraFields, rescan, decode, isTag=F
 
 def libraryAllMovieSets(action, filter, force, extraFields, rescan, decode):
 
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, "sets", filter, extraFields)
 
@@ -1622,7 +1470,7 @@ def libraryAllMovieSets(action, filter, force, extraFields, rescan, decode):
 
   filteredSets = []
 
-  if action == "dump": gProgress.errout("Filtering Sets...")
+  if action == "dump": gLogger.progress("Filtering Sets...")
 
   for set in sets:
     title = set["title"]
@@ -1630,14 +1478,14 @@ def libraryAllMovieSets(action, filter, force, extraFields, rescan, decode):
       filteredSets.append(set)
 
   for set in filteredSets:
-    if action in ["qa", "dump"]: gProgress.errout("Parsing Set: [%s]..." % title.encode("utf-8"), every = 1)
+    if action in ["qa", "dump"]: gLogger.progress("Parsing Set: [%s]..." % title.encode("utf-8"), every = 1)
 
   if action == "dump": jcomms.dumpJSON(filteredSets, decode)
 
 def libraryAllTVShows(action, filter, force, extraFields, rescan, decode):
 
-  jcomms = MyJSONComms(gConfig, gProgress)
-  database = MyDB(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
 
   secondaryFields = None
   if action == "qa": secondaryFields = "plot, rating"
@@ -1654,7 +1502,7 @@ def libraryAllTVShows(action, filter, force, extraFields, rescan, decode):
     title = tvshow["title"]
     tvshowid = tvshow["tvshowid"]
 
-    if action in ["qa", "dump"]: gProgress.errout("Parsing TV Show: [%s]..." % title.encode("utf-8"), every = 1)
+    if action in ["qa", "dump"]: gLogger.progress("Parsing TV Show: [%s]..." % title.encode("utf-8"), every = 1)
 
     if action == "qa":
       missing = {}
@@ -1674,7 +1522,7 @@ def libraryAllTVShows(action, filter, force, extraFields, rescan, decode):
       elif database.getRowByFilename(tvshow["art"]["poster"]) == None: missing["poster (uncached)"] = False
 
       if missing != {}:
-        gProgress.stdout("TVShow  [%-38s]: Missing %s" % (title.encode("utf-8")[0:38], ", ".join(missing)))
+        gLogger.out("TVShow  [%-38s]: Missing %s" % (title.encode("utf-8")[0:38], ", ".join(missing)))
 
     seasons = libraryTVShow(jcomms, database, action, force, extraFields, rescan, title, tvshowid)
 
@@ -1694,7 +1542,7 @@ def libraryTVShow(jcomms, database, action, force, extraFields, rescan, showName
   for season in seasons:
     seasonid = season["season"]
 
-    if action in ["qa", "dump"]: gProgress.errout("Parsing TV Show: [%s, Season %d]..." % (showName.encode("utf-8"), seasonid), every = 1)
+    if action in ["qa", "dump"]: gLogger.progress("Parsing TV Show: [%s, Season %d]..." % (showName.encode("utf-8"), seasonid), every = 1)
 
     episodes = libraryTVSeason(jcomms, database, action, force, extraFields, rescan, showName, showid, seasonid)
 
@@ -1735,7 +1583,7 @@ def libraryTVSeason(jcomms, database, action, force, extraFields, rescan, showNa
       if gConfig.QA_FILE and not ("file" in episode and jcomms.getFileDetails(episode["file"])): missing["file"] = False
 
       if missing != {}:
-        gProgress.stdout("Episode [%-32s] %5s: Missing %s\n" % (showName[0:32], label, ", ".join(missing)))
+        gLogger.out("Episode [%-32s] %5s: Missing %s\n" % (showName[0:32], label, ", ".join(missing)))
         if "".join(["Y" if missing[m] else "" for m in missing]) != "":
           libraryids.append(episodeid)
           dir = os.path.dirname(episode["file"])
@@ -1747,7 +1595,7 @@ def libraryTVSeason(jcomms, database, action, force, extraFields, rescan, showNa
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter=""):
-  database = MyDB(gConfig, gProgress)
+  database = MyDB(gConfig, gLogger)
 
   with database:
     SQL = ""
@@ -1765,8 +1613,8 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
       row = database.fetchone()
       if row == None: break
 
-      IDS += " " + str(row[0])
-      FCOUNT+=1
+      IDS = "%s %s" % (IDS, str(row[0]))
+      FCOUNT += 1
 
       if ACTION == "NONE":
         database.dumpRow(row)
@@ -1777,25 +1625,24 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
         FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
         database.dumpRow(row)
 
-    if ACTION == "STATS": print "\nFile Summary: %s files; Total size: %s Kbytes\n" % (format(FCOUNT, ",d"), format(FSIZE/1024, ",d"))
+    if ACTION == "STATS":
+      gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(FSIZE/1024, ",d")))
 
-    sys.stdout.flush()
-
-    if (search != "" or filter != ""): gProgress.errout("Matching row ids:%s\n" % IDS)
+    if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
 
 # Delete row by id, and corresponding file item
 def sqlDelete( ids=[] ):
-  database = MyDB(gConfig, gProgress)
+  database = MyDB(gConfig, gLogger)
   with database:
     for id in ids:
       try:
         database.deleteItem(int(id))
       except ValueError:
-        print "id " + id + " is not valid"
+        gLogger.out("id %s is not valid\n" % id)
         continue
 
 def dirScan(CLEAN="N", purge_nonlibrary_artwork=False, libraryFiles=None, keyIsHash=False):
-  database = MyDB(gConfig, gProgress)
+  database = MyDB(gConfig, gLogger)
 
   with database:
     dbfiles = {}
@@ -1805,13 +1652,13 @@ def dirScan(CLEAN="N", purge_nonlibrary_artwork=False, libraryFiles=None, keyIsH
     re_search_addon = re.compile("^.*%s.xbmc%saddons%s.*" % (os.sep, os.sep, os.sep))
     re_search_mirror = re.compile("^http://mirrors.xbmc.org/addons/.*")
 
-    gProgress.errout("Loading texture cache...")
+    gLogger.progress("Loading texture cache...")
 
     rows = database.getAllColumns().fetchall()
     for r in rows: dbfiles[r[1]] = r
-    gProgress.log("Loaded %d rows from texture cache" % len(dbfiles))
+    gLogger.log("Loaded %d rows from texture cache" % len(dbfiles))
 
-    gProgress.errout("Scanning Thumbnails directory...")
+    gLogger.progress("Scanning Thumbnails directory...")
 
     path = gConfig.getFilePath()
 
@@ -1822,7 +1669,7 @@ def dirScan(CLEAN="N", purge_nonlibrary_artwork=False, libraryFiles=None, keyIsH
         for f in sorted(files, key=str.lower):
           hash = "%s/%s" % (dir, f)
 
-          gProgress.errout("Scanning Thumbnails directory [%s]..." % hash, every=25)
+          gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
 
           if not hash in dbfiles:
             orphanedfiles.append(hash)
@@ -1850,34 +1697,34 @@ def dirScan(CLEAN="N", purge_nonlibrary_artwork=False, libraryFiles=None, keyIsH
               else:
                  del libraryFiles[key]
 
-    gProgress.errout("")
+    gLogger.progress("")
 
     if not libraryFiles:
-      gProgress.log("Identified %d orphaned files" % len(orphanedfiles))
+      gLogger.log("Identified %d orphaned files" % len(orphanedfiles))
       if CLEAN == "Y" and len(orphanedfiles) > (len(dbfiles)/20):
-        gProgress.log("Something wrong here, that's far too many orphaned files - more than 5% limit.")
-        print "Found %d orphaned files for %d database files."  % (len(orphanedfiles), len(dbfiles))
-        print "This is far too many orphaned files for this number of database files, something may be wrong."
-        print "Check your configuration, database, and Thumbnails folder."
+        gLogger.log("Something is wrong here, that's far too many orphaned files - 5% limit exceeded!")
+        gLogger.out("Found %d orphaned files for %d database files.\n"  % (len(orphanedfiles), len(dbfiles)))
+        gLogger.out("This is far too many orphaned files for this number of database files, something may be wrong.\n")
+        gLogger.out("Check your configuration, database, and Thumbnails folder.\n")
         return
       for ofile in orphanedfiles:
-        print "Orphaned file found: Name [%s], Created [%s], Size [%d]%s" % \
+        gLogger.out("Orphaned file found: Name [%s], Created [%s], Size [%d]%s\n" % \
           (ofile,
            time.ctime(os.path.getctime(gConfig.getFilePath(ofile))),
            os.path.getsize(gConfig.getFilePath(ofile)),
-           ", REMOVING..." if CLEAN == "Y" else "")
+           ", REMOVING..." if CLEAN == "Y" else ""))
         if CLEAN == "Y": os.remove(gConfig.getFilePath(ofile))
 
     if libraryFiles:
       if localfiles != []:
-        if purge_nonlibrary_artwork: gProgress.errout("Pruning cached images from texture cache...", newLine=True)
-        else: gProgress.errout("The following items are present in the texture cache but not the media library:", newLine=True)
+        if purge_nonlibrary_artwork: gLogger.progress("Pruning cached images from texture cache...", newLine=True)
+        else: gLogger.out("The following items are present in the texture cache but not the media library:\n")
       FSIZE=0
       for row in localfiles:
         database.dumpRow(row)
         FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
         if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1])
-      print "\nSummary: %s files; Total size: %s Kbytes\n" % (format(len(localfiles),",d"), format(FSIZE/1024, ",d"))
+      gLogger.out("\nSummary: %s files; Total size: %s Kbytes\n\n" % (format(len(localfiles),",d"), format(FSIZE/1024, ",d")))
 
 def getHash(string):
   string = string.lower()
@@ -1898,7 +1745,7 @@ def getHash(string):
 # as fast on a Pi.
 def getKeyFromHash(filename):
   url = re.sub("^image://(.*)/","\\1",filename)
-  url = u"" + urllib.unquote(url)
+  url = urllib.unquote(url)
   hash = getHash(url.encode("utf-8"))
   return "%s%s%s" % (hash[0:1], os.sep, hash)
 
@@ -1907,7 +1754,7 @@ def getKeyFromFilename(filename):
 
 def getAllFiles(keyFunction):
 
-  jcomms = MyJSONComms(gConfig, gProgress)
+  jcomms = MyJSONComms(gConfig, gLogger)
 
   files = {}
 
@@ -1941,7 +1788,7 @@ def getAllFiles(keyFunction):
     mediatype = re.sub(".*Library\.Get(.*)","\\1",r["method"])
     interval = 0 if mediatype == "MovieSets" else 50
 
-    gProgress.errout("Loading: %s..." % mediatype)
+    gLogger.progress("Loading: %s..." % mediatype)
     data = jcomms.sendJSON(r, "libFiles")
 
     for items in data["result"]:
@@ -1949,7 +1796,7 @@ def getAllFiles(keyFunction):
         title = ""
         for i in data["result"][items]:
           title = i["title"] if "title" in i else i["artist"]
-          gProgress.errout("Parsing: %s [%s]..." % (mediatype, title), every = interval)
+          gLogger.progress("Parsing: %s [%s]..." % (mediatype, title), every = interval)
           if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
           if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
           if "art" in i:
@@ -1959,9 +1806,9 @@ def getAllFiles(keyFunction):
             for c in i["cast"]:
               if "thumbnail" in c:
                 files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
-        if title != "": gProgress.errout("Parsing: %s [%s]..." % (mediatype, title))
+        if title != "": gLogger.progress("Parsing: %s [%s]..." % (mediatype, title))
 
-  gProgress.errout("Loading: TVShows...")
+  gLogger.progress("Loading: TVShows...")
 
   REQUEST = {"method":"VideoLibrary.GetTVShows",
              "params": {"sort": {"order": "ascending", "method": "title"},
@@ -1970,7 +1817,7 @@ def getAllFiles(keyFunction):
   tvdata = jcomms.sendJSON(REQUEST, "libTV")
 
   for tvshow in tvdata["result"]["tvshows"]:
-    gProgress.errout("Parsing: TVShows [%s]..." % tvshow["title"])
+    gLogger.progress("Parsing: TVShows [%s]..." % tvshow["title"])
     tvshowid = tvshow["tvshowid"]
     for a in tvshow["art"]:
       files[keyFunction(tvshow["art"][a])] = a
@@ -2027,33 +1874,33 @@ def pruneCache( purge_nonlibrary_artwork=False ):
 
 def usage(EXIT_CODE):
 
-  print "Version: %s" % gConfig.VERSION
-  print
-  print "Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | config"
-  print
-  print "  s       Search url column for partial movie or tvshow title. Case-insensitive."
-  print "  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation"
-  print "  x       Extract details, using optional SQL filter"
-  print "  X       Same as \"x\" (extract) but will validate cachedurl file exists, displaying only those that fail validation"
-  print "  f       Same as x, but include file summary (file count, accumulated file size)"
-  print "  d       Delete rows with matching ids, along with associated cached images"
-  print "  r       Reverse search to identify \"orphaned\" Thumbnail files not present in texture cache"
-  print "  R       Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files"
-  print "  c       Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs."
-  print "  C       Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory."
-  print "  nc      Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs."
-  print "  j       Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results."
-  print "  J       Same as \"j\", but includes extra JSON audio/video fields as defined in properties file."
-  print "  jd, Jd  Functionality equivalent to j/J, but all urls are decoded"
-  print "  qa      Run QA check on movies, tags and tvshows, identifying media with missing artwork or plots"
-  print "  qax     Same as qa, but remove and rescan those media items with missing details. Optional tests: qa.rating, qa.file."
-  print "  p       Display files present in texture cache that don't exist in the media library"
-  print "  P       Prune (automatically remove) cached items that don't exist in the media library"
-  print "  config  Show current configuration"
-  print
-  print "SQL Filter fields:"
-  print "  id, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url"
+  print("Version: %s" % gConfig.VERSION)
+  print("")
+  print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
+        "rR | c [class [filter]] | nc [class [filter]] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | config")
+  print("")
+  print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
+  print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
+  print("  x       Extract details, using optional SQL filter")
+  print("  X       Same as \"x\" (extract) but will validate cachedurl file exists, displaying only those that fail validation")
+  print("  f       Same as x, but include file summary (file count, accumulated file size)")
+  print("  d       Delete rows with matching ids, along with associated cached images")
+  print("  r       Reverse search to identify \"orphaned\" Thumbnail files not present in texture cache")
+  print("  R       Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
+  print("  c       Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
+  print("  C       Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
+  print("  nc      Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
+  print("  j       Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results.")
+  print("  J       Same as \"j\", but includes extra JSON audio/video fields as defined in properties file.")
+  print("  jd, Jd  Functionality equivalent to j/J, but all urls are decoded")
+  print("  qa      Run QA check on movies, tags and tvshows, identifying media with missing artwork or plots")
+  print("  qax     Same as qa, but remove and rescan those media items with missing details. Optional tests: qa.rating, qa.file.")
+  print("  p       Display files present in texture cache that don't exist in the media library")
+  print("  P       Prune (automatically remove) cached items that don't exist in the media library")
+  print("  config  Show current configuration")
+  print("")
+  print("SQL Filter fields:")
+  print("  id, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url")
 
   sys.exit(EXIT_CODE)
 
@@ -2065,51 +1912,51 @@ def showConfig(EXIT_CODE):
     for i in gConfig.CACHE_IGNORE_TYPES: t.append(i.pattern)
     ignore_types = ", ".join(t)
 
-  print "Current properties (if exists, read from %s%s%s):" % (os.path.dirname(__file__), os.sep, gConfig.CONFIG_NAME)
-  print
-  print "  sep = %s" % gConfig.FSEP
-  print "  userdata = %s " % gConfig.XBMC_BASE
-  print "  dbfile = %s" % gConfig.TEXTUREDB
-  print "  thumbnails = %s " % gConfig.THUMBNAILS
-  print "  xbmc.host = %s" % gConfig.XBMC_HOST
-  print "  webserver.port = %s" % gConfig.WEB_PORT
-  print "  webserver.singleshot = %s" % gConfig.WEB_SINGLESHOT
-  print "  rpc.port = %s" % gConfig.RPC_PORT
-  print "  download.threads = %d" % gConfig.DOWNLOAD_THREADS_DEFAULT
-  print "  extrajson.albums  = %s" % gConfig.XTRAJSON["extrajson.albums"]
-  print "  extrajson.artists = %s" % gConfig.XTRAJSON["extrajson.artists"]
-  print "  extrajson.songs   = %s" % gConfig.XTRAJSON["extrajson.songs"]
-  print "  extrajson.movies  = %s" % gConfig.XTRAJSON["extrajson.movies"]
-  print "  extrajson.sets    = %s" % gConfig.XTRAJSON["extrajson.sets"]
-  print "  extrajson.tvshows.tvshow = %s" % gConfig.XTRAJSON["extrajson.tvshows.tvshow"]
-  print "  extrajson.tvshows.season = %s" % gConfig.XTRAJSON["extrajson.tvshows.season"]
-  print "  extrajson.tvshows.episode= %s" % gConfig.XTRAJSON["extrajson.tvshows.episode"]
-  print "  qaperiod = %d (added after %s)" % (gConfig.QAPERIOD, gConfig.QADATE)
-  print "  qa.rating = %s" % gConfig.QA_RATING
-  print "  qa.file = %s" % gConfig.QA_FILE
-  print "  cache.castthumb = %s" % gConfig.CACHE_CAST_THUMB
-  print "  cache.ignore.types = %s" % ignore_types
-  print "  logfile = %s" % gConfig.LOGFILE
+  print("Current properties (if exists, read from %s%s%s):" % (os.path.dirname(__file__), os.sep, gConfig.CONFIG_NAME))
+  print("")
+  print("  sep = %s" % gConfig.FSEP)
+  print("  userdata = %s " % gConfig.XBMC_BASE)
+  print("  dbfile = %s" % gConfig.TEXTUREDB)
+  print("  thumbnails = %s " % gConfig.THUMBNAILS)
+  print("  xbmc.host = %s" % gConfig.XBMC_HOST)
+  print("  webserver.port = %s" % gConfig.WEB_PORT)
+  print("  webserver.singleshot = %s" % gConfig.WEB_SINGLESHOT)
+  print("  rpc.port = %s" % gConfig.RPC_PORT)
+  print("  download.threads = %d" % gConfig.DOWNLOAD_THREADS_DEFAULT)
+  print("  extrajson.albums  = %s" % gConfig.XTRAJSON["extrajson.albums"])
+  print("  extrajson.artists = %s" % gConfig.XTRAJSON["extrajson.artists"])
+  print("  extrajson.songs   = %s" % gConfig.XTRAJSON["extrajson.songs"])
+  print("  extrajson.movies  = %s" % gConfig.XTRAJSON["extrajson.movies"])
+  print("  extrajson.sets    = %s" % gConfig.XTRAJSON["extrajson.sets"])
+  print("  extrajson.tvshows.tvshow = %s" % gConfig.XTRAJSON["extrajson.tvshows.tvshow"])
+  print("  extrajson.tvshows.season = %s" % gConfig.XTRAJSON["extrajson.tvshows.season"])
+  print("  extrajson.tvshows.episode= %s" % gConfig.XTRAJSON["extrajson.tvshows.episode"])
+  print("  qaperiod = %d (added after %s)" % (gConfig.QAPERIOD, gConfig.QADATE))
+  print("  qa.rating = %s" % gConfig.QA_RATING)
+  print("  qa.file = %s" % gConfig.QA_FILE)
+  print("  cache.castthumb = %s" % gConfig.CACHE_CAST_THUMB)
+  print("  cache.ignore.types = %s" % ignore_types)
+  print("  logfile = %s" % gConfig.LOGFILE)
   if gConfig.RECACHEALL:
-    print "  allow.recacheall = yes"
-  print
-  print "See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields."
+    print("  allow.recacheall = yes")
+  print("")
+  print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
   sys.exit(EXIT_CODE)
 
 def loadConfig():
   global DBVERSION, MYWEB, MYSOCKET, MYDB
   global TOTALS
-  global gConfig, gProgress
+  global gConfig, gLogger
 
   DBVERSION = MYWEB = MYSOCKET = MYDB = None
 
   TOTALS = MyTotals()
 
   gConfig = MyConfiguration()
-  gProgress = MyLogger()
-  gProgress.DEBUG = gConfig.DEBUG
-  gProgress.setLogFile(gConfig.LOGFILE)
+  gLogger = MyLogger()
+  gLogger.DEBUG = gConfig.DEBUG
+  gLogger.setLogFile(gConfig.LOGFILE)
 
 def checkConfig(option):
 
@@ -2137,7 +1984,7 @@ def checkConfig(option):
     try:
       defaultTimeout = socket.getdefaulttimeout()
       socket.setdefaulttimeout(7.5)
-      jcomms = MyJSONComms(gConfig, gProgress)
+      jcomms = MyJSONComms(gConfig, gLogger)
       REQUEST = {}
       REQUEST["jsonrpc"] = "2.0"
       REQUEST["method"] = "JSONRPC.Ping"
@@ -2155,13 +2002,13 @@ def checkConfig(option):
           "       enabled and running on the XBMC system you wish to connect.\n\n" \
           "       A connection cannot be established to the following webserver:\n" \
           "       %s:%s\n\n" \
-          "       Check settings in properties file %s" % (gConfig.XBMC_HOST, gConfig.WEB_PORT, gConfig.CONFIG_NAME)
-    gProgress.errout(MSG, newLine=True)
+          "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.WEB_PORT, gConfig.CONFIG_NAME)
+    gLogger.out(MSG)
     sys.exit(2)
 
   if needSocket:
     try:
-      jcomms = MyJSONComms(gConfig, gProgress)
+      jcomms = MyJSONComms(gConfig, gLogger)
       REQUEST = {"method": "JSONRPC.Ping"}
       data = jcomms.sendJSON(REQUEST, "libPing", timeout=7.5, checkResult=False)
       if "result" in data and data["result"] == "pong":
@@ -2182,26 +2029,26 @@ def checkConfig(option):
           "       enabled and running on the XBMC system you wish to connect.\n\n" \
           "       A connection cannot be established to the following JSON-RPC server:\n" \
           "       %s:%s\n\n" \
-          "       Check settings in properties file %s" % (gConfig.XBMC_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
-    gProgress.errout(MSG, newLine=True)
+          "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
+    gLogger.out(MSG)
     return False
 
   if needSocket and jsonGotVersion  < jsonNeedVersion :
     MSG = "FATAL: The task you wish to perform requires that a JSON-RPC server with\n" \
           "       version %d or above of the XBMC JSON-RPC API is provided.\n\n" \
           "       The JSON-RPC API version of the connected server is: %d (0 means unknown)\n\n" \
-          "       Check settings in properties file %s" % (jsonNeedVersion, jsonGotVersion, gConfig.CONFIG_NAME)
-    gProgress.errout(MSG, newLine=True)
+          "       Check settings in properties file %s\n" % (jsonNeedVersion, jsonGotVersion, gConfig.CONFIG_NAME)
+    gLogger.out(MSG)
     return False
 
   if needDb:
     try:
-      database = MyDB(gConfig, gProgress)
+      database = MyDB(gConfig, gLogger)
       con = database.getDB()
       if database.DBVERSION < 13:
-        MSG = "WARNING: The sqlite3 database pre-dates Frodo (v12), some problems may be encountered!"
-        gProgress.errout(MSG, newLine=True)
-        gProgress.log(MSG)
+        MSG = "WARNING: The sqlite3 database pre-dates Frodo (v12), some problems may be encountered!\n"
+        gLogger.out(MSG)
+        gLogger.log(MSG)
       gotDb = True
     except lite.OperationalError:
       pass
@@ -2211,8 +2058,8 @@ def checkConfig(option):
           "       access to the XBMC sqlite3 Texture Cache database.\n\n" \
           "       The following sqlite3 database could not be opened:\n" \
           "       %s\n\n" \
-          "       Check settings in properties file %s" % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
-    gProgress.errout(MSG, newLine=True)
+          "       Check settings in properties file %s\n" % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
+    gLogger.out(MSG)
     return False
 
   return True
@@ -2275,7 +2122,7 @@ def main(argv):
       libraryQuery("cache", argv[1], force=True)
       TOTALS.libraryStats(argv[1])
     else:
-      print "Forcing re-cache of all items is disabled. Enable by setting \"allow.recacheall=yes\" in property file."
+      print("Forcing re-cache of all items is disabled. Enable by setting \"allow.recacheall=yes\" in property file.")
       sys.exit(2)
   elif argv[0] == "C" and len(argv) == 3:
     libraryQuery("cache", argv[1], argv[2], force=True)
@@ -2327,7 +2174,7 @@ def main(argv):
     pruneCache(purge_nonlibrary_artwork=True)
 
   elif argv[0] == "version":
-    print "Version: v%s" % gConfig.VERSION
+    print("Version: v%s" % gConfig.VERSION)
 
   elif argv[0] == "config":
     showConfig(1)
