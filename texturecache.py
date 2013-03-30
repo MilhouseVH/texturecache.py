@@ -32,7 +32,7 @@
 
 import sqlite3 as lite
 import os, sys, ConfigParser, StringIO, json, re, datetime, time
-import httplib, urllib, socket, base64
+import httplib, urllib2, socket, base64, hashlib
 import Queue, threading
 
 #
@@ -41,7 +41,9 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.3"
+    self.VERSION="0.3.4"
+
+    self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
     config = ConfigParser.SafeConfigParser(defaults={
                                             "format": "%%06d",
@@ -70,7 +72,8 @@ class MyConfiguration(object):
                                             "cache.castthumb": "no",
                                             "cache.ignore.types": "image://video, image://music",
                                             "logfile": None,
-                                            "allow.recacheall": "no"
+                                            "allow.recacheall": "no",
+                                            "checkupdate": "yes"
                                             }
                                           )
 
@@ -130,17 +133,11 @@ class MyConfiguration(object):
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
     self.QADATE = adate.strftime("%Y-%m-%d")
 
-    temp = config.get("xbmc", "qa.rating").lower() if config.get("xbmc", "qa.rating") else "yes"
-    self.QA_RATING = True if (temp == "yes" or temp == "true") else False
+    self.QA_RATING  = self.getBoolean(config, "qa.rating", "yes")
+    self.QA_FILE = self.getBoolean(config, "qa.file", "yes")
 
-    temp = config.get("xbmc", "qa.file").lower() if config.get("xbmc", "qa.file") else "yes"
-    self.QA_FILE = True if (temp == "yes" or temp == "true") else False
-
-    temp = config.get("xbmc", "cache.castthumb").lower() if config.get("xbmc", "cache.castthumb") else "yes"
-    self.CACHE_CAST_THUMB = True if (temp == "yes" or temp == "true") else False
-
-    temp = config.get("xbmc", "webserver.singleshot").lower() if config.get("xbmc", "webserver.singleshot") else "yes"
-    self.WEB_SINGLESHOT = True if (temp == "yes" or temp == "true") else False
+    self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "yes")
+    self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "yes")
 
     web_user = config.get("xbmc", "webserver.username")
     web_pass = config.get("xbmc", "webserver.password")
@@ -153,20 +150,24 @@ class MyConfiguration(object):
     if temp != None and temp.lower() == "none": temp = None
     self.CACHE_IGNORE_TYPES = [re.compile(x.strip()) for x in temp.split(',')] if temp else None
 
-    temp = config.get("xbmc", "allow.recacheall").lower()
-    self.RECACHEALL = True if (temp == "yes" or temp == "true") else False
+    self.RECACHEALL = self.getBoolean(config, "allow.recacheall")
 
+    self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
+
+  # default value will be used if key is present, but without a value
+  def getBoolean(self, parser, key, default="no"):
+    temp = parser.get("xbmc", key)
+    temp = temp.lower() if temp else default
+    return True if (temp == "yes" or temp == "true") else False
 
   def getFilePath( self, filename = "" ):
-    # Absolute path, or colon (likely Windows drive ref)
-    if self.THUMBNAILS.startswith(os.sep) or self.THUMBNAILS.find(":") != -1:
+    if os.path.isabs(self.THUMBNAILS):
       return "%s%s" % (self.THUMBNAILS, filename)
     else:
       return "%s%s%s" % (self.XBMC_BASE, self.THUMBNAILS, filename)
 
   def getDBPath( self ):
-    # Absolute path, or colon (likely Windows drive ref)
-    if self.TEXTUREDB.startswith(os.sep) or self.TEXTUREDB.find(":") != -1:
+    if os.path.isabs(self.TEXTUREDB):
       return self.TEXTUREDB
     else:
       return "%s%s" % (self.XBMC_BASE, self.TEXTUREDB)
@@ -428,7 +429,7 @@ class MyDB(object):
     return row
 
   def getRowByFilename_Impl(self, filename, unquote=True):
-    ufilename = urllib.unquote(filename) if unquote else filename
+    ufilename = urllib2.unquote(filename) if unquote else filename
 
     # If string contains unicode, replace unicode chars with % and
     # use LIKE instead of equality
@@ -663,7 +664,7 @@ class MyJSONComms(object):
     # Not able to get a directory for remote files...
     if filename.find("image://http") != -1: return (None, None, None)
 
-    directory = urllib.unquote(filename[8:-1])
+    directory = urllib2.unquote(filename[8:-1])
 
     # Remove filename, leaving just directory...
     ADD_BACK=""
@@ -683,10 +684,10 @@ class MyJSONComms(object):
       for f in data["result"]["files"]:
         if f["filetype"] == "file":
           fname = f["label"].lower()
-          if fname.find("season-all.") != -1: poster_url = "image://%s%s" % (urllib.quote(f["file"], "()"),ADD_BACK)
-          elif fname.find("season-all-poster.") != -1: poster_url = "image://%s%s" % (urllib.quote(f["file"], "()"),ADD_BACK)
-          elif fname.find("season-all-banner.") != -1: banner_url = "image://%s%s" % (urllib.quote(f["file"], "()"),ADD_BACK)
-          elif fname.find("season-all-fanart.") != -1: fanart_url = "image://%s%s" % (urllib.quote(f["file"], "()"),ADD_BACK)
+          if fname.find("season-all.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif fname.find("season-all-poster.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif fname.find("season-all-banner.") != -1: banner_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif fname.find("season-all-fanart.") != -1: fanart_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
       return (poster_url, fanart_url, banner_url)
 
     return (None, None, None)
@@ -702,7 +703,7 @@ class MyJSONComms(object):
     else:
       if filename[8:12].lower() != "http":
         self.logger.log("Files.PrepareDownload failed. It's a local file, what the heck... trying anyway.")
-        return "/image/%s" % urllib.quote(filename, "()")
+        return "/image/%s" % urllib2.quote(filename, "()")
       return None
 
   def getFileDetails(self, filename):
@@ -729,17 +730,17 @@ class MyJSONComms(object):
       for field in item:
         if field in ["seasons", "episodes"]: self.unquoteArtwork(item[field])
 
-        if field in ["fanart", "thumbnail"]: item[field] = urllib.unquote(item[field])
+        if field in ["fanart", "thumbnail"]: item[field] = urllib2.unquote(item[field])
 
         if field == "art":
           art = item["art"]
           for image in art:
-            art[image] = urllib.unquote(art[image])
+            art[image] = urllib2.unquote(art[image])
 
         if field == "cast":
           for cast in item["cast"]:
             if "thumbnail" in cast:
-              cast["thumbnail"] = urllib.unquote(cast["thumbnail"])
+              cast["thumbnail"] = urllib2.unquote(cast["thumbnail"])
 
   def getData(self, action, mediatype,
               filter = None, useExtraFields = False, secondaryFields = None,
@@ -1052,7 +1053,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
 
   itemCount = 0
   for item in mediaitems:
-    filename = urllib.unquote(item.filename[8:-1]).encode("ascii", "ignore")
+    filename = urllib2.unquote(item.filename[8:-1]).encode("ascii", "ignore")
     if not filename in dbfiles:
       filename = item.filename[:-1].encode("ascii", "ignore")
 
@@ -1140,7 +1141,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
       while not error_queue.empty():
         item = error_queue.get()
         name = item.getFullName()[:40]
-        gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, urllib.unquote(item.filename)))
+        gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, urllib2.unquote(item.filename)))
         gLogger.log("ERROR ITEM: %s" % item)
         error_queue.task_done()
 
@@ -1660,12 +1661,12 @@ def getHash(string):
 # as fast on a Pi.
 def getKeyFromHash(filename):
   url = re.sub("^image://(.*)/","\\1",filename)
-  url = urllib.unquote(url)
+  url = urllib2.unquote(url)
   hash = getHash(url.encode("utf-8"))
   return "%s%s%s" % (hash[0:1], os.sep, hash)
 
 def getKeyFromFilename(filename):
-  return removeNonAscii(urllib.unquote(re.sub("^image://(.*)/","\\1",filename)))
+  return removeNonAscii(urllib2.unquote(re.sub("^image://(.*)/","\\1",filename)))
 
 def getAllFiles(keyFunction):
 
@@ -1852,6 +1853,7 @@ def showConfig(EXIT_CODE):
   print("  cache.castthumb = %s" % gConfig.CACHE_CAST_THUMB)
   print("  cache.ignore.types = %s" % ignore_types)
   print("  logfile = %s" % gConfig.LOGFILE)
+  print("  checkupdate = %s" % gConfig.CHECKUPDATE)
   if gConfig.RECACHEALL:
     print("  allow.recacheall = yes")
   print("")
@@ -1979,6 +1981,66 @@ def checkConfig(option):
 
   return True
 
+def checkUpdate():
+  (remoteVersion, remoteHash) = getLatestVersion()
+
+  if remoteVersion and remoteVersion > gConfig.VERSION:
+    print("A new version (v%s) of this script is available" % remoteVersion)
+    print("Use the \"update\" option to automatically download and apply update.")
+    print("")
+
+def getLatestVersion():
+  return ("0.3.4", "abc")
+
+  try:
+    response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "VERSION"))
+    data = response.read()
+    return data.split(" ")
+  except:
+    return (None, None)
+
+def downloadLatestVersion():
+  (remoteVersion, remoteHash) = getLatestVersion()
+
+  if not remoteVersion:
+    print("FATAL: Unable to determine version of the latest file, check internet is available.")
+    sys.exit(2)
+
+  if remoteVersion <= gConfig.VERSION:
+    print("Current version is already up to date - no update required.")
+    sys.exit(2)
+
+  try:
+    response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "texturecache.py"))
+    data = response.read()
+  except:
+    print("FATAL: Unable to download latest file, check internet is available.")
+    sys.exit(2)
+
+  digest = hashlib.md5()
+  digest.update(data)
+
+  if (digest.hexdigest() != remoteHash):
+    print("FATAL: Hash of new download is not correct, possibly corrupt, abandoning update.")
+    sys.exit(2)
+
+  path = os.path.realpath(__file__)
+  dir = os.path.dirname(path)
+
+  if os.path.exists("%s%s.git" % (dir, os.sep)):
+    print("FATAL: Might be updating version in git repository... Abandoning update!")
+    sys.exit(2)
+
+  try:
+    THISFILE = open(os.path.realpath(__file__), "w")
+    THISFILE.write(data)
+    THISFILE.close()
+  except:
+    print("FATAL: Unable to update current file, check you have write access")
+    sys.exit(2)
+
+  print("Succesfully updated to version v%s" % remoteVersion)
+
 def main(argv):
 
   loadConfig()
@@ -1986,6 +2048,9 @@ def main(argv):
   if len(argv) == 0: usage(1)
 
   if not checkConfig(argv[0]): sys.exit(2)
+
+  if gConfig.CHECKUPDATE:
+    if not argv[0] in ["version","update"]: checkUpdate()
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")
@@ -2089,10 +2154,14 @@ def main(argv):
     pruneCache(purge_nonlibrary_artwork=True)
 
   elif argv[0] == "version":
-    print("Version: v%s" % gConfig.VERSION)
+    print("Current Version: v%s\n" % gConfig.VERSION)
+    checkUpdate()
 
   elif argv[0] == "config":
     showConfig(1)
+
+  elif argv[0] == "update":
+    downloadLatestVersion()
 
   else:
     usage(1)

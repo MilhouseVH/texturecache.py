@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.3.4 (30/03/2013)
+* Add version check/update support. Check version with `version` option, and update with `update`.
+
+  An automatic version check will always occur, unless disabled by `checkupdate = no` in properties.
+
 ##Version 0.3.3 (29/03/2013)
 * Fix length bug in `MyLogger.progress()`
 * Change `print` to `print()`
