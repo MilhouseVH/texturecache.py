@@ -66,54 +66,54 @@ Changelog:
   * Added extra QA rule, "[artwork] (uncached)", which is a warning
     only, and won't cause a directory re-scan by itself, mostly
     because it's usually pointless.
-#
-#  Version 0.2.3 - 24/03/2013
-#  * Add logfile property, eg. logfile=/tmp/cache.log
-#
-#  Version 0.2.2 - 24/03/2013
-#  * Fix pre-Python 2.7.3 incompatibility.
-#
-#  Version 0.2.1 - 23/03/2013
-#  * Added webserver.username/webserver.password authentication.
-#  * Summary of processing for c/C options
-#
-#  Version 0.2.0 - 23/03/2013
-#  * Auto-detect webserver.singleshot - unless already enabled
-#    in properties, will be automatically enabled when first web
-#    connection request fails, with the request being attempted a
-#    second time. Best to leave disabled, and only used when required.
-#
-#  Version 0.1.9 - 23/03/2013
-#  * Add webserver.singleshot = yes/no property to prevent web server
-#    connection from being reused, as this seems to cause a problem for
-#    some users. Default behaviour is to reuse the connection.
-#
-#  Version 0.1.8 - 22/03/2013
-#  * Optionally cache cast thumbnails - add cache.castthumb = yes/no/true/false
-#    to properties file. Default is no/false.
-#
-#  Version 0.1.7 - 21/03/2013
-#  * When pruning the texture cache, don't consider files that are
-#    stored in the local filesystem as these are most likely add-on
-#    related.
-#
-#  Version 0.1.6 - 20/03/2013
-#  * Add support for season-all-(fanart|banner).
-#
-#  Version 0.1.5 - 17/03/2013
-#  * Add prune (p) option.
-#  * Significantly improved performance of r/R option
-#
-#  Version 0.1.4 - 16/03/2013
-#  * Refactor connection code
-#  * Add keyboard interrupt exception handler
-#
-#  Version 0.1.3 - 15/03/2013
-#  * Switch JSON to use tcp sockets.
-#  * Add xbmc_host (localhost) and rpc_port (9090) properties
-#
-#  Version 0.1.2 - 13/03/2013
-#  * Restrict qa to consider only movies/tvshows added within qaperiod days.
+
+  Version 0.2.3 - 24/03/2013
+  * Add logfile property, eg. logfile=/tmp/cache.log
+
+  Version 0.2.2 - 24/03/2013
+  * Fix pre-Python 2.7.3 incompatibility.
+
+  Version 0.2.1 - 23/03/2013
+  * Added webserver.username/webserver.password authentication.
+  * Summary of processing for c/C options
+
+  Version 0.2.0 - 23/03/2013
+  * Auto-detect webserver.singleshot - unless already enabled
+    in properties, will be automatically enabled when first web
+    connection request fails, with the request being attempted a
+    second time. Best to leave disabled, and only used when required.
+
+  Version 0.1.9 - 23/03/2013
+  * Add webserver.singleshot = yes/no property to prevent web server
+    connection from being reused, as this seems to cause a problem for
+    some users. Default behaviour is to reuse the connection.
+
+  Version 0.1.8 - 22/03/2013
+  * Optionally cache cast thumbnails - add cache.castthumb = yes/no/true/false
+    to properties file. Default is no/false.
+
+  Version 0.1.7 - 21/03/2013
+  * When pruning the texture cache, don't consider files that are
+    stored in the local filesystem as these are most likely add-on
+    related.
+
+  Version 0.1.6 - 20/03/2013
+  * Add support for season-all-(fanart|banner).
+
+  Version 0.1.5 - 17/03/2013
+  * Add prune (p) option.
+  * Significantly improved performance of r/R option
+
+  Version 0.1.4 - 16/03/2013
+  * Refactor connection code
+  * Add keyboard interrupt exception handler
+
+  Version 0.1.3 - 15/03/2013
+  * Switch JSON to use tcp sockets.
+  * Add xbmc_host (localhost) and rpc_port (9090) properties
+
+  Version 0.1.2 - 13/03/2013
+  * Restrict qa to consider only movies/tvshows added within qaperiod days.
 
   Version 0.1.1 - 13/03/2013
   * Add qa option to identify missing artwork and plots (movies and tvshows only)
