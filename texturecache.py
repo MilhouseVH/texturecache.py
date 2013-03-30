@@ -1985,7 +1985,7 @@ def checkUpdate():
   (remoteVersion, remoteHash) = getLatestVersion()
 
   if remoteVersion and remoteVersion > gConfig.VERSION:
-    print("A new version (v%s) of this script is available" % remoteVersion)
+    print("A new version (v%s) of this script is available." % remoteVersion)
     print("Use the \"update\" option to automatically download and apply update.")
     print("")
 
@@ -1993,7 +1993,7 @@ def getLatestVersion():
   try:
     response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "VERSION"))
     data = response.read()
-    return data.split(" ")
+    return data.replace("\n","").split(" ")
   except:
     return (None, None)
 
