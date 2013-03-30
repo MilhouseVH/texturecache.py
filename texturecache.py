@@ -1990,8 +1990,6 @@ def checkUpdate():
     print("")
 
 def getLatestVersion():
-  return ("0.3.4", "abc")
-
   try:
     response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "VERSION"))
     data = response.read()
