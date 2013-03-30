@@ -21,9 +21,9 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[r, R]** Reverse query cache, identifying any "orphaned" files no longer referenced by texture cache database, with option to auto-delete files
 
-**[j, J, jd, Jd]** Query media library using JSON API, and output content using JSON notation (and suitable for further external processing). The **jd** and **Jd** options will decode (unquote) all artwork urls. **J** and **Jd** options will include additional user configurable fields when querying media library (see [properties file](#propertyfile))
+**[j, J, jd, Jd]** Query media library using JSON API, and output content using JSON notation (and suitable for further external processing). The **jd** and **Jd** options will decode (unquote) all artwork urls. **J** and **Jd** options will include additional user configurable fields when querying media library (see [properties file](#optional-properties-file))
 
-**[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#propertyfile). Add properties "[qa.rating = yes](#propertyfile)" or "[qa.file = yes](#propertyfile)" for rating and file validation during QA
+**[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Add properties "[qa.rating = yes](#optional-properties-file)" or "[qa.file = yes](#optional-properties-file)" for rating and file validation during QA
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
@@ -55,13 +55,7 @@ Let's say the poster image for the "Dr. No" movie is corrupted, and it needs to 
 
 ```
 000226|5/596edd13.jpg|0720|1280|0011|2013-03-05 02:07:40|2013-03-04 21:27:37|nfs://192.168.0.3/mnt/share/media/Video/Movies/James Bond/Dr. No (1962)[DVDRip]-fanart.jpg
-```
-
-```
 000227|6/6f3d0d94.jpg|0512|0364|0003|2013-03-05 02:07:40|2013-03-04 22:26:38|nfs://192.168.0.3/mnt/share/media/Video/Movies/James Bond/Dr. No (1962)[DVDRip].tbn
-```
-
-```
 Matching row ids: 226 227
 ```
 
@@ -84,7 +78,7 @@ The utility has several options that operate on media library items grouped into
 * tvshows
 
 In most cases, when performing an operation it is possible to specify a filter to further restrict processing/selection of particular items, for example, to extract the default media library details for all movies whose name contains "zombie":
-
+####Code:
 ```
 ./texturecache.py j movies zombie
 ```
@@ -93,13 +87,13 @@ In most cases, when performing an operation it is possible to specify a filter t
 When using the tags media class, you can apply a filter that uses logical operators such as `and` and `or` to restrict the selection criteria.
 
 For example, to cache only those movies tagged with either action and adventure:
-
+####Code:
 ```
 ./texturecache.py c tags "action and adventure"
 ```
 
 Or, only those movies tagged with either comedy or family:
-
+####Code:
 ```
 ./texturecache.py c tags "comedy or family"
 ```
@@ -110,7 +104,7 @@ If no filter is specified, all movies with a tag will be selected.
 ##Format of database records
 
 When displaying rows from the texture cache database, the following fields (columns) are shown:
-
+####Code:
 ```
 rowid, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url
 ```
@@ -118,32 +112,29 @@ rowid, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url
 ##Additional usage examples
 
 #####Caching all of the artwork for your TV Shows
-
+####Code:
 ```
 ./texturecache.py c tvshows
 ```
 
-
 #####Viewing your most recently accessed artwork
-
+####Code:
 ```
 ./texturecache.py x | sort -t"|" -k6
 ```
-
 or
-
+####Code:
 ```
 ./texturecache.py x "order by lastusetime asc"
 ```
 
 #####Viewing your Top 10 accessed artwork
-
+####Code:
 ```
 ./texturecache.py x | sort -t"|" -k5r | head -10
 ```
-
 or
-
+####Code:
 ```
 ./texturecache.py x "order by usecount desc" 2>/dev/null | head -10
 ```
@@ -153,8 +144,7 @@ or
 Use texturecache.py to identify artwork for deletion, then cutting and pasting the matched ids into the "d" option or via a script:
 
 For example, to delete those small remote thumbnails you might have viewed when downloading artwork (and which still clutter up your cache):
-
-
+####Code:
 ```
 ./texturecache.py s "size=thumb"
 ```
@@ -162,24 +152,24 @@ For example, to delete those small remote thumbnails you might have viewed when 
 *then cut & paste the ids as an argument to `./texturecache.py d id [id id]`
 
 and the same, but automatically:
-
+####Code:
 ```
 IDS=$(./texturecache.py s "size=thumb" 2>&1 1>/dev/null | cut -b19-)
 [ -n "$IDS" ] && ./texturecache.py d $IDS
 ```
 
 Or when removing artwork that is no longer needed, simply let texturecache.py work it all out:
-
+####Code:
 ```./texturecache.py P```
 
 #####Delete artwork that has not been accessed after a particular date
-
+####Code:
 ```
 ./texturecache.py x "where lastusetime <= '2013-03-05'
 ```
 
 or hasn't been accessed more than once:
-
+####Code:
 ```
 ./texturecache.py x "where usecount <= 1"
 ```
@@ -187,11 +177,11 @@ or hasn't been accessed more than once:
 #####Query the media library, returning JSON results
 
 First, let's see the default fields for a particular media class (movies), filtered for a specific item (avatar):
-
+####Code:
 ```
 ./texturecache.py j movies "avatar"
 ```
-
+####Result:
 ```
 [
   {
@@ -210,9 +200,12 @@ First, let's see the default fields for a particular media class (movies), filte
 ```
 
 With `extrajson.movies = trailer, streamdetails, file` in the properties file, here is the same query but now returning the extra fields too:
-
+####Code:
 ```
 ./texturecache.py J movies "Avatar"
+```
+####Result:
+```
 [
   {
     "movieid": 22,
@@ -250,7 +243,7 @@ With `extrajson.movies = trailer, streamdetails, file` in the properties file, h
 ]
 ```
 
-<a id="propertyfile">Optional Properties File</a>
+##Optional Properties File
 
 By default the script will run fine on distributions where the `.xbmc/userdata` folder is within the users Home folder (ie. `userdata=~/.xbmc/userdata`). To override this default, specify a properties file with a different value for the `userdata` property.
 
