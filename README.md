@@ -149,9 +149,9 @@ For example, to delete those small remote thumbnails you might have viewed when 
 ./texturecache.py s "size=thumb"
 ```
 
-*then cut & paste the ids as an argument to `./texturecache.py d id [id id]`
+then cut & paste the ids as an argument to `./texturecache.py d id [id id]`
 
-and the same, but automatically:
+And the same, but automatically:
 ####Code:
 ```
 IDS=$(./texturecache.py s "size=thumb" 2>&1 1>/dev/null | cut -b19-)
