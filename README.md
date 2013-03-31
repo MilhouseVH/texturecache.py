@@ -273,6 +273,7 @@ qa.rating = no
 qa.file = no
 cache.castthumb = no
 cache.ignore.types = image://video, image://music
+prune.retain.types =
 logfile =
 ```
 
@@ -285,6 +286,8 @@ The `extrajson.*` properties allow the specification of additional JSON audio/vi
 Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes` if you require cast artwork to be re-cached.
 
 Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `image://video` and `image://music`. Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
+
+Retain specific URLs when pruning the texture cache, eg. `prune.retain.types = ^http://www.wiziwig.tv/` to keep all artwork relating to wizwig.tv (as used by the SportsDevil addon).
 
 Specify a filename for the `logfile` property, to log detailed processing information. Prefix the filename with + to force flushing.
 

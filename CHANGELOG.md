@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.3.5 (31/03/2013)
+* Added timing and performance data to statistical summary on `c`, `C` and `nc` options
+* Added `prune.retain.types` property to retain specific URLs when pruning (`p`, `P`) the texture cache
+* Added additional JSON artwork queries for Genres and Addons when pruning the texture cache
+
 ##Version 0.3.4 (30/03/2013)
 * Add version check/update support. Check version with `version` option, and update with `update`.
 
