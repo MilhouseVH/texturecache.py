@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.7"
+    self.VERSION="0.3.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -58,6 +58,7 @@ class MyConfiguration(object):
                                             "webserver.password": None,
                                             "rpc.port": "9090",
                                             "download.threads": "2",
+                                            "extrajson.addons": None,
                                             "extrajson.albums": None,
                                             "extrajson.artists": None,
                                             "extrajson.songs": None,
@@ -115,7 +116,7 @@ class MyConfiguration(object):
     self.DOWNLOAD_THREADS_DEFAULT = int(config.get("xbmc", "download.threads"))
 
     self.DOWNLOAD_THREADS = {}
-    for x in ["albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
+    for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
       temp = self.DOWNLOAD_THREADS_DEFAULT
       try:
         temp = int(config.get("xbmc", "download.threads.%s" % x))
@@ -124,7 +125,8 @@ class MyConfiguration(object):
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
 
     self.XTRAJSON = {}
-    for x in ["extrajson.albums", "extrajson.artists", "extrajson.songs",
+    for x in ["extrajson.addons",
+              "extrajson.albums", "extrajson.artists", "extrajson.songs",
               "extrajson.movies", "extrajson.sets",
               "extrajson.tvshows.tvshow", "extrajson.tvshows.season", "extrajson.tvshows.episode"]:
       temp = config.get("xbmc", x)
@@ -210,6 +212,7 @@ class MyConfiguration(object):
       for dt in self.DOWNLOAD_THREADS:
         if self.DOWNLOAD_THREADS[dt] != self.DOWNLOAD_THREADS_DEFAULT:
           print("  %s = %d" % (dt, self.DOWNLOAD_THREADS[dt]))
+    print("  extrajson.addons  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.addons"]))
     print("  extrajson.albums  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.albums"]))
     print("  extrajson.artists = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.artists"]))
     print("  extrajson.songs   = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.songs"]))
@@ -838,7 +841,12 @@ class MyJSONComms(object):
     TITLE = "title"
     IDENTIFIER = "%sid" % re.sub("(.*)s$", "\\1", mediatype)
 
-    if mediatype == "albums":
+    if mediatype == "addons":
+      REQUEST = {"method":"Addons.GetAddons",
+                 "params":{"properties":["name", "thumbnail", "fanart"]}}
+      FILTER = "name"
+      TITLE = "name"
+    elif mediatype == "albums":
       REQUEST = {"method":"AudioLibrary.GetAlbums",
                  "params":{"sort": {"order": "ascending", "method": "label"},
                            "properties":["title", "artist", "fanart", "thumbnail"]}}
@@ -910,7 +918,7 @@ class MyJSONComms(object):
             word += 1
             if (word%2 == 0) and tag in ["and","or"]: filterBoolean = tag
             else: self.addFilter(REQUEST["params"], {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
-    elif filter and filter.strip() != "" and not mediatype in ["sets", "seasons", "episodes"]:
+    elif filter and filter.strip() != "" and not mediatype in ["addons", "sets", "seasons", "episodes"]:
         self.addFilter(REQUEST["params"], {"field": FILTER, "operator": "contains", "value": filter})
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
@@ -1158,7 +1166,7 @@ class MyMediaItem(object):
     self.missingOK = missingOK
 
   def __str__(self):
-    return "{%d, %s, %s, %s, %s, %s, %s, %d, %s, %d, %s}" % \
+    return "{%d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s}" % \
       (self.status, self.mtype, self.itype, self.name, self.season, \
        self.episode, self.filename,  self.dbid, self.cachedurl, \
        self.libraryid, self.missingOK)
@@ -1210,12 +1218,12 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
   limits = data["result"]["limits"]
   if limits["total"] == 0: return
 
-  if mediatype == "sets" and filter:
-    filteredSets = []
-    for set in data["result"]["sets"]:
-      if re.search(filter, set["title"], re.IGNORECASE):
-        filteredSets.append(set)
-    data["result"]["sets"] = filteredSets
+  if mediatype in ["addons", "sets"] and filter:
+    filteredData = []
+    for d in data["result"][section_name]:
+      if re.search(filter, d[title_name], re.IGNORECASE):
+        filteredData.append(d)
+    data["result"][section_name] = filteredData
 
   if mediatype == "tvshows":
     for tvshow in data["result"][section_name]:
@@ -1485,6 +1493,8 @@ def evaluateURL(imgtype, url, imagecache):
 def libraryQuery(action, item, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False):
   if action == "cache":
     processData(action, item, filter, force, extraFields, nodownload)
+  elif item == "addons":
+    libraryAllAddons(action, filter, force, extraFields, False, decode)
   elif item == "albums":
     libraryAllAlbums(action, filter, force, extraFields, rescan, decode)
   elif item == "artists":
@@ -1504,6 +1514,34 @@ def libraryQuery(action, item, filter="", force=False, extraFields=False, rescan
     sys.exit(2)
 
   gLogger.progress("")
+
+def libraryAllAddons(action, filter, force, extraFields, rescan, decode):
+
+  jcomms = MyJSONComms(gConfig, gLogger)
+  database = MyDB(gConfig, gLogger)
+
+  (section_name, title_name, id_name, data) = jcomms.getData(action, "addons", filter, extraFields)
+
+  limits = data["result"]["limits"]
+  if limits["total"] == 0: return
+
+  addons = data["result"]["addons"]
+
+  filteredAddons = []
+
+  if action == "dump": gLogger.progress("Filtering Addons...")
+
+  for addon in addons:
+    title = addon["name"]
+    if filter == "" or re.search(filter, title, re.IGNORECASE):
+      filteredAddons.append(addon)
+
+  for addon in filteredAddons:
+    title = addon["name"]
+
+    if action in ["qa", "dump"]: gLogger.progress("Parsing Addons: [%s]..." % title.encode("utf-8"), every = 1)
+
+  if action == "dump": jcomms.dumpJSON(filteredAddons, decode)
 
 def libraryAllAlbums(action, filter, force, extraFields, rescan, decode):
 
@@ -2319,12 +2357,13 @@ def main(argv):
     sqlExtract("STATS", "", argv[1])
 
   elif argv[0] == "c" and len(argv) == 1:
+    libraryQuery("cache", "addons")
     libraryQuery("cache", "albums")
     libraryQuery("cache", "artists")
     libraryQuery("cache", "movies")
     libraryQuery("cache", "sets")
     libraryQuery("cache", "tvshows")
-    TOTALS.libraryStats("albums/artists/movies/sets/tvshows")
+    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
   elif argv[0] == "c" and len(argv) == 2:
     libraryQuery("cache", argv[1])
     TOTALS.libraryStats(argv[1])
@@ -2333,12 +2372,13 @@ def main(argv):
     TOTALS.libraryStats(argv[1], argv[2])
 
   elif argv[0] == "nc" and len(argv) == 1:
+    libraryQuery("cache", "addons", nodownload=True)
     libraryQuery("cache", "albums", nodownload=True)
     libraryQuery("cache", "artists", nodownload=True)
     libraryQuery("cache", "movies", nodownload=True)
     libraryQuery("cache", "sets", nodownload=True)
     libraryQuery("cache", "tvshows", nodownload=True)
-    TOTALS.libraryStats("albums/artists/movies/sets/tvshows")
+    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
   elif argv[0] == "nc" and len(argv) == 2:
     libraryQuery("cache", argv[1], nodownload=True)
     TOTALS.libraryStats(argv[1])

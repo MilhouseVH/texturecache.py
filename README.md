@@ -69,6 +69,7 @@ But wait, there's more... another method is to force images to be re-cached, aut
 
 The utility has several options that operate on media library items grouped into classes:
 
+* addons
 * albums
 * artists
 * songs
@@ -260,6 +261,7 @@ webserver.username =
 webserver.password =
 rpc.port = 9090
 download.threads = 2
+extrajson.addons =
 extrajson.albums =
 extrajson.artists =
 extrajson.songs =

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.8 (02/04/2013)
+* Add "addons" as media class, filtered by `name` (`c`, `nc`, `C`, `j`, `jd`, `J`, `Jd`)
+
 ##Version 0.3.7 (02/04/2013)
 * Use correct image type when discarding duplicate cast thumbnails (affected stats only)
 
