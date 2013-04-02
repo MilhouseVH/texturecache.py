@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.3.6 (01/04/2013)
+* Show class-specific thread limits in `config` when not using default (`downloads.threads`) value
+* Detect sqlite3 database locked, and retry
+* Fix carriage-return/linefeed problem when auto-updating on Windows
+
 ##Version 0.3.5 (31/03/2013)
 * Added timing and performance data to statistical summary on `c`, `C` and `nc` options
 * Added `prune.retain.types` property to retain specific URLs when pruning (`p`, `P`) the texture cache

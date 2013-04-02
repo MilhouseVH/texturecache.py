@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.5"
+    self.VERSION="0.3.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -206,6 +206,10 @@ class MyConfiguration(object):
     print("  webserver.singleshot = %s" % self.WEB_SINGLESHOT)
     print("  rpc.port = %s" % self.RPC_PORT)
     print("  download.threads = %d" % self.DOWNLOAD_THREADS_DEFAULT)
+    if self.DOWNLOAD_THREADS != {}:
+      for dt in self.DOWNLOAD_THREADS:
+        if self.DOWNLOAD_THREADS[dt] != self.DOWNLOAD_THREADS_DEFAULT:
+          print("  %s = %d" % (dt, self.DOWNLOAD_THREADS[dt]))
     print("  extrajson.albums  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.albums"]))
     print("  extrajson.artists = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.artists"]))
     print("  extrajson.songs   = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.songs"]))
@@ -248,9 +252,9 @@ class MyLogger():
   def __del__( self ):
     if self.LOGFILE: self.LOGFILE.close()
 
-  def progress(self, data, every=0, newLine=False):
+  def progress(self, data, every=0, finalItem = False, newLine=False):
     with threading.Lock():
-      if every != 0:
+      if every != 0 and not finalItem:
         self.now += 1
         if self.now != 1:
           if self.now <= every: return
@@ -273,7 +277,7 @@ class MyLogger():
   def reset(self, initialValue=0):
     self.now = initialValue
 
-  def out( self, data, pure=False ):
+  def out( self, data, pure=False, newLine=False ):
     with threading.Lock():
       udata = data if pure else self.removeNonAscii(data, "?")
       spaces = self.lastlen - len(udata)
@@ -282,6 +286,9 @@ class MyLogger():
         sys.stdout.write("%-s%*s" % (udata, spaces, " "))
       else:
         sys.stdout.write("%-s" % udata)
+      if newLine:
+        sys.stdout.write("\n")
+        self.lastlen = 0
       sys.stdout.flush()
 
   def debug(self, data, jsonrequest=None, every=0, newLine=False, newLineBefore=False):
@@ -422,6 +429,9 @@ class MyDB(object):
     self.DBVERSION = None
     self.cursor = None
 
+    self.RETRY_MAX = 5
+    self.RETRY = 0
+
   def __enter__(self):
     self.getDB()
     return self
@@ -434,14 +444,26 @@ class MyDB(object):
     if not self.mydb:
       if not os.path.exists(self.config.getDBPath()):
         raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
-      self.mydb = lite.connect(self.config.getDBPath())
+      self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
       self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
   def execute(self, SQL):
     self.cursor = self.getDB().cursor()
     self.logger.log("EXECUTING SQL: %s" % SQL)
-    self.cursor.execute(SQL)
+    try:
+      self.cursor.execute(SQL)
+    except lite.OperationalError as e:
+      if e.value == "database is locked" and self.RETRY <= self.RETRY_MAX:
+        time.sleep(0.1)
+        self.RETRY += 1
+        self.logger.log("EXCEPTION SQL: %s - retrying attempt #%d" % (e.value, self.RETRY))
+        self.execute(SQL)
+      else:
+        raise
+
+    self.RETRY = 0
+
     return self.cursor
 
   def fetchone(self): return self.cursor.fetchone()
@@ -476,7 +498,7 @@ class MyDB(object):
     if os.path.exists(self.config.getFilePath(localFile)):
       os.remove(self.config.getFilePath(localFile))
     else:
-      self.logger.out("WARNING: id %s, cached thumbnail file %s not found\n" % ((self.config.IDFORMAT % id), localFile))
+      self.logger.out("WARNING: id %s, cached thumbnail file %s not found" % ((self.config.IDFORMAT % id), localFile), newLine=True)
 
     self.execute("DELETE FROM texture WHERE id=%d" % id)
     self.commit()
@@ -1081,6 +1103,9 @@ class MyTotals(object):
 
     print("")
 
+    # Failed to load anything so don't display time stats that we don't have
+    if not self.TimeDuration("Load"): return
+
     if len(self.THREADS) != 0:
       print("  Threads Used: %d" % len(self.THREADS))
       print("   Min/Avg/Max: %3.2f / %3.2f / %3.2f" % (self.PMIN, self.PAVG/self.PCOUNT, self.PMAX))
@@ -1303,8 +1328,6 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
     error_queue = Queue.Queue()
 
     gLogger.out("\n")
-    gLogger.progress("Caching artwork: %d item%s remaining of %d, 0 errors" % \
-                      (itemCount, "s"[itemCount==1:], itemCount))
 
     # Identify unique itypes, so we can group items in the queue
     # This is crucial to working out when the first/last item is loaded
@@ -1314,10 +1337,13 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
       if not item.itype in unique_items:
         unique_items[item.itype] = True
 
+    c = 0
     for ui in sorted(unique_items):
       for item in mediaitems:
         if item.status == 1 and item.itype == ui:
+          c += 1
           gLogger.log("QUEUE ITEM: %s" % item)
+          gLogger.progress("Queueing work item: %d" % c, every=50, finalItem=(c==itemCount))
           work_queue.put(item)
 
     # Don't need this data anymore, make it available for garbage collection
@@ -1326,6 +1352,9 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
     tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
     THREADCOUNT = tCount if tCount <= itemCount else itemCount
     gLogger.log("Creating %d image download threads" % THREADCOUNT)
+
+#    gLogger.progress("Caching artwork: %d item%s remaining of %d, 0 errors" % \
+#                      (itemCount, "s"[itemCount==1:], itemCount))
 
     TOTALS.TimeStart("Download")
 
@@ -2252,7 +2281,7 @@ def downloadLatestVersion():
     sys.exit(2)
 
   try:
-    THISFILE = open(os.path.realpath(__file__), "w")
+    THISFILE = open("%sx" % os.path.realpath(__file__), "wb")
     THISFILE.write(data)
     THISFILE.close()
   except:
