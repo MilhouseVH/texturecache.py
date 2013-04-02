@@ -2281,7 +2281,7 @@ def downloadLatestVersion():
     sys.exit(2)
 
   try:
-    THISFILE = open("%sx" % os.path.realpath(__file__), "wb")
+    THISFILE = open("%s" % os.path.realpath(__file__), "wb")
     THISFILE.write(data)
     THISFILE.close()
   except:
