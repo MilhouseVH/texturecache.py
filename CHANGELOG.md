@@ -1,6 +1,9 @@
 #Changelog
 
-##Version 0.3.6 (01/04/2013)
+##Version 0.3.7 (02/04/2013)
+* Use correct image type when discarding duplicate cast thumbnails (affected stats only)
+
+##Version 0.3.6 (02/04/2013)
 * Show class-specific thread limits in `config` when not using default (`downloads.threads`) value
 * Detect sqlite3 database locked, and retry
 * Fix carriage-return/linefeed problem when auto-updating on Windows

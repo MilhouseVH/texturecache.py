@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.6"
+    self.VERSION="0.3.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1447,7 +1447,7 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
 
     if "cast" in item:
       for a in item["cast"]:
-        if "thumbnail" in a and evaluateURL("thumbnail", a["thumbnail"], imagecache):
+        if "thumbnail" in a and evaluateURL("cast.thumb", a["thumbnail"], imagecache):
           mediaitems.append(MyMediaItem(mediatype, "cast.thumb", a["name"], name, None, a["thumbnail"], 0, None, item[id_name], False))
 
     if "seasons" in item:
