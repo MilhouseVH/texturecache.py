@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.9"
+    self.VERSION="0.4.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -929,8 +929,6 @@ class MyJSONComms(object):
 class MyTotals(object):
   def __init__(self):
     self.TIMES = {}
-    self.TIMES["START"] = {}
-    self.TIMES["END"] = {}
 
     self.ETIMES = {}
 
@@ -952,17 +950,23 @@ class MyTotals(object):
   def addNotCached(self):
     self.TOTALS["Not in Cache"] = {}
 
-  def TimeStart(self, item):
-    self.TIMES["START"][item] = time.time()
+  def TimeStart(self, mediatype, item):
+    if not mediatype in self.TIMES: self.TIMES[mediatype] = {}
+    self.TIMES[mediatype][item] = (time.time(), 0)
 
-  def TimeEnd(self, item):
-    self.TIMES["END"][item] = time.time()
+  def TimeEnd(self, mediatype, item):
+    self.TIMES[mediatype][item] = (self.TIMES[mediatype][item][0], time.time())
 
   def TimeDuration(self, item):
-    if item in self.TIMES["START"] and item in self.TIMES["END"]:
-      return self.TIMES["END"][item] - self.TIMES["START"][item]
-    else:
-      return None
+    tElapsed = 0
+    isPresent = False
+    for m in self.TIMES:
+      for i in self.TIMES[m]:
+        if i == item:
+          isPresent = True
+          tuple = self.TIMES[m][i]
+          tElapsed += (tuple[1] - tuple[0])
+    return tElapsed if isPresent else None
 
   # Record start time for an image type.
   # If we've already got a start time for imgtype, exit before acquiring a lock.
@@ -1063,7 +1067,6 @@ class MyTotals(object):
     # Times are held by mediatype, so accumulate for each mediatype
     # Total Download Time is sum of elapsed time for each mediatype
       tmin = tmax = 0.0
-      print self.ETIMES
       self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] = 0
       for mtype in self.ETIMES:
         tmin = tmax = 0.0
@@ -1207,7 +1210,8 @@ def removeNonAscii(s, replaceWith = ""):
 # Sets doesn't support filters, so filter this list after retrieval.
 #
 def processData(action, mediatype, filter, force, extraFields=False, nodownload=False):
-  TOTALS.TimeStart("Total")
+
+  TOTALS.TimeStart(mediatype, "Total")
 
   jcomms = MyJSONComms(gConfig, gLogger)
   database = MyDB(gConfig, gLogger)
@@ -1221,41 +1225,40 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
 
   gLogger.progress("Loading %s..." % mediatype, every = 1)
 
-  TOTALS.TimeStart("Load")
+  TOTALS.TimeStart(mediatype, "Load")
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, secondaryFields)
 
-  limits = data["result"]["limits"]
-  if limits["total"] == 0: return
+  if section_name in data["result"]:
+    if mediatype in ["addons", "sets"] and filter:
+      filteredData = []
+      for d in data["result"][section_name]:
+        if re.search(filter, d[title_name], re.IGNORECASE):
+          filteredData.append(d)
+      data["result"][section_name] = filteredData
 
-  if mediatype in ["addons", "sets"] and filter:
-    filteredData = []
-    for d in data["result"][section_name]:
-      if re.search(filter, d[title_name], re.IGNORECASE):
-        filteredData.append(d)
-    data["result"][section_name] = filteredData
+    if mediatype == "tvshows":
+      for tvshow in data["result"][section_name]:
+        title = tvshow["title"]
+        gLogger.progress("Loading TV Show: [%s]..." % title.encode("utf-8"), every = 1)
+        (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name])
+        limits = data2["result"]["limits"]
+        if limits["total"] == 0: break
+        tvshow[s2] = data2["result"]
+        for season in data2["result"][s2]:
+          seasonid = season["season"]
+          gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title.encode("utf-8"), seasonid), every = 1)
+          (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, secondaryFields, showid=tvshow[id_name], seasonid=season[i2])
+          limits = data3["result"]["limits"]
+          if limits["total"] == 0: break
+          season[s3] = data3["result"]
 
-  if mediatype == "tvshows":
-    for tvshow in data["result"][section_name]:
-      title = tvshow["title"]
-      gLogger.progress("Loading TV Show: [%s]..." % title.encode("utf-8"), every = 1)
-      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name])
-      limits = data2["result"]["limits"]
-      if limits["total"] == 0: return
-      tvshow[s2] = data2["result"]
-      for season in data2["result"][s2]:
-        seasonid = season["season"]
-        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title.encode("utf-8"), seasonid), every = 1)
-        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, secondaryFields, showid=tvshow[id_name], seasonid=season[i2])
-        limits = data3["result"]["limits"]
-        if limits["total"] == 0: return
-        season[s3] = data3["result"]
+  TOTALS.TimeEnd(mediatype, "Load")
 
-  TOTALS.TimeEnd("Load")
+  if section_name in data["result"]:
+    cacheImages(mediatype, jcomms, database, force, nodownload, data, section_name, title_name, id_name)
 
-  cacheImages(mediatype, jcomms, database, force, nodownload, data, section_name, title_name, id_name)
-
-  TOTALS.TimeEnd("Total")
+  TOTALS.TimeEnd(mediatype, "Total")
 
 #
 # Parse the supplied JSON data, turning it into a list of artwork urls
@@ -1272,17 +1275,17 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
   mediaitems = []
   imagecache = {}
 
-  TOTALS.TimeStart("Parse")
+  TOTALS.TimeStart(mediatype, "Parse")
 
   parseURLData(jcomms, mediatype, mediaitems, imagecache, data["result"][section_name], title_name, id_name)
 
-  TOTALS.TimeEnd("Parse")
+  TOTALS.TimeEnd(mediatype, "Parse")
 
   # Don't need this data anymore, make it available for garbage collection
   del data
   del imagecache
 
-  TOTALS.TimeStart("Match")
+  TOTALS.TimeStart(mediatype, "Match")
 
   gLogger.progress("Loading database items...")
   dbfiles = {}
@@ -1329,7 +1332,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
         elif itemCount == ITEMLIMIT:
           gLogger.out("...and many more! (First %d items shown)\n" % ITEMLIMIT)
 
-  TOTALS.TimeEnd("Match")
+  TOTALS.TimeEnd(mediatype, "Match")
 
   # Don't need this data anymore, make it available for garbage collection
   del dbfiles
@@ -1371,7 +1374,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
     THREADCOUNT = tCount if tCount <= itemCount else itemCount
     gLogger.log("Creating %d image download threads" % THREADCOUNT)
 
-    TOTALS.TimeStart("Download")
+    TOTALS.TimeStart(mediatype, "Download")
 
     THREADS = []
     for i in range(THREADCOUNT):
@@ -1395,7 +1398,7 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
         for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
         if ALIVE: time.sleep(0.1)
 
-    TOTALS.TimeEnd("Download")
+    TOTALS.TimeEnd(mediatype, "Download")
 
     gLogger.progress("\n")
 

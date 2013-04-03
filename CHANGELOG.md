@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.0 (03/04/2013)
+# More cumulative elapsed time stat fixes.
+
 ##Version 0.3.9 (03/04/2013)
 * Elapsed time stats were not correct across image types when caching multiple media classes (ie. `c` or `C` without specifying a media class)
 
