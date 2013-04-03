@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.1"
+    self.VERSION="0.4.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -2069,53 +2069,54 @@ def getAllFiles(keyFunction):
 
   tvdata = jcomms.sendJSON(REQUEST, "libTV")
 
-  for tvshow in tvdata["result"]["tvshows"]:
-    gLogger.progress("Parsing: TVShows [%s]..." % tvshow["title"])
-    tvshowid = tvshow["tvshowid"]
-    for a in tvshow["art"]:
-      files[keyFunction(tvshow["art"][a])] = a
-    if "cast" in tvshow:
-      for c in tvshow["cast"]:
-        if "thumbnail" in c:
-          files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
+  if "result" in tvdata and "tvshows" in tvdata["result"]:
+    for tvshow in tvdata["result"]["tvshows"]:
+      gLogger.progress("Parsing: TVShows [%s]..." % tvshow["title"])
+      tvshowid = tvshow["tvshowid"]
+      for a in tvshow["art"]:
+        files[keyFunction(tvshow["art"][a])] = a
+      if "cast" in tvshow:
+        for c in tvshow["cast"]:
+          if "thumbnail" in c:
+            files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
 
-    REQUEST = {"method":"VideoLibrary.GetSeasons",
-               "params":{"tvshowid": tvshowid,
-                         "properties":["season", "art"]}}
+      REQUEST = {"method":"VideoLibrary.GetSeasons",
+                 "params":{"tvshowid": tvshowid,
+                           "properties":["season", "art"]}}
 
-    seasondata = jcomms.sendJSON(REQUEST, "libTV")
+      seasondata = jcomms.sendJSON(REQUEST, "libTV")
 
-    if "seasons" in seasondata["result"]:
-      SEASON_ALL = True
-      for season in seasondata["result"]["seasons"]:
-        seasonid = season["season"]
-        for a in season["art"]:
-          if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
-            SEASON_ALL = False
-#            filename = keyFunction(season["art"][a])
-#            files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all\2.\3", filename)] = a
-#            files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-fanart.\3", filename)] = "fanart"
-#            files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-banner.\3", filename)] = "banner"
-            (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(season["art"][a])
-            if poster_url: files[keyFunction(poster_url)] = "poster"
-            if fanart_url: files[keyFunction(fanart_url)] = "fanart"
-            if banner_url: files[keyFunction(banner_url)] = "banner"
-          files[keyFunction(season["art"][a])] = a
+      if "seasons" in seasondata["result"]:
+        SEASON_ALL = True
+        for season in seasondata["result"]["seasons"]:
+          seasonid = season["season"]
+          for a in season["art"]:
+            if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
+              SEASON_ALL = False
+#              filename = keyFunction(season["art"][a])
+#              files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all\2.\3", filename)] = a
+#              files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-fanart.\3", filename)] = "fanart"
+#              files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-banner.\3", filename)] = "banner"
+              (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(season["art"][a])
+              if poster_url: files[keyFunction(poster_url)] = "poster"
+              if fanart_url: files[keyFunction(fanart_url)] = "fanart"
+              if banner_url: files[keyFunction(banner_url)] = "banner"
+            files[keyFunction(season["art"][a])] = a
 
-        REQUEST = {"method":"VideoLibrary.GetEpisodes",
-                   "params":{"tvshowid": tvshowid, "season": seasonid,
-                             "properties":["cast", "art"]}}
+          REQUEST = {"method":"VideoLibrary.GetEpisodes",
+                     "params":{"tvshowid": tvshowid, "season": seasonid,
+                               "properties":["cast", "art"]}}
 
-        episodedata = jcomms.sendJSON(REQUEST, "libTV")
+          episodedata = jcomms.sendJSON(REQUEST, "libTV")
 
-        for episode in episodedata["result"]["episodes"]:
-          episodeid = episode["episodeid"]
-          for a in episode["art"]:
-            files[keyFunction(episode["art"][a])] = a
-          if "cast" in episode:
-            for c in episode["cast"]:
-              if "thumbnail" in c:
-                files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
+          for episode in episodedata["result"]["episodes"]:
+            episodeid = episode["episodeid"]
+            for a in episode["art"]:
+              files[keyFunction(episode["art"][a])] = a
+            if "cast" in episode:
+              for c in episode["cast"]:
+                if "thumbnail" in c:
+                  files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
 
   return files
 

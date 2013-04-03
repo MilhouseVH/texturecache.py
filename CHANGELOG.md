@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.2 (03/04/2013)
+# Another empty library crash fix (who has no tv shows...?), this time when pruning...
+
 ##Version 0.4.1 (03/04/2013)
 # Fix crash when library is empty
 
