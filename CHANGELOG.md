@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.9 (03/04/2013)
+* Elapsed time stats were not correct across image types when caching multiple media classes (ie. `c` or `C` without specifying a media class)
+
 ##Version 0.3.8 (02/04/2013)
 * Add "addons" as media class, filtered by `name` (`c`, `nc`, `C`, `j`, `jd`, `J`, `Jd`)
 

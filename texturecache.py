@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.3.8"
+    self.VERSION="0.3.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -358,7 +358,7 @@ class MyImageLoader(threading.Thread):
     while not stopped.is_set():
       item = self.work_queue.get()
 
-      if not self.loadImage(item.itype, item.filename, item.dbid, item.cachedurl, self.retry, self.force, item.missingOK):
+      if not self.loadImage(item.mtype, item.itype, item.filename, item.dbid, item.cachedurl, self.retry, self.force, item.missingOK):
         if not item.missingOK:
           self.error_queue.put(item)
 
@@ -379,9 +379,9 @@ class MyImageLoader(threading.Thread):
 
     self.totals.stop()
 
-  def loadImage(self, imgtype, filename, rowid, cachedurl, retry, force, missingOK = False):
+  def loadImage(self, mediatype, imgtype, filename, rowid, cachedurl, retry, force, missingOK = False):
 
-    self.totals.start(imgtype)
+    self.totals.start(mediatype, imgtype)
 
     self.LAST_URL = self.json.getDownloadURL(filename)
 
@@ -401,7 +401,7 @@ class MyImageLoader(threading.Thread):
         # Don't need to download the whole image for it to be cached so just grab the first 1KB
         PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount = 1024)
         if self.json.WEB_LAST_STATUS == httplib.OK:
-          self.logger.log("Succesfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
+          self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
                         % (len(PAYLOAD), (retry - ATTEMPT + 1), filename))
           self.totals.bump("Cached", imgtype)
           break
@@ -416,7 +416,7 @@ class MyImageLoader(threading.Thread):
       if not missingOK:
         self.totals.bump("Error", imgtype)
 
-    self.totals.finish(imgtype)
+    self.totals.finish(mediatype, imgtype)
 
     return ATTEMPT != 0
 
@@ -966,21 +966,22 @@ class MyTotals(object):
 
   # Record start time for an image type.
   # If we've already got a start time for imgtype, exit before acquiring a lock.
-  def start(self, imgtype):
+  def start(self, mediatype, imgtype):
     with threading.Lock():
       t = time.time()
       self.THREADS[threading.current_thread().name] = (t, 0)
-      if not imgtype in self.ETIMES: self.ETIMES[imgtype] = (t, 0)
+      if not mediatype in self.ETIMES: self.ETIMES[mediatype] = {}
+      if not imgtype in self.ETIMES[mediatype]: self.ETIMES[mediatype][imgtype] = (t, 0)
 
   # Record current time for imgtype - this will allow stats to
   # determine cumulative time taken to download an image type.
-  def finish(self, imgtype):
+  def finish(self, mediatype, imgtype):
     with threading.Lock():
       tname = threading.current_thread().name
       ctime = time.time()
       self.THREADS[tname] = (self.THREADS[tname][0], ctime)
-      if imgtype in self.ETIMES:
-        self.ETIMES[imgtype] = (self.ETIMES[imgtype][0], ctime)
+      if mediatype in self.ETIMES and imgtype in self.ETIMES[mediatype]:
+        self.ETIMES[mediatype][imgtype] = (self.ETIMES[mediatype][imgtype][0], ctime)
 
   def stop(self):
     with threading.Lock():
@@ -997,8 +998,8 @@ class MyTotals(object):
   # Record history of averages to use as a basic smoothing function
   # Calculate and store min/max/avg peak performance.
   def getPerformance(self, remaining):
-    active = 0
-    tmin = tmax = 0
+
+    active = tmin = tmax = 0
 
     with threading.Lock():
       for t in self.THREADS:
@@ -1010,7 +1011,7 @@ class MyTotals(object):
 
       if tmax == 0: return ""
 
-      tpersec = 1 / ((tmax - tmin) / active)
+      tpersec = active / (tmax - tmin)
 
       self.PCOUNT += 1
       self.PAVG += tpersec
@@ -1044,6 +1045,8 @@ class MyTotals(object):
        item.find("songs") != -1:
       if not "thumbnail" in items: items["thumbnail"] = None
 
+    DOWNLOAD_LABEL = "Download Time"
+
     sortedItems = sorted(items.items())
     sortedItems.append(("TOTAL", None))
     items["TOTAL"] = 0
@@ -1053,17 +1056,24 @@ class MyTotals(object):
     self.TOTALS["TOTAL"] = {}
 
     if len(self.THREADS) != 0:
-      sortedTOTALS.append(("Download Time", {}))
-      self.TOTALS["Download Time"] = {"TOTAL": 0}
+      sortedTOTALS.append((DOWNLOAD_LABEL, {}))
+      self.TOTALS[DOWNLOAD_LABEL] = {"TOTAL": 0}
 
     # Transfer elapsed times for each image type to our matrix of values
+    # Times are held by mediatype, so accumulate for each mediatype
+    # Total Download Time is sum of elapsed time for each mediatype
       tmin = tmax = 0.0
-      for etime in self.ETIMES:
-        tuple = self.ETIMES[etime]
-        if tuple[0] < tmin or tmin == 0.0: tmin = tuple[0]
-        if tuple[1] > tmax: tmax = tuple[1]
-        self.TOTALS["Download Time"][etime] = (tuple[1] - tuple[0])
-      self.TOTALS["Download Time"]["TOTAL"] = (tmax - tmin)
+      print self.ETIMES
+      self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] = 0
+      for mtype in self.ETIMES:
+        tmin = tmax = 0.0
+        for itype in self.ETIMES[mtype]:
+          tuple = self.ETIMES[mtype][itype]
+          if tuple[0] < tmin or tmin == 0.0: tmin = tuple[0]
+          if tuple[1] > tmax: tmax = tuple[1]
+          if not itype in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
+          self.TOTALS[DOWNLOAD_LABEL][itype] += (tuple[1] - tuple[0])
+        self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] += (tmax - tmin)
 
     line0 = "Cache pre-load activity summary for \"%s\"" % item
     if filter != "": line0 = "%s, filtered by \"%s\"" % (line0, filter)
@@ -1085,14 +1095,14 @@ class MyTotals(object):
 
     for a in sortedTOTALS:
       a = a[0]
-      if a != "Download Time": self.TOTALS[a]["TOTAL"] = 0
+      if a != DOWNLOAD_LABEL: self.TOTALS[a]["TOTAL"] = 0
       if a == "TOTAL": print(line2.replace("-","=").replace("+","="))
       line = "%-13s " % a
       for i in sortedItems:
         i = i[0]
         if a == "TOTAL":
           value = "%d" % items[i] if items[i] != None else "-"
-        elif a == "Download Time":
+        elif a == DOWNLOAD_LABEL:
           if i in self.TOTALS[a] and self.TOTALS[a][i] != 0:
             value = self.secondsToTime(self.TOTALS[a][i])
           else:
@@ -1360,9 +1370,6 @@ def cacheImages(mediatype, jcomms, database, force, nodownload, data, section_na
     tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
     THREADCOUNT = tCount if tCount <= itemCount else itemCount
     gLogger.log("Creating %d image download threads" % THREADCOUNT)
-
-#    gLogger.progress("Caching artwork: %d item%s remaining of %d, 0 errors" % \
-#                      (itemCount, "s"[itemCount==1:], itemCount))
 
     TOTALS.TimeStart("Download")
 
@@ -2319,14 +2326,14 @@ def downloadLatestVersion():
     sys.exit(2)
 
   try:
-    THISFILE = open("%s" % os.path.realpath(__file__), "wb")
+    THISFILE = open(os.path.realpath(__file__), "wb")
     THISFILE.write(data)
     THISFILE.close()
   except:
     print("FATAL: Unable to update current file, check you have write access")
     sys.exit(2)
 
-  print("Succesfully updated to version v%s" % remoteVersion)
+  print("Successfully updated to version v%s" % remoteVersion)
 
 def main(argv):
 
