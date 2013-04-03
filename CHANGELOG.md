@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.1 (03/04/2013)
+# Fix crash when library is empty
+
 ##Version 0.4.0 (03/04/2013)
 # More cumulative elapsed time stat fixes.
 

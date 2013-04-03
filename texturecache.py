@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.0"
+    self.VERSION="0.4.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -959,14 +959,19 @@ class MyTotals(object):
 
   def TimeDuration(self, item):
     tElapsed = 0
-    isPresent = False
     for m in self.TIMES:
       for i in self.TIMES[m]:
         if i == item:
-          isPresent = True
           tuple = self.TIMES[m][i]
           tElapsed += (tuple[1] - tuple[0])
-    return tElapsed if isPresent else None
+    return tElapsed
+
+  def gotTimeDuration(self, item):
+    for m in self.TIMES:
+      for i in self.TIMES[m]:
+        if i == item:
+          return True
+    return False
 
   # Record start time for an image type.
   # If we've already got a start time for imgtype, exit before acquiring a lock.
@@ -1125,7 +1130,7 @@ class MyTotals(object):
     print("")
 
     # Failed to load anything so don't display time stats that we don't have
-    if not self.TimeDuration("Load"): return
+    if not self.gotTimeDuration("Load"): return
 
     if len(self.THREADS) != 0:
       print("  Threads Used: %d" % len(self.THREADS))
@@ -1229,7 +1234,7 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
 
   (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, secondaryFields)
 
-  if section_name in data["result"]:
+  if "result" in data and section_name in data["result"]:
     if mediatype in ["addons", "sets"] and filter:
       filteredData = []
       for d in data["result"][section_name]:
@@ -1255,7 +1260,7 @@ def processData(action, mediatype, filter, force, extraFields=False, nodownload=
 
   TOTALS.TimeEnd(mediatype, "Load")
 
-  if section_name in data["result"]:
+  if "result" in data and section_name in data["result"]:
     cacheImages(mediatype, jcomms, database, force, nodownload, data, section_name, title_name, id_name)
 
   TOTALS.TimeEnd(mediatype, "Total")
