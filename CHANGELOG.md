@@ -1,10 +1,10 @@
 #Changelog
 
 ##Version 0.4.3 (05/04/2013)
-# Add supprt for BDMV/VIDEO_TS folder structures during `qax`
-# Rescan entire library whenever a media item is in root folder - workaround for bug in rescan directory method
-# Refactor QA (`qa`,`qax`) and json query (`j`,`jd`,`Jd`,`Jd`) implementation, eliminating duplicate code
-# Added extensible QA rules: `qa.zero.<mediaclass>`, `qa.blank.<mediaclass>` and `qa.art.<mediaclass>`
+* Add supprt for BDMV/VIDEO_TS folder structures during `qax`
+* Rescan entire library whenever a media item is in root folder - workaround for bug in rescan directory method
+* Refactor QA (`qa`,`qax`) and json query (`j`,`jd`,`Jd`,`Jd`) implementation, eliminating duplicate code
+* Added extensible QA rules: `qa.zero.<mediaclass>`, `qa.blank.<mediaclass>` and `qa.art.<mediaclass>`
 
   eg. `qa.zero.movies = rating, runtime`
       `qa.blank.movies = studio, director, writer`
@@ -25,17 +25,17 @@
 
   <mediaclass> follows the same rules as for `extrajson` fields.
 
-# Property `qa.rating` is no longer supported - add `rating` field to `qa.zero.*` property if required.
-# Change name of `qa.file` property to `qafile`
+* Property `qa.rating` is no longer supported - add `rating` field to `qa.zero.*` property if required.
+* Change name of `qa.file` property to `qafile`
 
 ##Version 0.4.2 (03/04/2013)
-# Another empty library crash fix (who has no tv shows...?), this time when pruning...
+* Another empty library crash fix (who has no tv shows...?), this time when pruning...
 
 ##Version 0.4.1 (03/04/2013)
-# Fix crash when library is empty
+* Fix crash when library is empty
 
 ##Version 0.4.0 (03/04/2013)
-# More cumulative elapsed time stat fixes.
+* More cumulative elapsed time stat fixes.
 
 ##Version 0.3.9 (03/04/2013)
 * Elapsed time stats were not correct across image types when caching multiple media classes (ie. `c` or `C` without specifying a media class)
