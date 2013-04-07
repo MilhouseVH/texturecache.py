@@ -793,7 +793,7 @@ class MyJSONComms(object):
     for directory in sorted(workItems):
       (mediatype, dpath) = directory.split(";")
 
-      for disc_folder in [ ".BDMV$", ".VIDEO_TS.VTS$" ]:
+      for disc_folder in [ ".BDMV$", ".VIDEO_TS$" ]:
         re_match = re.search(disc_folder, dpath, flags=re.IGNORECASE)
         if re_match:
           dpath = dpath[:re_match.start()]
