@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.3"
+    self.VERSION="0.4.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -372,15 +372,22 @@ class MyLogger():
           self.LOGFILE.close()
           self.LOGFILE = None
 
-  def log(self, data, jsonrequest = None):
+  def log(self, data, jsonrequest = None, maxLen=0):
     if self.LOGGING:
       with threading.Lock():
         t = threading.current_thread().name
         if jsonrequest == None:
-          self.LOGFILE.write("%s:%-10s: %s\n" % (datetime.datetime.now(), t, data.encode("utf-8")))
+          if maxLen != 0 and len(data) > maxLen:
+            d = "%s (truncated)" % self.removeNonAscii(data)[:maxLen]
+          else:
+            d = self.removeNonAscii(data)
+          self.LOGFILE.write("%s:%-10s: %s\n" % (datetime.datetime.now(), t, d))
         else:
-          self.LOGFILE.write("%s:%-10s: %s [%s]\n" % (datetime.datetime.now(), t,
-            data.encode("utf-8"), json.dumps(jsonrequest).encode("utf-8")))
+          if maxLen != 0 and len(data) > maxLen:
+            d = "%s (truncated)" % json.dumps(jsonrequest,ensure_ascii=True)[:maxLen]
+          else:
+            d = json.dumps(jsonrequest,ensure_ascii=True)
+          self.LOGFILE.write("%s:%-10s: %s [%s]\n" % (datetime.datetime.now(), t, data.encode("utf-8"), d))
         if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
 
   def removeNonAscii(self, s, replaceWith = ""):
@@ -682,14 +689,14 @@ class MyJSONComms(object):
 
     # Following methods don't work over sockets - by design.
     if request["method"] in ["Files.PrepareDownload", "Files.Download"]:
-      self.logger.debug("SENDING JSON WEB REQUEST", jsonrequest=request, newLine=True, newLineBefore=True)
+      self.logger.debug("SENDING JSON WEB REQUEST:", jsonrequest=request, newLine=True, newLineBefore=True)
       data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"})
       if self.logger.LOGGING:
-        self.logger.log("RESPONSE%s: %s" % (" (truncated)" if len(data)>256 else "", self.removeNonAscii(data[:256])))
+        self.logger.log("RESPONSE: %s" % data, maxLen=512)
       return json.loads(data) if data != "" else ""
 
     s = self.getSocket()
-    self.logger.debug("SENDING JSON SOCKET REQUEST", jsonrequest=request, newLine=True, newLineBefore=True)
+    self.logger.debug("SENDING JSON SOCKET REQUEST:", jsonrequest=request, newLine=True, newLineBefore=True)
     START_TIME=time.time()
     s.send(json.dumps(request))
 
@@ -711,16 +718,26 @@ class MyJSONComms(object):
       except socket.error:
         if newdata[-1:] == "}" or newdata[-2:] == "}\n":
           try:
+            self.logger.log("DATA1: %s" % newdata)
+            self.logger.log("DATA2: %s" % "".join(data))
             self.logger.debug("CONVERTING RESPONSE", newLine=True)
             jdata = json.loads("".join(data))
             self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
             if ("result" in jdata and "limits" in jdata["result"]):
               self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
             if self.logger.LOGGING:
-              self.logger.log("RESPONSE%s: %s" % (" (truncated)" if len(data[0]) > 256 else "", removeNonAscii(data[0][:256])))
+              self.logger.log("RESPONSE: %s" % data[0], maxLen=512)
             ENDOFDATA = True
-          except ValueError:
+          except ValueError as e:
+            self.logger.log("VALUE ERROR EXCEPTION: %s" % str(e))
+            self.logger.log("DATA1: %s" % newdata)
+            self.logger.log("DATA2: %s" % "".join(data))
             pass
+          except Exception as e:
+            self.logger.log("GENERAL EXCEPTION: %s" % str(e))
+            self.logger.log("DATA1: %s" % newdata)
+            self.logger.log("DATA2: %s" % "".join(data))
+            raise
 
         if not ENDOFDATA:
           if (time.time() - LASTIO) > timeout:
@@ -2219,14 +2236,14 @@ def getLatestVersion():
   except:
     return (None, None)
 
-def downloadLatestVersion():
+def downloadLatestVersion(force=False):
   (remoteVersion, remoteHash) = getLatestVersion()
 
   if not remoteVersion:
     print("FATAL: Unable to determine version of the latest file, check internet is available.")
     sys.exit(2)
 
-  if remoteVersion <= gConfig.VERSION:
+  if not force and remoteVersion <= gConfig.VERSION:
     print("Current version is already up to date - no update required.")
     sys.exit(2)
 
@@ -2384,6 +2401,8 @@ def main(argv):
 
   elif argv[0] == "update":
     downloadLatestVersion()
+  elif argv[0] == "fupdate":
+    downloadLatestVersion(force=True)
 
   else:
     usage(1)
