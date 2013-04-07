@@ -1,6 +1,6 @@
 #Changelog
 
-##Version 0.4.3 (05/04/2013)
+##Version 0.4.3 (07/04/2013)
 * Add supprt for BDMV/VIDEO_TS folder structures during `qax`
 * Rescan entire library whenever a media item is in root folder - workaround for bug in rescan directory method
 * Refactor QA (`qa`,`qax`) and json query (`j`,`jd`,`Jd`,`Jd`) implementation, eliminating duplicate code
