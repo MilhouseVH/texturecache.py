@@ -6,14 +6,21 @@
 * Refactor QA (`qa`,`qax`) and json query (`j`,`jd`,`Jd`,`Jd`) implementation, eliminating duplicate code
 * Added extensible QA rules: `qa.zero.<mediaclass>`, `qa.blank.<mediaclass>` and `qa.art.<mediaclass>`
 
-  eg. `qa.zero.movies = rating, runtime`
+  eg.
+  
+      `qa.zero.movies = rating, runtime`
+  
       `qa.blank.movies = studio, director, writer`
+      
       `qa.art.movies = clearart, clearlogo`
       
   will result in movies failing QA if:
-     rating or runtime is zero (or missing)
-     studio, or director or writer is blank (or otherwise missing), or
-     clearart/clearlogo artwork is not present
+  
+      * rating or runtime is zero (or missing)
+     
+      * studio, or director or writer is blank (or otherwise missing), or
+     
+      * clearart/clearlogo artwork is not present
 
   If the QA fields are prefixed with a +, they will be added to the default QA fields, eg.
 
