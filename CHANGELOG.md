@@ -1,5 +1,33 @@
 #Changelog
 
+##Version 0.4.3 (05/04/2013)
+# Add supprt for BDMV/VIDEO_TS folder structures during `qax`
+# Rescan entire library whenever a media item is in root folder - workaround for bug in rescan directory method
+# Refactor QA (`qa`,`qax`) and json query (`j`,`jd`,`Jd`,`Jd`) implementation, eliminating duplicate code
+# Added extensible QA rules: `qa.zero.<mediaclass>`, `qa.blank.<mediaclass>` and `qa.art.<mediaclass>`
+
+  eg. `qa.zero.movies = rating, runtime`
+      `qa.blank.movies = studio, director, writer`
+      `qa.art.movies = clearart, clearlogo`
+      
+  will result in movies failing QA if:
+     rating or runtime is zero (or missing)
+     studio, or director or writer is blank (or otherwise missing), or
+     clearart/clearlogo artwork is not present
+
+  If the QA fields are prefixed with a +, they will be added to the default QA fields, eg.
+
+      `qa.blank.movies = + studio, director, writer`
+
+  will QA: plot, mpaa, studio, director and writer. Without the +, the defaults will be replaced.
+     
+  By default, fields that fail QA will trigger a rescan whenever using the `qax` option. However, if a field is prefixed with a ?, eg. `?clearart` then it will become informational only and will not trigger a rescan.
+
+  <mediaclass> follows the same rules as for `extrajson` fields.
+
+# Property `qa.rating` is no longer supported - add `rating` field to `qa.zero.*` property if required.
+# Change name of `qa.file` property to `qafile`
+
 ##Version 0.4.2 (03/04/2013)
 # Another empty library crash fix (who has no tv shows...?), this time when pruning...
 
