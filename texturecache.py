@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 ################################################################################
@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.4"
+    self.VERSION="0.4.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -58,6 +58,7 @@ class MyConfiguration(object):
                                             "webserver.password": None,
                                             "rpc.port": "9090",
                                             "download.threads": "2",
+                                            "singlethread.urls": None,
                                             "extrajson.addons": None,
                                             "extrajson.albums": None,
                                             "extrajson.artists": None,
@@ -73,6 +74,7 @@ class MyConfiguration(object):
                                             "cache.ignore.types": "image://video, image://music",
                                             "prune.retain.types": None,
                                             "logfile": None,
+                                            "logfile.verbose": "no",
                                             "allow.recacheall": "no",
                                             "checkupdate": "yes"
                                             }
@@ -122,6 +124,10 @@ class MyConfiguration(object):
       except ConfigParser.NoOptionError:
         pass
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
+
+    temp = config.get("xbmc", "singlethread.urls")
+    if temp != None and temp.lower() == "none": temp = None
+    self.SINGLETHREAD_URLS = [re.compile(x.strip()) for x in temp.split(',')] if temp else None
 
     self.XTRAJSON = {}
     self.QA_FIELDS = {}
@@ -178,6 +184,7 @@ class MyConfiguration(object):
     else: self.WEB_AUTH_TOKEN = None
 
     self.LOGFILE = config.get("xbmc", "logfile")
+    self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
 
     temp = config.get("xbmc", "cache.ignore.types")
     if temp != None and temp.lower() == "none": temp = None
@@ -235,6 +242,9 @@ class MyConfiguration(object):
   def NoneIsBlank(self, x):
     return x if x else ""
 
+  def BooleanIsYesNo(self, x):
+    return "yes" if x else "no"
+
   def showConfig(self):
     if not self.CACHE_IGNORE_TYPES:
       ignore_types = None
@@ -250,6 +260,13 @@ class MyConfiguration(object):
       for r in self.PRUNE_RETAIN_TYPES: t.append(r.pattern)
       retain_types = ", ".join(t)
 
+    if not self.SINGLETHREAD_URLS:
+      single_urls = None
+    else:
+      t = []
+      for s in self.SINGLETHREAD_URLS: t.append(s.pattern)
+      single_urls = ", ".join(t)
+
     print("Current properties (if exists, read from %s%s%s):" % (os.path.dirname(__file__), os.sep, self.CONFIG_NAME))
     print("")
     print("  sep = %s" % self.FSEP)
@@ -258,13 +275,14 @@ class MyConfiguration(object):
     print("  thumbnails = %s " % self.THUMBNAILS)
     print("  xbmc.host = %s" % self.XBMC_HOST)
     print("  webserver.port = %s" % self.WEB_PORT)
-    print("  webserver.singleshot = %s" % self.WEB_SINGLESHOT)
+    print("  webserver.singleshot = %s" % self.BooleanIsYesNo(self.WEB_SINGLESHOT))
     print("  rpc.port = %s" % self.RPC_PORT)
     print("  download.threads = %d" % self.DOWNLOAD_THREADS_DEFAULT)
     if self.DOWNLOAD_THREADS != {}:
       for dt in self.DOWNLOAD_THREADS:
         if self.DOWNLOAD_THREADS[dt] != self.DOWNLOAD_THREADS_DEFAULT:
           print("  %s = %d" % (dt, self.DOWNLOAD_THREADS[dt]))
+    print("  singlethread.urls = %s") % self.NoneIsBlank(single_urls)
     print("  extrajson.addons  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.addons"]))
     print("  extrajson.albums  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.albums"]))
     print("  extrajson.artists = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.artists"]))
@@ -275,16 +293,17 @@ class MyConfiguration(object):
     print("  extrajson.tvshows.season = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.season"]))
     print("  extrajson.tvshows.episode= %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.episode"]))
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
-    print("  qafile = %s" % self.QA_FILE)
+    print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
 
     for k in sorted(self.QA_FIELDS):
       print("  %s = %s" % (k, self.NoneIsBlank(self.QA_FIELDS[k])))
 
-    print("  cache.castthumb = %s" % self.CACHE_CAST_THUMB)
+    print("  cache.castthumb = %s" % self.BooleanIsYesNo(self.CACHE_CAST_THUMB))
     print("  cache.ignore.types = %s" % self.NoneIsBlank(ignore_types))
     print("  prune.retain.types = %s" % self.NoneIsBlank(retain_types))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
-    print("  checkupdate = %s" % self.CHECKUPDATE)
+    print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
+    print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
     if self.RECACHEALL:
       print("  allow.recacheall = yes")
     print("")
@@ -307,11 +326,12 @@ class MyLogger():
     self.LOGFILE = None
     self.LOGFLUSH = False
     self.DEBUG = False
+    self.VERBOSE = False
 
   def __del__( self ):
     if self.LOGFILE: self.LOGFILE.close()
 
-  def progress(self, data, every=0, finalItem = False, newLine=False):
+  def progress(self, data, every=0, finalItem = False, newLine=False, noBlank=False):
     with threading.Lock():
       if every != 0 and not finalItem:
         self.now += 1
@@ -324,7 +344,8 @@ class MyLogger():
       udata = self.removeNonAscii(data, "?")
       spaces = self.lastlen - len(udata)
       self.lastlen = len(udata)
-      if spaces > 0:
+
+      if spaces > 0 and not noBlank:
         sys.stderr.write("%-s%*s\r" % (udata, spaces, " "))
       else:
         sys.stderr.write("%-s\r" % udata)
@@ -377,8 +398,8 @@ class MyLogger():
       with threading.Lock():
         t = threading.current_thread().name
         if jsonrequest == None:
-          if maxLen != 0 and len(data) > maxLen:
-            d = "%s (truncated)" % self.removeNonAscii(data)[:maxLen]
+          if maxLen != 0 and not self.VERBOSE and len(data) > maxLen:
+            d = "%s (truncated)" % self.removeNonAscii(data[:maxLen])
           else:
             d = self.removeNonAscii(data)
           self.LOGFILE.write("%s:%-10s: %s\n" % (datetime.datetime.now(), t, d))
@@ -400,9 +421,13 @@ class MyLogger():
 # Image loader thread class.
 #
 class MyImageLoader(threading.Thread):
-  def __init__(self, work_queue, error_queue, maxItems, config, logger, totals, force=False, retry=10):
+  def __init__(self, isSingle, work_queue, other_queue, error_queue, maxItems, config, logger, totals, force=False, retry=10):
     threading.Thread.__init__(self)
+
+    self.isSingle = isSingle
+
     self.work_queue = work_queue
+    self.other_queue = other_queue
     self.error_queue = error_queue
     self.maxItems = maxItems
 
@@ -419,6 +444,8 @@ class MyImageLoader(threading.Thread):
 
   def run(self):
 
+    self.totals.init()
+
     while not stopped.is_set():
       item = self.work_queue.get()
 
@@ -429,12 +456,18 @@ class MyImageLoader(threading.Thread):
       self.work_queue.task_done()
 
       if not stopped.is_set():
-        wqs = self.work_queue.qsize()
+        if self.isSingle:
+          swqs = self.work_queue.qsize()
+          mwqs = self.other_queue.qsize()
+        else:
+          swqs = self.other_queue.qsize()
+          mwqs = self.work_queue.qsize()
+        wqs = swqs + mwqs
         eqs = self.error_queue.qsize()
         tac = threading.activeCount() - 1
-        self.logger.progress("Caching artwork: %d item%s remaining of %d, %d error%s, %d thread%s active%s" % \
+        self.logger.progress("Caching artwork: %d item%s remaining of %d (s: %d, m: %d), %d error%s, %d thread%s active%s" % \
                           (wqs, "s"[wqs==1:],
-                           self.maxItems,
+                           self.maxItems, swqs, mwqs,
                            eqs, "s"[eqs==1:],
                            tac, "s"[tac==1:],
                            self.totals.getPerformance(wqs)))
@@ -457,7 +490,7 @@ class MyImageLoader(threading.Thread):
         self.database.deleteItem(rowid, cachedurl)
         self.totals.bump("Deleted", imgtype)
     else:
-      self.logger.log("Image not available for download - uncacheable (embedded?), or doesn't exist.Filename [%s]" % filename)
+      self.logger.log("Image not available for download - uncacheable (embedded?), or doesn't exist. Filename [%s]" % filename)
       ATTEMPT = 0
 
     while ATTEMPT > 0:
@@ -692,7 +725,7 @@ class MyJSONComms(object):
       self.logger.debug("SENDING JSON WEB REQUEST:", jsonrequest=request, newLine=True, newLineBefore=True)
       data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"})
       if self.logger.LOGGING:
-        self.logger.log("RESPONSE: %s" % data, maxLen=512)
+        self.logger.log("RESPONSE: %s" % data, maxLen=256)
       return json.loads(data) if data != "" else ""
 
     s = self.getSocket()
@@ -707,44 +740,49 @@ class MyJSONComms(object):
       if ENDOFDATA:
         ENDOFDATA = False
         s.setblocking(1)
-        data = []
+        data = ""
 
       try:
         newdata = s.recv(BUFFER_SIZE)
-        if data == []: s.setblocking(0)
-        data.append(newdata)
+        if data == "": s.setblocking(0)
+        data += newdata
         LASTIO=time.time()
         self.logger.debug("BUFFER RECEIVED (len %d)" % len(newdata), newLine=True)
-      except socket.error:
-        if newdata[-1:] == "}" or newdata[-2:] == "}\n":
+        READ_ERR = False
+      except socket.error as e:
+        READ_ERR = True
+
+      if READ_ERR or len(newdata) < BUFFER_SIZE:
+        if data[-1:] == "}" or data[-2:] == "}\n":
           try:
-            self.logger.log("DATA1: %s" % newdata)
-            self.logger.log("DATA2: %s" % "".join(data))
             self.logger.debug("CONVERTING RESPONSE", newLine=True)
-            jdata = json.loads("".join(data))
+            jdata = json.loads(data)
             self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
             if ("result" in jdata and "limits" in jdata["result"]):
               self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
             if self.logger.LOGGING:
-              self.logger.log("RESPONSE: %s" % data[0], maxLen=512)
+              self.logger.log("RESPONSE: %s" % data, maxLen=256)
             ENDOFDATA = True
           except ValueError as e:
-            self.logger.log("VALUE ERROR EXCEPTION: %s" % str(e))
-            self.logger.log("DATA1: %s" % newdata)
-            self.logger.log("DATA2: %s" % "".join(data))
-            pass
+            # If we've reached EOF and we have invalid data then raise exception
+            # otherwise continu reading more data
+            if READ_ERR:
+              self.logger.log("VALUE ERROR EXCEPTION: %s" % str(e))
+              self.logger.log("DATA: %s" % data)
+              raise
+            else:
+              self.logger.log("Incomplete JSON data - continue reading socket")
           except Exception as e:
             self.logger.log("GENERAL EXCEPTION: %s" % str(e))
-            self.logger.log("DATA1: %s" % newdata)
-            self.logger.log("DATA2: %s" % "".join(data))
+            self.logger.log("DATA: %s" % data)
             raise
 
         if not ENDOFDATA:
           if (time.time() - LASTIO) > timeout:
             raise socket.error("Socket IO timeout exceeded")
-            break
           else:
             time.sleep(0.1)
+            continue
 
       if ENDOFDATA:
         id = jdata["id"] if "id" in jdata else None
@@ -775,24 +813,27 @@ class MyJSONComms(object):
 
     return False
 
-  def appendFields(self, aList, fields):
+  def jsonWaitForCleanFinished(self, id, method, params):
+    if method.endswith("Library.OnCleanFinished"): return True
+
+    return False
+
+  def addProperties(self, request, fields):
+    aList = request["params"]["properties"]
     if fields != None:
       for f in fields.split():
         newField = f.replace(",", "")
         if not newField in aList:
           aList.append(newField)
+    request["params"]["properties"] = aList
 
-  def addFilter(self, filter, newFilter, condition="and"):
+  def addFilter(self, request, newFilter, condition="and"):
+    filter = request["params"]
     if "filter" in filter:
        filter["filter"] = { condition: [ filter["filter"], newFilter ] }
     else:
        filter["filter"] = newFilter
-
-  def removeNonAscii(self, s, replaceWith = ""):
-    if replaceWith == "":
-      return  "".join([x if ord(x) < 128 else ("%%%02x" % ord(x)) for x in s])
-    else:
-      return  "".join([x if ord(x) < 128 else replaceWith for x in s])
+    request["params"] = filter
 
   def rescanDirectories(self, workItems):
     if workItems == {}: return
@@ -836,15 +877,30 @@ class MyJSONComms(object):
         REQUEST = {"method": removeMethod, "params":{idName: libraryid}}
         self.sendJSON(REQUEST, "libRemove")
 
-      if not rootScan:
-        self.logger.out("Rescanning directory: %s..." % dpath, newLine=True, log=True)
-        REQUEST = {"method": scanMethod, "params":{"directory": dpath}}
-        self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
+      if not rootScan: self.scanDirectory(scanMethod, dpath)
 
-    if rootScan:
+    if rootScan: self.scanDirectory(scanMethod)
+
+  def scanDirectory(self, scanMethod, path=None):
+    if path and path != "":
+      self.logger.out("Rescanning directory: %s..." % path, newLine=True, log=True)
+      REQUEST = {"method": scanMethod, "params":{"directory": path}}
+    else:
       self.logger.out("Rescanning library...", newLine=True, log=True)
       REQUEST = {"method": scanMethod, "params":{"directory": ""}}
-      self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
+
+    self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
+
+  def cleanLibrary(self, cleanMethod):
+    self.logger.out("Cleaning library...", newLine=True, log=True)
+    REQUEST = {"method": cleanMethod}
+    self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
+
+  def getDirectoryList(self, mediatype, path):
+    REQUEST = {"method":"Files.GetDirectory",
+               "params": {"directory": path, "media": mediatype},
+               "properties": ["file", "art", "fanart", "thumb", "size", "dateadded", "lastmodified", "mimetype"]}
+    return self.sendJSON(REQUEST, "libDirectory", checkResult=False)
 
   def getSeasonAll(self, filename):
 
@@ -941,7 +997,8 @@ class MyJSONComms(object):
         file = source["file"]
         if file.startswith("multipath://"):
           for qfile in file[12:].split("/"):
-            source_list.append(urllib2.unquote(qfile)[:-1])
+            if qfile != "":
+              source_list.append(urllib2.unquote(qfile)[:-1])
         else:
           source_list.append(file[:-1])
 
@@ -1015,37 +1072,36 @@ class MyJSONComms(object):
 
     if mediatype == "tags":
         if not filter or filter.strip() == "":
-          self.addFilter(REQUEST["params"], {"field": "tag", "operator": "contains", "value": "%"})
+          self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": "%"})
         else:
           word = 0
           filterBoolean = "and"
           for tag in [x.strip() for x in re.split("( and | or )", filter)]:
             word += 1
             if (word%2 == 0) and tag in ["and","or"]: filterBoolean = tag
-            else: self.addFilter(REQUEST["params"], {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
+            else: self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
     elif filter and filter.strip() != "" and not mediatype in ["addons", "sets", "seasons", "episodes"]:
-        self.addFilter(REQUEST["params"], {"field": FILTER, "operator": "contains", "value": filter})
+        self.addFilter(REQUEST, {"field": FILTER, "operator": "contains", "value": filter})
 
     if action == "qa":
       qaSinceDate = self.config.QADATE
       if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
-        self.addFilter(REQUEST["params"], {"field": "dateadded", "operator": "after", "value": qaSinceDate })
+        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate })
 
       if mediatype in ["albums", "artists", "songs", "movies", "tags", "tvshows", "episodes" ]:
-        self.appendFields(REQUEST["params"]["properties"], "file")
+        self.addProperties(REQUEST, "file")
 
-      self.appendFields(REQUEST["params"]["properties"], ", ".join(self.config.getQAFields("zero", XTRA)))
-      self.appendFields(REQUEST["params"]["properties"], ", ".join(self.config.getQAFields("blank", XTRA)))
-
+      self.addProperties(REQUEST, ", ".join(self.config.getQAFields("zero", XTRA)))
+      self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", XTRA)))
     elif action == "dump":
       xtraFields = self.config.XTRAJSON["extrajson.%s" % XTRA] if XTRA != "" else None
       if useExtraFields and xtraFields:
-        self.appendFields(REQUEST["params"]["properties"], xtraFields)
+        self.addProperties(REQUEST, xtraFields)
       if secondaryFields:
-        self.appendFields(REQUEST["params"]["properties"], secondaryFields)
+        self.addProperties(REQUEST, secondaryFields)
     elif action == "cache":
       if mediatype in ["movies", "tags", "tvshows", "episodes"] and self.config.CACHE_CAST_THUMB:
-        self.appendFields(REQUEST["params"]["properties"], "cast")
+        self.addProperties(REQUEST, "cast")
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
 
@@ -1059,6 +1115,7 @@ class MyTotals(object):
     self.ETIMES = {}
 
     self.THREADS = {}
+    self.THREADS_HIST = {}
     self.HISTORY = []
     self.PCOUNT = self.PMIN = self.PAVG = self.PMAX = 0
 
@@ -1099,14 +1156,21 @@ class MyTotals(object):
           return True
     return False
 
+  def init(self):
+    with threading.Lock():
+      tname = threading.current_thread().name
+      self.THREADS[tname] = 0
+      self.THREADS_HIST[tname] = (0, 0)
+
   # Record start time for an image type.
-  # If we've already got a start time for imgtype, exit before acquiring a lock.
   def start(self, mediatype, imgtype):
     with threading.Lock():
-      t = time.time()
-      self.THREADS[threading.current_thread().name] = (t, 0)
+      tname = threading.current_thread().name
+      ctime = time.time()
+      self.THREADS[tname] = ctime
       if not mediatype in self.ETIMES: self.ETIMES[mediatype] = {}
-      if not imgtype in self.ETIMES[mediatype]: self.ETIMES[mediatype][imgtype] = (t, 0)
+      if not imgtype in self.ETIMES[mediatype]: self.ETIMES[mediatype][imgtype] = {}
+      if not tname in self.ETIMES[mediatype][imgtype]: self.ETIMES[mediatype][imgtype][tname] = (ctime, 0)
 
   # Record current time for imgtype - this will allow stats to
   # determine cumulative time taken to download an image type.
@@ -1114,13 +1178,13 @@ class MyTotals(object):
     with threading.Lock():
       tname = threading.current_thread().name
       ctime = time.time()
-      self.THREADS[tname] = (self.THREADS[tname][0], ctime)
-      if mediatype in self.ETIMES and imgtype in self.ETIMES[mediatype]:
-        self.ETIMES[mediatype][imgtype] = (self.ETIMES[mediatype][imgtype][0], ctime)
+      self.THREADS_HIST[tname] = (self.THREADS[tname], ctime)
+      self.THREADS[tname] = 0
+#      if mediatype in self.ETIMES and imgtype in self.ETIMES[mediatype] and tname in self.ETIMES[mediatype][imgtype]:
+      self.ETIMES[mediatype][imgtype][tname] = (self.ETIMES[mediatype][imgtype][tname][0], ctime)
 
   def stop(self):
-    with threading.Lock():
-      self.THREADS[threading.current_thread().name] = (0, 0)
+    self.init()
 
   # Increment counter for action/imgtype pairing
   def bump(self, action, imgtype):
@@ -1137,8 +1201,8 @@ class MyTotals(object):
     active = tmin = tmax = 0
 
     with threading.Lock():
-      for t in self.THREADS:
-        times = self.THREADS[t]
+      for t in self.THREADS_HIST:
+        times = self.THREADS_HIST[t]
         if times[0] != 0:
           active += 1
           if tmin == 0 or times[0] < tmin: tmin = times[0]
@@ -1161,7 +1225,7 @@ class MyTotals(object):
       tpersec = tpersec/len(self.HISTORY)
 
     eta = self.secondsToTime(remaining / tpersec, withMillis=False)
-    return " (%3.2f downloads per second, ETA: %s)" % (tpersec, eta)
+    return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 
   def libraryStats(self, item="", filter=""):
     items = {}
@@ -1190,23 +1254,26 @@ class MyTotals(object):
     sortedTOTALS.append(("TOTAL", {}))
     self.TOTALS["TOTAL"] = {}
 
-    if len(self.THREADS) != 0:
+    if len(self.THREADS_HIST) != 0:
       sortedTOTALS.append((DOWNLOAD_LABEL, {}))
       self.TOTALS[DOWNLOAD_LABEL] = {"TOTAL": 0}
 
     # Transfer elapsed times for each image type to our matrix of values
     # Times are held by mediatype, so accumulate for each mediatype
     # Total Download Time is sum of elapsed time for each mediatype
-      tmin = tmax = 0.0
       self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] = 0
       for mtype in self.ETIMES:
         tmin = tmax = 0.0
         for itype in self.ETIMES[mtype]:
-          tuple = self.ETIMES[mtype][itype]
-          if tuple[0] < tmin or tmin == 0.0: tmin = tuple[0]
-          if tuple[1] > tmax: tmax = tuple[1]
-          if not itype in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
-          self.TOTALS[DOWNLOAD_LABEL][itype] += (tuple[1] - tuple[0])
+          itmin = itmax = 0.0
+          for tname in self.ETIMES[mtype][itype]:
+            tuple = self.ETIMES[mtype][itype][tname]
+            if tuple[0] < itmin or itmin == 0.0: itmin = tuple[0]
+            if tuple[1] > itmax: itmax = tuple[1]
+            if not itype in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
+          self.TOTALS[DOWNLOAD_LABEL][itype] = (itmax - itmin)
+          if itmin < tmin or tmin == 0.0: tmin = itmin
+          if itmax > tmax: tmax = itmax
         self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] += (tmax - tmin)
 
     line0 = "Cache pre-load activity summary for \"%s\"" % item
@@ -1260,8 +1327,8 @@ class MyTotals(object):
     # Failed to load anything so don't display time stats that we don't have
     if not self.gotTimeDuration("Load"): return
 
-    if len(self.THREADS) != 0:
-      print("  Threads Used: %d" % len(self.THREADS))
+    if len(self.THREADS_HIST) != 0:
+      print("  Threads Used: %d" % len(self.THREADS_HIST))
       print("   Min/Avg/Max: %3.2f / %3.2f / %3.2f" % (self.PMIN, self.PAVG/self.PCOUNT, self.PMAX))
       print("")
 
@@ -1272,7 +1339,7 @@ class MyTotals(object):
     if self.gotTimeDuration("Rescan"):
       print("    Rescanning: %s" % self.secondsToTime(self.TimeDuration("Rescan")))
 
-    if len(self.THREADS) != 0:
+    if len(self.THREADS_HIST) != 0:
       print("   Downloading: %s" % self.secondsToTime(self.TimeDuration("Download")))
 
     print(" TOTAL RUNTIME: %s" % self.secondsToTime(self.TimeDuration("Total")))
@@ -1346,6 +1413,10 @@ def removeNonAscii(s, replaceWith = ""):
 # Sets doesn't support filters, so filter this list after retrieval.
 #
 def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False):
+
+  if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
+    gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
+    sys.exit(2)
 
   TOTALS.TimeStart(mediatype, "Total")
 
@@ -1463,7 +1534,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
         item.dbid = db[0]
         item.cachedurl = db[1]
       else:
-        gLogger.log("ITEM SKIPPED: %s" % item)
+        if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
         TOTALS.bump("Skipped", item.itype)
         item.status = 0
     # These items we are missing from the cache...
@@ -1490,7 +1561,8 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   gLogger.progress("")
 
   if itemCount > 0 and not nodownload:
-    work_queue = Queue.Queue()
+    single_work_queue = Queue.Queue()
+    multiple_work_queue = Queue.Queue()
     error_queue = Queue.Queue()
 
     gLogger.out("\n")
@@ -1503,30 +1575,54 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       if not item.itype in unique_items:
         unique_items[item.itype] = True
 
-    c = 0
+    c = sc = mc = 0
     for ui in sorted(unique_items):
       for item in mediaitems:
         if item.status == 1 and item.itype == ui:
           c += 1
-          gLogger.log("QUEUE ITEM: %s" % item)
-          gLogger.progress("Queueing work item: %d" % c, every=50, finalItem=(c==itemCount))
-          work_queue.put(item)
+
+          isSingle = False
+          if gConfig.SINGLETHREAD_URLS:
+            for site in gConfig.SINGLETHREAD_URLS:
+              if site.search(item.filename):
+                sc += 1
+                if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
+                single_work_queue.put(item)
+                item.status = 0
+                isSingle = True
+                break
+
+          if not isSingle:
+            mc += 1
+            if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: %s" % item)
+            multiple_work_queue.put(item)
+            item.status = 0
+
+          gLogger.progress("Queueing work item: Single thread %d, Multi thread %d" % (sc, mc), every=50, finalItem=(c==itemCount))
 
     # Don't need this data anymore, make it available for garbage collection
     del mediaitems
 
-    tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
-    THREADCOUNT = tCount if tCount <= itemCount else itemCount
-    gLogger.log("Creating %d image download threads" % THREADCOUNT)
-
     TOTALS.TimeStart(mediatype, "Download")
 
     THREADS = []
-    for i in range(THREADCOUNT):
-      t = MyImageLoader(work_queue, error_queue, itemCount, gConfig, gLogger, TOTALS, force, 10)
+
+    if not single_work_queue.empty():
+      gLogger.log("Creating 1 thread for single access sites")
+      t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount, gConfig, gLogger, TOTALS, force, 10)
       THREADS.append(t)
       t.setDaemon(True)
       t.start()
+
+    if not multiple_work_queue.empty():
+      tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
+      THREADCOUNT = tCount if tCount <= mc else mc
+      gLogger.log("Creating %d image download threads" % THREADCOUNT)
+      for i in range(THREADCOUNT):
+        t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount, gConfig, gLogger, TOTALS, force, 10)
+        THREADS.append(t)
+        t.setDaemon(True)
+        t.start()
 
     try:
       ALIVE = True
@@ -1545,7 +1641,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 
     TOTALS.TimeEnd(mediatype, "Download")
 
-    gLogger.progress("\n")
+    gLogger.progress("", newLine=True, noBlank=True)
 
     if not error_queue.empty():
       gLogger.out("\nThe following items could not be downloaded:\n\n")
@@ -1593,9 +1689,6 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
     if "art" in item:
       if season and SEASON_ALL and "poster" in item["art"]:
         SEASON_ALL = False
-#        poster_url = re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all\2.\3", item["art"]["poster"])
-#        banner_url = re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-fanart.\3", item["art"]["poster"])
-#        fanart_url = re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-banner.\3", item["art"]["poster"])
         (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(item["art"]["poster"])
         if poster_url and evaluateURL("poster", poster_url, imagecache):
           mediaitems.append(MyMediaItem(mediatype, "poster", name, "Season All", None, poster_url, 0, None, item[id_name], False))
@@ -1664,8 +1757,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
   art_items = []
   check_file = False
 
-  if mediatype in ["movies", "tags", "episodes"]:
-    check_file = gConfig.QA_FILE
+  check_file = (gConfig.QA_FILE and mediatype in ["movies", "tags", "episodes"])
 
   zero_items.extend(gConfig.getQAFields("zero", mediatype, stripModifier=False))
   blank_items.extend(gConfig.getQAFields("blank", mediatype, stripModifier=False))
@@ -1796,6 +1888,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 
   with database:
     dbfiles = {}
+    ddsmap = {}
     orphanedfiles = []
     localfiles = []
 
@@ -1806,6 +1899,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 
     rows = database.getAllColumns().fetchall()
     for r in rows: dbfiles[r[1]] = r
+    for r in rows: ddsmap[r[1][:-4]] = r[1]
     gLogger.log("Loaded %d rows from texture cache" % len(dbfiles))
 
     gLogger.progress("Scanning Thumbnails directory...")
@@ -1820,6 +1914,16 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
           hash = "%s/%s" % (dir, f)
 
           gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
+
+          # If its a dds file, it should be associated with another
+          # file with the same hash, but different extension. Find
+          # this other file in the ddsmap - if its there, ignore
+          # the dds file, otherwise leave the dds file to be reported
+          # as an orphaned file.
+          if hash[-4:] == ".dds":
+            ddsfile = hash[:-4]
+            baseFile = ddsmap.get(ddsfile, None)
+            if baseFile: continue
 
           if not hash in dbfiles:
             orphanedfiles.append(hash)
@@ -2026,10 +2130,6 @@ def getAllFiles(keyFunction):
           for a in season["art"]:
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
               SEASON_ALL = False
-#              filename = keyFunction(season["art"][a])
-#              files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all\2.\3", filename)] = a
-#              files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-fanart.\3", filename)] = "fanart"
-#              files[re.sub(r"season(-specials|[ 0-9]*)(.*)\.(.*)", r"season-all-banner.\3", filename)] = "banner"
               (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(season["art"][a])
               if poster_url: files[keyFunction(poster_url)] = "poster"
               if fanart_url: files[keyFunction(fanart_url)] = "fanart"
@@ -2059,11 +2159,57 @@ def pruneCache( purge_nonlibrary_artwork=False ):
 
   dirScan("N", purge_nonlibrary_artwork, libraryFiles=files, keyIsHash=False)
 
+def doLibraryScan(media, path):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  scanMethod = "VideoLibrary.Scan" if media == "video" else "AudioLibrary.Scan"
+
+  jcomms.scanDirectory(scanMethod, path)
+
+def doLibraryClean(media):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  cleanMethod = "VideoLibrary.Clean" if media == "video" else "AudioLibrary.Clean"
+
+  jcomms.cleanLibrary(cleanMethod)
+
+def getDirectoryList(path, mediatype = "files"):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  data = jcomms.getDirectoryList(mediatype, path)
+
+  if not "result" in data:
+    print "No directory listing available."
+    return
+
+  files = data["result"]["files"]
+  for file in files:
+    ftype = file["filetype"]
+    fname = file["file"]
+
+    if ftype == "directory":
+      FTYPE = "DIR"
+      FNAME = os.path.dirname(fname)
+    else:
+      FTYPE = "FILE"
+      FNAME = fname
+
+    print("%s: %s") % (FTYPE, FNAME)
+
+def showSources(media=None):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  mlist = [media] if media else ["video", "music", "pictures", "files", "programs"]
+
+  for m in mlist:
+    for s in jcomms.getSources(m):
+      gLogger.out("%s: %s" % (m, s), newLine=True)
+
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | config | version | update")
+        "rR | c [class [filter]] | nc [class [filter]] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2084,6 +2230,13 @@ def usage(EXIT_CODE):
   print("          Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
   print("  p       Display files present in texture cache that don't exist in the media library")
   print("  P       Prune (automatically remove) cached items that don't exist in the media library")
+  print("  ascan   Scan entire audio library, or specific path")
+  print("  vscan   Scan entire video library, or specific path")
+  print("  aclean  Clean audio library")
+  print("  vclean  Clean video library")
+  print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs)")
+  print("directory Retrieve list of files in a specific directory (see sources)")
+  print("")
   print("  config  Show current configuration")
   print("  version Show current version and check for new version")
   print("  update  Update to new version (if available)")
@@ -2105,6 +2258,7 @@ def loadConfig():
   gConfig = MyConfiguration()
   gLogger = MyLogger()
   gLogger.DEBUG = gConfig.DEBUG
+  gLogger.VERBOSE = gConfig.LOGVERBOSE
   gLogger.setLogFile(gConfig.LOGFILE)
 
 def checkConfig(option):
@@ -2392,6 +2546,24 @@ def main(argv):
   elif argv[0] == "P" and len(argv) == 1:
     pruneCache(purge_nonlibrary_artwork=True)
 
+  elif argv[0] == "vscan":
+    doLibraryScan("video", path = argv[1] if len(argv) == 2 else None)
+
+  elif argv[0] == "ascan":
+    doLibraryScan("audio", path = argv[1] if len(argv) == 2 else None)
+
+  elif argv[0] == "vclean":
+    doLibraryClean("video")
+
+  elif argv[0] == "aclean":
+    doLibraryClean("audio")
+
+  elif argv[0] == "directory" and len(argv) == 2:
+    getDirectoryList(argv[1])
+
+  elif argv[0] == "sources":
+    showSources(media = argv[1] if len(argv) == 2 else None)
+
   elif argv[0] == "version":
     print("Current Version: v%s" % gConfig.VERSION)
     checkUpdate(forcedCheck = True)
@@ -2413,5 +2585,6 @@ if __name__ == "__main__":
   try:
     stopped = threading.Event()
     main(sys.argv[1:])
-  except (KeyboardInterrupt, SystemExit):
+  except (KeyboardInterrupt, SystemExit) as e:
+    if type(e) == SystemExit: sys.exit(int(str(e)))
     pass

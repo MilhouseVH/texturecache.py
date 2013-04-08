@@ -1,5 +1,15 @@
 #Changelog
 
+##Version 0.4.5 (08/04/2013)
+* Added DDS suppoort for `r`, `R`, `p` and `P` options.
+* Added `logfile.verbose` to control amount of information written to logfile. Default `no`.
+* Added `singlethread.urls` property, to force download of content on a single thread. Use this for sites that appear to disallow mutltiple requests from the same address.
+
+  eg. `singlethread.urls = assets.fanart.tv, some.othersite.com`
+  
+  would result in all content requests for files matching the above patterns to be performed sequentially on a single thread. This thread will be in addition to any other threads.
+* Added `ascan [path]`, `vscan [path]`, `vclean`, `aclean`, `directory path` and `sources [media]` options. Update, clean and interrogate a remote media library from the command line.
+
 ##Version 0.4.4 (07/04/2013)
 * Add fupdate option to ignore version number when updating
 * Added extra logging and exception handling to json communication
