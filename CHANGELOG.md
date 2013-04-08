@@ -1,21 +1,21 @@
 #Changelog
 
-##Version 0.4.5 (08/04/2013)
-* Added DDS suppoort for `r`, `R`, `p` and `P` options.
-* Added `logfile.verbose` to control amount of information written to logfile. Default `no`.
-* Added `singlethread.urls` property, to force download of content on a single thread. Use this for sites that appear to disallow mutltiple requests from the same address.
+##Version 0.4.5 (09/04/2013)
+* Added DDS support for `r`, `R`, `p` and `P` options.
+* Added `logfile.verbose` to control amount of information written to logfile. Default `no`. Significant amounts of data will be output when enabled.
+* Added `singlethread.urls` property, to force download of content on a single thread. Use this for sites that appear to disallow multiple requests from the same address - fanart.tv seems to be one example of this (clearart/clearlogos etc.).
 
   eg. `singlethread.urls = assets.fanart.tv, some.othersite.com`
   
-  would result in all content requests for files matching the above patterns to be performed sequentially on a single thread. This thread will be in addition to any other threads.
-* Added `ascan [path]`, `vscan [path]`, `vclean`, `aclean`, `directory path` and `sources [media]` options. Update, clean and interrogate a remote media library from the command line.
+  would result in all content requests for files matching any of the above patterns to be performed sequentially on a single thread. This thread will be in addition to any other threads.
+* Added `ascan [path]`, `vscan [path]`, `aclean`, `vclean`, `directory path` and `sources [media]` options. Update, clean and interrogate a remote media library from the command line.
 
 ##Version 0.4.4 (07/04/2013)
 * Add fupdate option to ignore version number when updating
 * Added extra logging and exception handling to json communication
 
 ##Version 0.4.3 (07/04/2013)
-* Add supprt for BDMV/VIDEO_TS folder structures during `qax`
+* Add support for BDMV/VIDEO_TS folder structures during `qax`
 * Rescan entire library whenever a media item is in root folder - workaround for bug in rescan directory method
 * Refactor QA (`qa`,`qax`) and json query (`j`,`jd`,`Jd`,`Jd`) implementation, eliminating duplicate code
 * Added extensible QA rules: `qa.zero.<mediaclass>`, `qa.blank.<mediaclass>` and `qa.art.<mediaclass>`
