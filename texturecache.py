@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.5"
+    self.VERSION="0.4.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1128,10 +1128,12 @@ class MyTotals(object):
     self.TOTALS["Ignored"] = {}
 
   def addSeasonAll(self):
-    self.TOTALS["Season-all"] = {}
+    if not "Season-all" in self.TOTALS:
+      self.TOTALS["Season-all"] = {}
 
   def addNotCached(self):
-    self.TOTALS["Not in Cache"] = {}
+    if not "Not in Cache" in self.TOTALS:
+      self.TOTALS["Not in Cache"] = {}
 
   def TimeStart(self, mediatype, item):
     if not mediatype in self.TIMES: self.TIMES[mediatype] = {}

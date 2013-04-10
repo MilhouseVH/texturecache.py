@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.6 (09/04/2013)
+* Fix running totals for "Not in Cache" when `nc` run for multiple media classes.
+
 ##Version 0.4.5 (09/04/2013)
 * Added DDS support for `r`, `R`, `p` and `P` options.
 * Added `logfile.verbose` to control amount of information written to logfile. Default `no`. Significant amounts of data will be output when enabled.
