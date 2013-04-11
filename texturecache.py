@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.6"
+    self.VERSION="0.4.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -76,7 +76,8 @@ class MyConfiguration(object):
                                             "logfile": None,
                                             "logfile.verbose": "no",
                                             "allow.recacheall": "no",
-                                            "checkupdate": "yes"
+                                            "checkupdate": "yes",
+                                            "lastrunfile": None
                                             }
                                           )
 
@@ -198,6 +199,12 @@ class MyConfiguration(object):
 
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
 
+    self.LASTRUNFILE = config.get("xbmc", "lastrunfile")
+    self.LASTRUNFILE_DATE = None
+    if self.LASTRUNFILE and os.path.exists(self.LASTRUNFILE):
+        temp = datetime.datetime.utcfromtimestamp(os.path.getmtime(self.LASTRUNFILE))
+        self.LASTRUNFILE_DATE = temp.strftime("%Y-%m-%d")
+
   # default value will be used if key is present, but without a value
   def getBoolean(self, parser, key, default="no"):
     temp = parser.get("xbmc", key)
@@ -306,6 +313,8 @@ class MyConfiguration(object):
     print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
     if self.RECACHEALL:
       print("  allow.recacheall = yes")
+    temp = " (%s)" % self.LASTRUNFILE_DATE if self.LASTRUNFILE and self.LASTRUNFILE_DATE else ""
+    print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -1006,7 +1015,7 @@ class MyJSONComms(object):
 
   def getData(self, action, mediatype,
               filter = None, useExtraFields = False, secondaryFields = None,
-              showid = None, seasonid = None):
+              showid = None, seasonid = None, lastRun = False):
 
     XTRA = mediatype
     SECTION = mediatype
@@ -1082,6 +1091,10 @@ class MyJSONComms(object):
             else: self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
     elif filter and filter.strip() != "" and not mediatype in ["addons", "sets", "seasons", "episodes"]:
         self.addFilter(REQUEST, {"field": FILTER, "operator": "contains", "value": filter})
+
+    if mediatype in ["movies", "tags", "episodes"]:
+      if lastRun and self.config.LASTRUNFILE_DATE:
+        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATE })
 
     if action == "qa":
       qaSinceDate = self.config.QADATE
@@ -1414,7 +1427,7 @@ def removeNonAscii(s, replaceWith = ""):
 #
 # Sets doesn't support filters, so filter this list after retrieval.
 #
-def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False):
+def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False, lastRun=False):
 
   if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
@@ -1431,7 +1444,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   TOTALS.TimeStart(mediatype, "Load")
 
-  (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields)
+  (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun = lastRun)
 
   if "result" in data and section_name in data["result"]:
     data = data["result"][section_name]
@@ -1449,14 +1462,14 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     for tvshow in data:
       title = tvshow["title"]
       gLogger.progress("Loading TV Show: [%s]..." % title.encode("utf-8"), every = 1)
-      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name])
+      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun = lastRun)
       limits = data2["result"]["limits"]
       if limits["total"] == 0: break
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
         gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title.encode("utf-8"), seasonid), every = 1)
-        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2])
+        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun = lastRun)
         limits = data3["result"]["limits"]
         if limits["total"] == 0: break
         season[s3] = data3["result"][s3]
@@ -2211,7 +2224,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2224,6 +2237,8 @@ def usage(EXIT_CODE):
   print("  c       Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
   print("  C       Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
   print("  nc      Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
+  print("  lc      Like c, but only for content added since the modification date of the file specficied in property lastrunfile")
+  print("  lnc     Like nc, but only for content added since the modification date of the file specficied in property lastrunfile")
   print("  j       Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results.")
   print("  J       Same as \"j\", but includes extra JSON audio/video fields as defined in properties file.")
   print("  jd, Jd  Functionality equivalent to j/J, but all urls are decoded")
@@ -2442,6 +2457,8 @@ def main(argv):
 
   if not checkConfig(argv[0]): sys.exit(2)
 
+  multi_call = ["addons", "albums", "artists", "movies", "sets", "tvshows"]
+
   if gConfig.CHECKUPDATE:
     if not argv[0] in ["version","update"]: checkUpdate()
 
@@ -2463,12 +2480,7 @@ def main(argv):
     sqlExtract("STATS", "", argv[1])
 
   elif argv[0] == "c" and len(argv) == 1:
-    jsonQuery("cache", "addons")
-    jsonQuery("cache", "albums")
-    jsonQuery("cache", "artists")
-    jsonQuery("cache", "movies")
-    jsonQuery("cache", "sets")
-    jsonQuery("cache", "tvshows")
+    for x in multi_call: jsonQuery("cache", x)
     TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
   elif argv[0] == "c" and len(argv) == 2:
     jsonQuery("cache", argv[1])
@@ -2478,18 +2490,34 @@ def main(argv):
     TOTALS.libraryStats(argv[1], argv[2])
 
   elif argv[0] == "nc" and len(argv) == 1:
-    jsonQuery("cache", "addons", nodownload=True)
-    jsonQuery("cache", "albums", nodownload=True)
-    jsonQuery("cache", "artists", nodownload=True)
-    jsonQuery("cache", "movies", nodownload=True)
-    jsonQuery("cache", "sets", nodownload=True)
-    jsonQuery("cache", "tvshows", nodownload=True)
+    for x in multi_call: jsonQuery("cache", x, nodownload=True)
     TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
   elif argv[0] == "nc" and len(argv) == 2:
     jsonQuery("cache", argv[1], nodownload=True)
     TOTALS.libraryStats(argv[1])
   elif argv[0] == "nc" and len(argv) == 3:
     jsonQuery("cache", argv[1], argv[2], nodownload=True)
+    TOTALS.libraryStats(argv[1], argv[2])
+
+  elif argv[0] == "lc" and len(argv) == 1:
+    for x in multi_call: jsonQuery("cache", x, lastRun=True)
+    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
+  elif argv[0] == "lc" and len(argv) == 2:
+    jsonQuery("cache", argv[1], lastRun=True)
+    TOTALS.libraryStats(argv[1])
+
+  elif argv[0] == "lnc" and len(argv) == 1:
+    for x in multi_call: jsonQuery("cache", x, nodownload=True, lastRun=True)
+    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
+  elif argv[0] == "lnc" and len(argv) == 2:
+    jsonQuery("cache", argv[1], nodownload=True, lastRun=True)
+    TOTALS.libraryStats(argv[1])
+
+  elif argv[0] == "c" and len(argv) == 2:
+    jsonQuery("cache", argv[1])
+    TOTALS.libraryStats(argv[1])
+  elif argv[0] == "c" and len(argv) == 3:
+    jsonQuery("cache", argv[1], argv[2])
     TOTALS.libraryStats(argv[1], argv[2])
 
   elif argv[0] == "C" and len(argv) == 2:

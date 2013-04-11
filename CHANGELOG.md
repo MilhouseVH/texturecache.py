@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.7 (11/04/2013)
+* Added `lastrunfile` property. Modification time of this file will be used to restrict cache updates for movies and tvshows, effectively allowing the script to recache only new content added since the script was last run. The new options `lc` and `lnc` will only process media files added since the modification time of the file specified by `lastrunfile` - if the file is missing or unreadable no filter will be applied.
+
 ##Version 0.4.6 (09/04/2013)
 * Fix running totals for "Not in Cache" when `nc` run for multiple media classes.
 
