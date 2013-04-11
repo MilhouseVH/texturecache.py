@@ -2287,12 +2287,13 @@ def checkConfig(option):
   else:
     needWeb = False
 
-  if option in ["c","C","nc","lc", "lnc", "j","jd","J","Jd","qa","qax","p","P" ]:
+  if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","p","P",
+                "vscan", "ascan", "vclean", "aclean", "directory", "sources"]:
     needSocket = True
   else:
     needSocket = False
 
-  if option in ["s","S","x","X","f","c","C","nc","lc", "lnc", "qa","qax","d","r","R","p","P" ]:
+  if option in ["s","S","x","X","f","c","C","nc","lc","lnc","qa","qax","d","r","R","p","P" ]:
     needDb = True
   else:
     needDb = False
