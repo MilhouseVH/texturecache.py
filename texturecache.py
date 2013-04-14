@@ -41,7 +41,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.7"
+    self.VERSION="0.4.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -667,6 +667,7 @@ class MyJSONComms(object):
     self.myweb = None
     self.WEB_LAST_STATUS = -1
     self.config.WEB_SINGLESHOT = True
+    self.UpdateCount = 0
 
   def __enter__(self):
     return self
@@ -764,14 +765,40 @@ class MyJSONComms(object):
       if READ_ERR or len(newdata) < BUFFER_SIZE:
         if data[-1:] == "}" or data[-2:] == "}\n":
           try:
-            self.logger.debug("CONVERTING RESPONSE", newLine=True)
-            jdata = json.loads(data)
+            self.logger.debug("PARSING RESPONSE", newLine=True)
+
+            result = False
+            jdata = {}
+            # Process any notifications first.
+            # Any message with an id must be processed later - should only be one at most
+            for m in self.parseResponse(data):
+              if not "id" in m:
+                if self.handleNotification(m, callback): result = True
+              else:
+                jdata = m
+
             self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
+
             if ("result" in jdata and "limits" in jdata["result"]):
               self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
-            if self.logger.LOGGING:
-              self.logger.log("RESPONSE: %s" % data, maxLen=256)
+
+            if self.logger.LOGGING: self.logger.log("RESPONSE: %s" % data, maxLen=256)
+
             ENDOFDATA = True
+
+            # Result from callback for a Notification - stop blocking and return
+            if result: break
+
+            if jdata != {}:
+              # If callback defined, pass it the message and break if result is True.
+              # Otherwise break only if message has an id, that is to
+              # say continue reading data (blocking) until a message
+              # with an id is available.
+              if callback:
+                if self.handleNotification(jdata, callback): break
+              elif "id" in jdata:
+                break
+
           except ValueError as e:
             # If we've reached EOF and we have invalid data then raise exception
             # otherwise continu reading more data
@@ -793,29 +820,72 @@ class MyJSONComms(object):
             time.sleep(0.1)
             continue
 
-      if ENDOFDATA:
-        id = jdata["id"] if "id" in jdata else None
-
-  # If we've got a callback defined, call it
-  # If no callback, return response if it has an id
-  # Responses without ids are notification, ignore and continue reading
-        if callback:
-          method = jdata["method"] if "method" in jdata else jdata["result"]
-          params = jdata["params"] if "params" in jdata else None
-          self.logger.log("Calling callback function: [%s] notification with params [%s]" % (method, params))
-          if callback(id, method, params): break
-        elif id: break
-
     if checkResult and not "result" in jdata:
       self.logger.out("ERROR: JSON response has no result!\n%s\n" % jdata)
 
     return jdata
 
+  def handleNotification(self, jdata, callback):
+    id = jdata["id"] if "id" in jdata else None
+
+    method = jdata["method"] if "method" in jdata else jdata["result"]
+    params = jdata["params"] if "params" in jdata else None
+
+    if not id:
+      self.logger.log("JSON NOTIFICATION: Method [%s] with Params [%s]" % (method, params))
+    else:
+      self.logger.log("JSON RESPONSE HANDLER: For id [%s], Method [%s] with Params [%s]" % (id, method, params))
+
+  # If we've got a callback defined, call it
+  # If no callback, return response if it has an id
+  # Responses without ids are notification, ignore and continue reading
+    if callback:
+      self.logger.log("Calling callback function: For id [%s], Method [%s] with Params [%s]" % (id, method, params))
+      result =  callback(id, method, params)
+      self.logger.log("Callback function result: %s for id [%s], method [%s]" % (result, id, method))
+      return result
+
+    return False
+
+  # Split data into individual json objects.
+  def parseResponse(self, data):
+
+    decoder = json._default_decoder
+    _w=json.decoder.WHITESPACE.match
+
+    idx = _w(data, 0).end()
+    end = len(data)
+
+    try:
+      while idx != end:
+        (val, idx) = decoder.raw_decode(data, idx=idx)
+        yield val
+        idx = _w(data, idx).end()
+    except ValueError as exc:
+      raise ValueError('%s (%r at position %d).' % (exc, data[idx:], idx))
+
   def jsonWaitForScanFinished(self, id, method, params):
     if method == "VideoLibrary.OnUpdate" and "data" in params:
+      self.UpdateCount += 1
+
       if "item" in params["data"]:
         item = params["data"]["item"]
-        self.logger.out("Updating Library: %s id %d\n" % (item["type"], item["id"]))
+
+        if item["type"] == "song":
+          title = self.getSongName(item["id"])
+        elif item["type"] == "movie":
+          title = self.getMovieName(item["id"])
+        elif item["type"] == "tvshow":
+          title = self.getTVShowName(item["id"])
+        elif item["type"] == "episode":
+          title = self.getEpisodeName(item["id"])
+        else: title = None
+
+        if title:
+          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (item["type"] + "id", item["id"], title))
+        else:
+          self.logger.out("Updating Library: New %-9s %5d\n" % (item["type"] + "id", item["id"]))
+
       return False
 
     if method.endswith("Library.OnScanFinished"): return True
@@ -967,6 +1037,49 @@ class MyJSONComms(object):
 
     if "result" in data:
       return data["result"]["filedetails"]
+    else:
+      return None
+
+  def getSongName(self, songid):
+    REQUEST = {"method":"AudioLibrary.GetSongDetails",
+               "params":{"songid": songid, "properties":["title", "artist", "albumartist"]}}
+    data = self.sendJSON(REQUEST, "libSong")
+    if "result" in data and "songdetails" in data["result"]:
+      s = data["result"]["songdetails"]
+      if s["artist"]:
+        return "%s (%s)" % (s["title"], s["artist"])
+      else:
+        return "%s (%s)" % (s["title"], s["albumartist"])
+    else:
+      return None
+
+  def getTVShowName(self, tvshowid):
+    REQUEST = {"method":"VideoLibrary.GetTVShowDetails",
+               "params":{"tvshowid": tvshowid, "properties":["title"]}}
+    data = self.sendJSON(REQUEST, "libTVShow")
+    if "result" in data and "tvshowdetails" in data["result"]:
+      t = data["result"]["tvshowdetails"]
+      return "%s" % t["title"]
+    else:
+      return None
+
+  def getEpisodeName(self, episodeid):
+    REQUEST = {"method":"VideoLibrary.GetEpisodeDetails",
+               "params":{"episodeid": episodeid, "properties":["title", "showtitle", "season", "episode"]}}
+    data = self.sendJSON(REQUEST, "libEpisode")
+    if "result" in data and "episodedetails" in data["result"]:
+      e = data["result"]["episodedetails"]
+      return "%s S%02dE%02d (%s)" % (e["showtitle"], e["season"], e["episode"], e["title"])
+    else:
+      return None
+
+  def getMovieName(self, movieid):
+    REQUEST = {"method":"VideoLibrary.GetMovieDetails",
+               "params":{"movieid": movieid, "properties":["title"]}}
+    data = self.sendJSON(REQUEST, "libMovie")
+    if "result" in data and "moviedetails" in data["result"]:
+      m = data["result"]["moviedetails"]
+      return "%s" % m["title"]
     else:
       return None
 
@@ -2181,6 +2294,8 @@ def doLibraryScan(media, path):
 
   jcomms.scanDirectory(scanMethod, path)
 
+  return jcomms.UpdateCount
+
 def doLibraryClean(media):
   jcomms = MyJSONComms(gConfig, gLogger)
 
@@ -2293,7 +2408,7 @@ def checkConfig(option):
   else:
     needSocket = False
 
-  if option in ["s","S","x","X","f","c","C","nc","lc","lnc","qa","qax","d","r","R","p","P" ]:
+  if option in ["s","S","x","X","f","c","C","nc","lc","lnc","qa","qax","d","r","R","p","P"]:
     needDb = True
   else:
     needDb = False
@@ -2458,6 +2573,8 @@ def main(argv):
 
   if not checkConfig(argv[0]): sys.exit(2)
 
+  EXIT_CODE = 0
+
   multi_call = ["addons", "albums", "artists", "movies", "sets", "tvshows"]
 
   if gConfig.CHECKUPDATE:
@@ -2578,10 +2695,10 @@ def main(argv):
     pruneCache(purge_nonlibrary_artwork=True)
 
   elif argv[0] == "vscan":
-    doLibraryScan("video", path = argv[1] if len(argv) == 2 else None)
+    EXIT_CODE = doLibraryScan("video", path = argv[1] if len(argv) == 2 else None)
 
   elif argv[0] == "ascan":
-    doLibraryScan("audio", path = argv[1] if len(argv) == 2 else None)
+    EXIT_CODE = doLibraryScan("audio", path = argv[1] if len(argv) == 2 else None)
 
   elif argv[0] == "vclean":
     doLibraryClean("video")
@@ -2610,7 +2727,7 @@ def main(argv):
   else:
     usage(1)
 
-  sys.exit(0)
+  sys.exit(EXIT_CODE)
 
 if __name__ == "__main__":
   try:

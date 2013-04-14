@@ -1,7 +1,12 @@
 #Changelog
 
+##Version 0.4.8 (14/04/2013)
+* Lookup song/movie/tvshow/episode title when new items are scanned into media library
+* `vscan`/`ascan` exit status will reflect the number of new items scanned in - 0 when no new items, +n whenever items are added
+* Update json socket communication to better handle concatenated messages (response + notification(s))
+
 ##Version 0.4.7 (11/04/2013)
-* Added `lastrunfile` property. Modification time of this file will be used to restrict cache updates for movies and tvshows, effectively allowing the script to recache only new content added since the script was last run. The new options `lc` and `lnc` will only process media files added since the modification time of the file specified by `lastrunfile` - if the file is missing or unreadable no filter will be applied.
+* Added `lastrunfile` property. Modification time of this file will be used to restrict cache updates for movies and tvshows (other media classes, while valid, do not support the `dateadded` filter so its not possible to restricty by data). With this property enabled, only new content added since the file was last modified will be considered for re-caching. The new options `lc` and `lnc` will respect the `lastrunfile` property. If the file is missing or unreadable, no `dateadded` filter will be applied. Manually `touch` the `lastrunfile` to advance the modification date, the script will only ever read the details of this file, and never update it.
 
 ##Version 0.4.6 (09/04/2013)
 * Fix running totals for "Not in Cache" when `nc` run for multiple media classes.
