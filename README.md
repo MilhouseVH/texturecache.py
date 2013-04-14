@@ -11,6 +11,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[nc]** Identify those items that require caching (and would be cached by **c** option)
 
+**[lc, lnc]** Same as `c` and `nc`, but only considers those media (movies, tvshows/episodes) added since the modification timestamp of the file identified by the property `lastrunfile`
+
 **[p, P]** Prune texture cache by removing accumulated **cruft** such as image previews, previously deleted movies/tv shows/music and whose artwork remains in the texture cache even after cleaning the media library database. Essentially, remove any cached file that is no longer associated with an entry in the media library, or an addon
 
 **[s, S]** Search texture cache for specific files and view database content, can help explain reason for incorrect artwork. Option **S** returns only those items that no longer have a matching image in the file system.
@@ -26,6 +28,14 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 **[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Add properties "[qa.rating = yes](#optional-properties-file)" or "[qa.file = yes](#optional-properties-file)" for rating and file validation during QA
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
+
+**[ascan, vscan]** Initiate audio/video library scan, either entire library or a specific path (see **sources**). The exit status is the number of items added during scan, 0 or +n.
+
+**[aclean, vclean]** Clean audio/video library
+
+**[directory]** Obtain directory listing for a specific path (see **sources**)
+
+**[sources]** List of sources for a specific media class (video, music, pictures, files, programs)
 
 ##Installation instructions
 
