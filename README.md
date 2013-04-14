@@ -25,7 +25,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[j, J, jd, Jd]** Query media library using JSON API, and output content using JSON notation (and suitable for further external processing). The **jd** and **Jd** options will decode (unquote) all artwork urls. **J** and **Jd** options will include additional user configurable fields when querying media library (see [properties file](#optional-properties-file))
 
-**[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Add properties "[qa.rating = yes](#optional-properties-file)" or "[qa.file = yes](#optional-properties-file)" for rating and file validation during QA
+**[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Define QA properties using `qa.zero.*`, `qa.blank.*` and `qa.art.*` properties. Enable "[qa.file = yes](#optional-properties-file)" for file validation during QA.
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
@@ -271,6 +271,7 @@ webserver.username =
 webserver.password =
 rpc.port = 9090
 download.threads = 2
+singlethread.urls = 
 extrajson.addons =
 extrajson.albums =
 extrajson.artists =
@@ -281,12 +282,41 @@ extrajson.tvshows.tvshow =
 extrajson.tvshows.season =
 extrajson.tvshows.episode =
 qaperiod = 30
-qa.rating = no
 qa.file = no
+qa.art.addons =
+qa.art.albums =
+qa.art.artists =
+qa.art.movies = fanart, poster
+qa.art.sets = fanart, poster
+qa.art.songs =
+qa.art.tvshows.episode = thumb
+qa.art.tvshows.season =
+qa.art.tvshows.tvshow = fanart, banner, poster
+qa.blank.addons =
+qa.blank.albums =
+qa.blank.artists =
+qa.blank.movies = plot, mpaa
+qa.blank.sets =
+qa.blank.songs =
+qa.blank.tvshows.episode = plot
+qa.blank.tvshows.season =
+qa.blank.tvshows.tvshow = plot
+qa.zero.addons =
+qa.zero.albums =
+qa.zero.artists =
+qa.zero.movies =
+qa.zero.sets =
+qa.zero.songs =
+qa.zero.tvshows.episode =
+qa.zero.tvshows.season =
+qa.zero.tvshows.tvshow =
 cache.castthumb = no
 cache.ignore.types = image://video, image://music
 prune.retain.types =
 logfile =
+logfile.verbose = no
+checkupdate = yes
+lastrunfile =
 ```
 
 The `dbfile` and `thumbbnails` properties represent folders that are normally relative to the `userdata` property, however full paths can be specified.
@@ -295,13 +325,20 @@ Set values for `webserver.username` and `webserver.password` if you require webs
 
 The `extrajson.*` properties allow the specification of additional JSON audio/video fields to be returned by the J/Jd query options. See the XBMC [JSON-RPC API Specification](http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6) for details.
 
-Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes` if you require cast artwork to be re-cached.
+The `qa.art.*`, `qa.blank.*` and `qa.zero.*` files can be used to replace or add additional fields for qa (not zero, not blank, and present in art list). Add to default fields by prefixing with +, so `qa.blank.movies = +director` will QA mpaa, plot and director for movies (failing QA if any are blank).
+
+Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes` if you require cast artwork to be re-cached, or considered when pruning.
 
 Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `image://video` and `image://music`. Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
 
 Retain specific URLs when pruning the texture cache, eg. `prune.retain.types = ^http://www.wiziwig.tv/` to keep all artwork relating to wizwig.tv (as used by the SportsDevil addon).
 
-Specify a filename for the `logfile` property, to log detailed processing information. Prefix the filename with + to force flushing.
+Specify a filename for the `logfile` property, to log detailed processing information. Prefix the filename with + to force flushing. Enable logfile.verbose for increased level of logging.
+
+Use `download.threads` to vary number of threads used when caching data. Class specific values can also be used, eg. `download.threads.movies`.
+
+Specify a comma delimited list of pattherns in `singlethread.urls` to force download on a single thread, necessary for sites that limit the number of concurrent requests. Example: `singlethread.urls = assets.fanart.tv`.
+
 
 Run the script without arguments for basic usage, and with `config` parameter to view current configuration information.
 
