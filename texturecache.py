@@ -34,6 +34,7 @@ import sqlite3 as lite
 import os, sys, ConfigParser, StringIO, json, re, datetime, time
 import httplib, urllib2, socket, base64, hashlib
 import Queue, threading
+import errno
 
 #
 # Config class. Will be a global object.
@@ -41,7 +42,7 @@ import Queue, threading
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.8"
+    self.VERSION="0.4.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -724,7 +725,7 @@ class MyJSONComms(object):
         return self.sendWeb(request_type, url, request, headers)
       raise
 
-  def sendJSON(self, request, id, callback=None, timeout=2, checkResult=True):
+  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True):
     BUFFER_SIZE = 32768
 
     request["jsonrpc"] = "2.0"
@@ -744,6 +745,7 @@ class MyJSONComms(object):
     s.send(json.dumps(request))
 
     ENDOFDATA = True
+    LASTIO = 0
     jdata = {}
 
     while True:
@@ -754,7 +756,7 @@ class MyJSONComms(object):
 
       try:
         newdata = s.recv(BUFFER_SIZE)
-        if data == "": s.setblocking(0)
+        if data == "": s.settimeout(1.0)
         data += newdata
         LASTIO=time.time()
         self.logger.debug("BUFFER RECEIVED (len %d)" % len(newdata), newLine=True)
@@ -762,63 +764,72 @@ class MyJSONComms(object):
       except socket.error as e:
         READ_ERR = True
 
-      if READ_ERR or len(newdata) < BUFFER_SIZE:
-        if data[-1:] == "}" or data[-2:] == "}\n":
-          try:
-            self.logger.debug("PARSING RESPONSE", newLine=True)
+      # Keep reading unless accumulated data is a likely candidate for successful parsing...
+      if not READ_ERR and data != "" and (data[-1:] == "}" or data[-2:] == "}\n"):
+        try:
+          self.logger.debug("PARSING RESPONSE", newLine=True)
 
-            result = False
-            jdata = {}
-            # Process any notifications first.
-            # Any message with an id must be processed later - should only be one at most
-            for m in self.parseResponse(data):
-              if not "id" in m:
-                if self.handleNotification(m, callback): result = True
-              else:
-                jdata = m
+          # Parse messages, to ensure the entire buffer is valid
+          # If buffer is not (VALUE EXCEPTION), may need to read more data.
+          messages = []
+          for m in self.parseResponse(data):
+            messages.append(m)
 
-            self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
-
-            if ("result" in jdata and "limits" in jdata["result"]):
-              self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
-
-            if self.logger.LOGGING: self.logger.log("RESPONSE: %s" % data, maxLen=256)
-
-            ENDOFDATA = True
-
-            # Result from callback for a Notification - stop blocking and return
-            if result: break
-
-            if jdata != {}:
-              # If callback defined, pass it the message and break if result is True.
-              # Otherwise break only if message has an id, that is to
-              # say continue reading data (blocking) until a message
-              # with an id is available.
-              if callback:
-                if self.handleNotification(jdata, callback): break
-              elif "id" in jdata:
-                break
-
-          except ValueError as e:
-            # If we've reached EOF and we have invalid data then raise exception
-            # otherwise continu reading more data
-            if READ_ERR:
-              self.logger.log("VALUE ERROR EXCEPTION: %s" % str(e))
-              self.logger.log("DATA: %s" % data)
-              raise
+          # Process any notifications first.
+          # Any message with an id must be processed after notification - should only be one at most...
+          result = False
+          jdata = {}
+          for m in messages:
+            if not "id" in m:
+              if self.handleNotification(m, callback): result = True
             else:
-              self.logger.log("Incomplete JSON data - continue reading socket")
-          except Exception as e:
-            self.logger.log("GENERAL EXCEPTION: %s" % str(e))
-            self.logger.log("DATA: %s" % data)
-            raise
+              jdata = m
 
-        if not ENDOFDATA:
-          if (time.time() - LASTIO) > timeout:
-            raise socket.error("Socket IO timeout exceeded")
+          messages = []
+
+          self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
+
+          if ("result" in jdata and "limits" in jdata["result"]):
+            self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
+
+          if self.logger.LOGGING: self.logger.log("RESPONSE: %s" % data, maxLen=256)
+
+          ENDOFDATA = True
+
+          # Result from callback for a Notification - stop blocking and return
+          if result: break
+
+          if jdata != {}:
+            # If callback defined, pass it the message and break if result is True.
+            # Otherwise break only if message has an id, that is to
+            # say continue reading data (blocking) until a message
+            # with an id is available.
+            if callback:
+              if self.handleNotification(jdata, callback): break
+            elif "id" in jdata:
+              break
+        except ValueError as e:
+          # If we think we've reached EOF and we have invalid data then
+          # raise exception
+          # otherwise continu reading more data
+          if READ_ERR:
+            self.logger.log("VALUE ERROR EXCEPTION: %s" % str(e))
+            self.logger.log("DATA: %s" % data, maxLen=256)
+            raise
           else:
-            time.sleep(0.1)
+            self.logger.log("Incomplete JSON data - continue reading socket")
             continue
+        except Exception as e:
+          self.logger.log("GENERAL EXCEPTION: %s" % str(e))
+          self.logger.log("DATA: %s" % data)
+          raise
+
+      if not ENDOFDATA:
+        if (time.time() - LASTIO) > timeout:
+          raise socket.error("Socket IO timeout exceeded")
+        else:
+          time.sleep(0.1)
+          continue
 
     if checkResult and not "result" in jdata:
       self.logger.out("ERROR: JSON response has no result!\n%s\n" % jdata)
@@ -835,6 +846,26 @@ class MyJSONComms(object):
       self.logger.log("JSON NOTIFICATION: Method [%s] with Params [%s]" % (method, params))
     else:
       self.logger.log("JSON RESPONSE HANDLER: For id [%s], Method [%s] with Params [%s]" % (id, method, params))
+
+    if method == "VideoLibrary.OnUpdate" and "data" in params:
+      self.UpdateCount += 1
+      if "item" in params["data"]:
+        item = params["data"]["item"]
+
+        if item["type"] == "song":
+          title = self.getSongName(item["id"])
+        elif item["type"] == "movie":
+          title = self.getMovieName(item["id"])
+        elif item["type"] == "tvshow":
+          title = self.getTVShowName(item["id"])
+        elif item["type"] == "episode":
+          title = self.getEpisodeName(item["id"])
+        else: title = None
+
+        if title:
+          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (item["type"] + "id", item["id"], title))
+        else:
+          self.logger.out("Updating Library: New %-9s %5d\n" % (item["type"] + "id", item["id"]))
 
   # If we've got a callback defined, call it
   # If no callback, return response if it has an id
@@ -865,37 +896,10 @@ class MyJSONComms(object):
       raise ValueError('%s (%r at position %d).' % (exc, data[idx:], idx))
 
   def jsonWaitForScanFinished(self, id, method, params):
-    if method == "VideoLibrary.OnUpdate" and "data" in params:
-      self.UpdateCount += 1
-
-      if "item" in params["data"]:
-        item = params["data"]["item"]
-
-        if item["type"] == "song":
-          title = self.getSongName(item["id"])
-        elif item["type"] == "movie":
-          title = self.getMovieName(item["id"])
-        elif item["type"] == "tvshow":
-          title = self.getTVShowName(item["id"])
-        elif item["type"] == "episode":
-          title = self.getEpisodeName(item["id"])
-        else: title = None
-
-        if title:
-          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (item["type"] + "id", item["id"], title))
-        else:
-          self.logger.out("Updating Library: New %-9s %5d\n" % (item["type"] + "id", item["id"]))
-
-      return False
-
-    if method.endswith("Library.OnScanFinished"): return True
-
-    return False
+    return True if method.endswith("Library.OnScanFinished") else False
 
   def jsonWaitForCleanFinished(self, id, method, params):
-    if method.endswith("Library.OnCleanFinished"): return True
-
-    return False
+    return True if method.endswith("Library.OnCleanFinished") else False
 
   def addProperties(self, request, fields):
     aList = request["params"]["properties"]

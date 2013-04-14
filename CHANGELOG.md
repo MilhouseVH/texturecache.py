@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.9 (14/04/2013)
+* Slightly more robust socket comms.
+
 ##Version 0.4.8 (14/04/2013)
 * Lookup song/movie/tvshow/episode title when new items are scanned into media library
 * `vscan`/`ascan` exit status will reflect the number of new items scanned in - 0 when no new items, +n whenever items are added
