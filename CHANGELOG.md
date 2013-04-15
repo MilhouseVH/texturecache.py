@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.5.0 (14/04/2013)
+* Improve JSON Notification handling while concurrent GUI initiated scan is taking place.
+* Added `status` option to determine if client is idle/active etc.
+
 ##Version 0.4.9 (14/04/2013)
 * Slightly more robust socket comms.
 

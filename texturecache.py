@@ -42,7 +42,7 @@ import errno
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.4.9"
+    self.VERSION="0.5.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -60,15 +60,6 @@ class MyConfiguration(object):
                                             "rpc.port": "9090",
                                             "download.threads": "2",
                                             "singlethread.urls": None,
-                                            "extrajson.addons": None,
-                                            "extrajson.albums": None,
-                                            "extrajson.artists": None,
-                                            "extrajson.songs": None,
-                                            "extrajson.movies": None,
-                                            "extrajson.sets": None,
-                                            "extrajson.tvshows.tvshow": None,
-                                            "extrajson.tvshows.season": None,
-                                            "extrajson.tvshows.episode": None,
                                             "qaperiod": "30",
                                             "qafile": "no",
                                             "cache.castthumb": "no",
@@ -668,7 +659,7 @@ class MyJSONComms(object):
     self.myweb = None
     self.WEB_LAST_STATUS = -1
     self.config.WEB_SINGLESHOT = True
-    self.UpdateCount = 0
+    self.aUpdateCount = self.vUpdateCount = 0
 
   def __enter__(self):
     return self
@@ -725,7 +716,7 @@ class MyJSONComms(object):
         return self.sendWeb(request_type, url, request, headers)
       raise
 
-  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True):
+  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True, processNotifications=False):
     BUFFER_SIZE = 32768
 
     request["jsonrpc"] = "2.0"
@@ -781,7 +772,8 @@ class MyJSONComms(object):
           jdata = {}
           for m in messages:
             if not "id" in m:
-              if self.handleNotification(m, callback): result = True
+              if processNotifications and self.handleResponse(m, callback, processNotifications=True):
+                result = True
             else:
               jdata = m
 
@@ -805,7 +797,7 @@ class MyJSONComms(object):
             # say continue reading data (blocking) until a message
             # with an id is available.
             if callback:
-              if self.handleNotification(jdata, callback): break
+              if self.handleResponse(jdata, callback, processNotifications=False): break
             elif "id" in jdata:
               break
         except ValueError as e:
@@ -836,9 +828,9 @@ class MyJSONComms(object):
 
     return jdata
 
-  def handleNotification(self, jdata, callback):
-    id = jdata["id"] if "id" in jdata else None
+  def handleResponse(self, jdata, callback, processNotifications=False):
 
+    id = jdata["id"] if "id" in jdata else None
     method = jdata["method"] if "method" in jdata else jdata["result"]
     params = jdata["params"] if "params" in jdata else None
 
@@ -847,25 +839,36 @@ class MyJSONComms(object):
     else:
       self.logger.log("JSON RESPONSE HANDLER: For id [%s], Method [%s] with Params [%s]" % (id, method, params))
 
-    if method == "VideoLibrary.OnUpdate" and "data" in params:
-      self.UpdateCount += 1
+    if method.endswith("Library.OnUpdate") and "data" in params:
+      if method == "AudioLibrary.OnUpdate": self.aUpdateCount += 1
+      if method == "VideoLibrary.OnUpdate": self.vUpdateCount += 1
+
       if "item" in params["data"]:
         item = params["data"]["item"]
+      elif "type" in params["data"]:
+        item = params["data"]
+      else:
+        item = None
 
-        if item["type"] == "song":
-          title = self.getSongName(item["id"])
-        elif item["type"] == "movie":
-          title = self.getMovieName(item["id"])
-        elif item["type"] == "tvshow":
-          title = self.getTVShowName(item["id"])
-        elif item["type"] == "episode":
-          title = self.getEpisodeName(item["id"])
-        else: title = None
+      if item:
+        iType = item["type"]
+        libraryId = item["id"]
+
+        if iType == "song":
+          title = self.getSongName(libraryId, processNotifications=processNotifications)
+        elif iType == "movie":
+          title = self.getMovieName(libraryId, processNotifications=processNotifications)
+        elif iType == "tvshow":
+          title = self.getTVShowName(libraryId, processNotifications=processNotifications)
+        elif iType == "episode":
+          title = self.getEpisodeName(libraryId, processNotifications=processNotifications)
+        else:
+          title = None
 
         if title:
-          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (item["type"] + "id", item["id"], title))
+          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (iType + "id", libraryId, title))
         else:
-          self.logger.out("Updating Library: New %-9s %5d\n" % (item["type"] + "id", item["id"]))
+          self.logger.out("Updating Library: New %-9s %5d\n" % (iType + "id", libraryId))
 
   # If we've got a callback defined, call it
   # If no callback, return response if it has an id
@@ -960,7 +963,7 @@ class MyJSONComms(object):
         REQUEST = {"method": removeMethod, "params":{idName: libraryid}}
         self.sendJSON(REQUEST, "libRemove")
 
-      if not rootScan: self.scanDirectory(scanMethod, dpath)
+      if not rootScan: self.scanDirectory(scanMethod, path=dpath)
 
     if rootScan: self.scanDirectory(scanMethod)
 
@@ -972,12 +975,12 @@ class MyJSONComms(object):
       self.logger.out("Rescanning library...", newLine=True, log=True)
       REQUEST = {"method": scanMethod, "params":{"directory": ""}}
 
-    self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
+    self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False, processNotifications=True)
 
   def cleanLibrary(self, cleanMethod):
     self.logger.out("Cleaning library...", newLine=True, log=True)
     REQUEST = {"method": cleanMethod}
-    self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
+    self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False, processNotifications=True)
 
   def getDirectoryList(self, mediatype, path):
     REQUEST = {"method":"Files.GetDirectory",
@@ -1044,43 +1047,43 @@ class MyJSONComms(object):
     else:
       return None
 
-  def getSongName(self, songid):
+  def getSongName(self, songid, processNotifications=False):
     REQUEST = {"method":"AudioLibrary.GetSongDetails",
                "params":{"songid": songid, "properties":["title", "artist", "albumartist"]}}
-    data = self.sendJSON(REQUEST, "libSong")
+    data = self.sendJSON(REQUEST, "libSong", processNotifications=processNotifications)
     if "result" in data and "songdetails" in data["result"]:
       s = data["result"]["songdetails"]
       if s["artist"]:
-        return "%s (%s)" % (s["title"], s["artist"])
+        return "%s (%s)" % (s["title"], "/".join(s["artist"]))
       else:
-        return "%s (%s)" % (s["title"], s["albumartist"])
+        return "%s (%s)" % (s["title"], "/".join(s["albumartist"]))
     else:
       return None
 
-  def getTVShowName(self, tvshowid):
+  def getTVShowName(self, tvshowid, processNotifications=False):
     REQUEST = {"method":"VideoLibrary.GetTVShowDetails",
                "params":{"tvshowid": tvshowid, "properties":["title"]}}
-    data = self.sendJSON(REQUEST, "libTVShow")
+    data = self.sendJSON(REQUEST, "libTVShow", processNotifications=processNotifications)
     if "result" in data and "tvshowdetails" in data["result"]:
       t = data["result"]["tvshowdetails"]
       return "%s" % t["title"]
     else:
       return None
 
-  def getEpisodeName(self, episodeid):
+  def getEpisodeName(self, episodeid, processNotifications=False):
     REQUEST = {"method":"VideoLibrary.GetEpisodeDetails",
                "params":{"episodeid": episodeid, "properties":["title", "showtitle", "season", "episode"]}}
-    data = self.sendJSON(REQUEST, "libEpisode")
+    data = self.sendJSON(REQUEST, "libEpisode", processNotifications=processNotifications)
     if "result" in data and "episodedetails" in data["result"]:
       e = data["result"]["episodedetails"]
       return "%s S%02dE%02d (%s)" % (e["showtitle"], e["season"], e["episode"], e["title"])
     else:
       return None
 
-  def getMovieName(self, movieid):
+  def getMovieName(self, movieid, processNotifications=False):
     REQUEST = {"method":"VideoLibrary.GetMovieDetails",
                "params":{"movieid": movieid, "properties":["title"]}}
-    data = self.sendJSON(REQUEST, "libMovie")
+    data = self.sendJSON(REQUEST, "libMovie", processNotifications=processNotifications)
     if "result" in data and "moviedetails" in data["result"]:
       m = data["result"]["moviedetails"]
       return "%s" % m["title"]
@@ -2227,7 +2230,7 @@ def getAllFiles(keyFunction):
           if "cast" in i:
             for c in i["cast"]:
               if "thumbnail" in c:
-                files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
+                files[keyFunction(c["thumbnail"])] = "cast.thumb"
         if title != "": gLogger.progress("Parsing: %s [%s]..." % (mediatype, title))
 
   gLogger.progress("Loading: TVShows...")
@@ -2247,7 +2250,7 @@ def getAllFiles(keyFunction):
       if "cast" in tvshow:
         for c in tvshow["cast"]:
           if "thumbnail" in c:
-            files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
+            files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
       REQUEST = {"method":"VideoLibrary.GetSeasons",
                  "params":{"tvshowid": tvshowid,
@@ -2281,7 +2284,7 @@ def getAllFiles(keyFunction):
             if "cast" in episode:
               for c in episode["cast"]:
                 if "thumbnail" in c:
-                  files[keyFunction(c["thumbnail"])] = "cast.thumbnail"
+                  files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
   return files
 
@@ -2298,7 +2301,10 @@ def doLibraryScan(media, path):
 
   jcomms.scanDirectory(scanMethod, path)
 
-  return jcomms.UpdateCount
+  if media == "video":
+    return jcomms.vUpdateCount
+  else:
+    return jcomms.aUpdateCount
 
 def doLibraryClean(media):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -2313,7 +2319,7 @@ def getDirectoryList(path, mediatype = "files"):
   data = jcomms.getDirectoryList(mediatype, path)
 
   if not "result" in data:
-    print "No directory listing available."
+    print("No directory listing available.")
     return
 
   files = data["result"]["files"]
@@ -2339,11 +2345,61 @@ def showSources(media=None):
     for s in jcomms.getSources(m):
       gLogger.out("%s: %s" % (m, s), newLine=True)
 
+def showStatus(idleTime=600):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  STATUS = []
+
+  REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": ["System.ScreenSaverActive "] }}
+  data = jcomms.sendJSON(REQUEST, "libSSaver")
+  if "result" in data and "System.ScreenSaverActive " in data["result"]:
+    if data["result"]["System.ScreenSaverActive "]:
+      STATUS.append("ScreenSaverIsActive")
+
+  property = "System.IdleTime(%s) " % idleTime
+  REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
+  data = jcomms.sendJSON(REQUEST, "libIdleTime")
+  if "result" in data and property in data["result"]:
+    if data["result"][property]:
+      STATUS.append("SystemIsIdle (for more than %s seconds)" % idleTime)
+
+  REQUEST = {"method":"Player.GetActivePlayers"}
+  data = jcomms.sendJSON(REQUEST, "libGetPlayers")
+  if "result" in data:
+    for player in data["result"]:
+      if "playerid" in player:
+        pType = player["type"]
+        pId = player["playerid"]
+        STATUS.append("Player: %s" % pType)
+
+        REQUEST = {"method": "Player.GetItem", "params": {"playerid": pId}}
+        data = jcomms.sendJSON(REQUEST, "libGetItem")
+
+        if "result" in data and "item" in data["result"]:
+          item = data["result"]["item"]
+          iType = item["type"]
+          libraryId = item["id"]
+
+          if iType == "song":
+            title = jcomms.getSongName(libraryId)
+          elif iType == "movie":
+            title = jcomms.getMovieName(libraryId)
+          elif iType == "episode":
+            title = jcomms.getEpisodeName(libraryId)
+          else:
+            title = None
+
+          STATUS.append("Activity: %s" % iType)
+          STATUS.append("Title: %s" % title)
+
+  if STATUS != []:
+    gLogger.out("\n".join(STATUS), newLine=True)
+
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update | status [idleTime]")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2372,6 +2428,7 @@ def usage(EXIT_CODE):
   print("  vclean  Clean video library")
   print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs)")
   print("directory Retrieve list of files in a specific directory (see sources)")
+  print("  status  Display state of client - ScreenSaverIsActive, SystemIsIdle (default 600 seconds), Active Player state")
   print("")
   print("  config  Show current configuration")
   print("  version Show current version and check for new version")
@@ -2407,7 +2464,7 @@ def checkConfig(option):
     needWeb = False
 
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","p","P",
-                "vscan", "ascan", "vclean", "aclean", "directory", "sources"]:
+                "vscan", "ascan", "vclean", "aclean", "directory", "sources", "status"]:
     needSocket = True
   else:
     needSocket = False
@@ -2715,6 +2772,12 @@ def main(argv):
 
   elif argv[0] == "sources":
     showSources(media = argv[1] if len(argv) == 2 else None)
+
+  elif argv[0] == "status":
+    if len(argv) == 2:
+      showStatus(idleTime = argv[1])
+    else:
+      showStatus()
 
   elif argv[0] == "version":
     print("Current Version: v%s" % gConfig.VERSION)
