@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.5.1 (15/04/2013)
+* Always include  basic system state (ScreenSaver, IsIdle, Player) for `status`
+
 ##Version 0.5.0 (14/04/2013)
 * Improve JSON Notification handling while concurrent GUI initiated scan is taking place.
 * Added `status` option to determine if client is idle/active etc.
