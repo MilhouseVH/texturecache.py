@@ -37,6 +37,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[sources]** List of sources for a specific media class (video, music, pictures, files, programs)
 
+**[status]** Display status of client - ScreenSaver active, IsIdle (default period 600 seconds, or user specified) and active Player type (audio or video), plus title of any media currently being played.
+
 ##Installation instructions
 
 Download the single Python file required from github. A default properties file is available on github, rename this to texturecache.cfg in order to use it.
