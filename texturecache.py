@@ -42,7 +42,7 @@ import errno
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.0"
+    self.VERSION="0.5.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -2354,14 +2354,18 @@ def showStatus(idleTime=600):
   data = jcomms.sendJSON(REQUEST, "libSSaver")
   if "result" in data and "System.ScreenSaverActive " in data["result"]:
     if data["result"]["System.ScreenSaverActive "]:
-      STATUS.append("ScreenSaverIsActive")
+      STATUS.append("ScreenSaverActive: Yes")
+    else:
+      STATUS.append("ScreenSaverActive: No")
 
   property = "System.IdleTime(%s) " % idleTime
   REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
   data = jcomms.sendJSON(REQUEST, "libIdleTime")
   if "result" in data and property in data["result"]:
     if data["result"][property]:
-      STATUS.append("SystemIsIdle (for more than %s seconds)" % idleTime)
+      STATUS.append("SystemIdle: Yes (for more than %s seconds)" % idleTime)
+    else:
+      STATUS.append("SystemIdle: No (for more than %s seconds)" % idleTime)
 
   REQUEST = {"method":"Player.GetActivePlayers"}
   data = jcomms.sendJSON(REQUEST, "libGetPlayers")
@@ -2370,7 +2374,7 @@ def showStatus(idleTime=600):
       if "playerid" in player:
         pType = player["type"]
         pId = player["playerid"]
-        STATUS.append("Player: %s" % pType)
+        STATUS.append("Player: %s" % pType.capitalize())
 
         REQUEST = {"method": "Player.GetItem", "params": {"playerid": pId}}
         data = jcomms.sendJSON(REQUEST, "libGetItem")
@@ -2389,8 +2393,11 @@ def showStatus(idleTime=600):
           else:
             title = None
 
-          STATUS.append("Activity: %s" % iType)
+          STATUS.append("Activity: %s" % iType.capitalize())
           STATUS.append("Title: %s" % title)
+
+    if data["result"] == []:
+      STATUS.append("Player: None")
 
   if STATUS != []:
     gLogger.out("\n".join(STATUS), newLine=True)
@@ -2428,7 +2435,7 @@ def usage(EXIT_CODE):
   print("  vclean  Clean video library")
   print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs)")
   print("directory Retrieve list of files in a specific directory (see sources)")
-  print("  status  Display state of client - ScreenSaverIsActive, SystemIsIdle (default 600 seconds), Active Player state")
+  print("  status  Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("")
   print("  config  Show current configuration")
   print("  version Show current version and check for new version")
