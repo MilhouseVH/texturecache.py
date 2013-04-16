@@ -1,11 +1,16 @@
 #Changelog
 
+##Version 0.5.2 (16/04/2013)
+* Clean up comms logging
+* Remove re-entrant lookup
+* Add `monitor` option
+
 ##Version 0.5.1 (15/04/2013)
-* Always include  basic system state (ScreenSaver, IsIdle, Player) for `status`
+* Always include  basic system state (ScreenSaverActive, SystemIdle, Player) for `status`
 
 ##Version 0.5.0 (14/04/2013)
 * Improve JSON Notification handling while concurrent GUI initiated scan is taking place.
-* Added `status` option to determine if client is idle/active etc.
+* Added `status` option to determine if client is idle or active etc.
 
 ##Version 0.4.9 (14/04/2013)
 * Slightly more robust socket comms.

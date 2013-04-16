@@ -42,7 +42,7 @@ import errno
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.1"
+    self.VERSION="0.5.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -660,6 +660,7 @@ class MyJSONComms(object):
     self.WEB_LAST_STATUS = -1
     self.config.WEB_SINGLESHOT = True
     self.aUpdateCount = self.vUpdateCount = 0
+    self.jcomms2 = None
 
   def __enter__(self):
     return self
@@ -676,6 +677,15 @@ class MyJSONComms(object):
       self.mysocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
     return self.mysocket
+
+  # Use a secondary socket object for simple lookups to avoid having to handle
+  # re-entrant code due to notifications being received out of sequence etc.
+  # Could instantiate an object whenever required, but keeping a reference here
+  # should improve effeciency slightly.
+  def getLookupObject(self):
+    if not self.jcomms2:
+      self.jcomms2 = MyJSONComms(self.config, self.logger)
+    return self.jcomms2
 
   def getWeb(self):
     if not self.myweb or self.config.WEB_SINGLESHOT:
@@ -711,12 +721,12 @@ class MyJSONComms(object):
       return ""
     except:
       if self.config.WEB_SINGLESHOT == False:
-        self.logger.debug("SWITCHING TO WEBSERVER.SINGLESHOT MODE", newLine=True)
+        self.logger.log("SWITCHING TO WEBSERVER.SINGLESHOT MODE")
         self.config.WEB_SINGLESHOT = True
         return self.sendWeb(request_type, url, request, headers)
       raise
 
-  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True, processNotifications=False):
+  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True):
     BUFFER_SIZE = 32768
 
     request["jsonrpc"] = "2.0"
@@ -724,15 +734,15 @@ class MyJSONComms(object):
 
     # Following methods don't work over sockets - by design.
     if request["method"] in ["Files.PrepareDownload", "Files.Download"]:
-      self.logger.debug("SENDING JSON WEB REQUEST:", jsonrequest=request, newLine=True, newLineBefore=True)
+      self.logger.log("%s.JSON WEB REQUEST:" % id, jsonrequest=request)
       data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"})
       if self.logger.LOGGING:
-        self.logger.log("RESPONSE: %s" % data, maxLen=256)
+        self.logger.log("%s.RECEIVED DATA: %s" % (id, data), maxLen=256)
       return json.loads(data) if data != "" else ""
 
     s = self.getSocket()
-    self.logger.debug("SENDING JSON SOCKET REQUEST:", jsonrequest=request, newLine=True, newLineBefore=True)
-    START_TIME=time.time()
+    self.logger.log("%s.JSON SOCKET REQUEST:" % id, jsonrequest=request)
+    START_IO_TIME=time.time()
     s.send(json.dumps(request))
 
     ENDOFDATA = True
@@ -750,7 +760,7 @@ class MyJSONComms(object):
         if data == "": s.settimeout(1.0)
         data += newdata
         LASTIO=time.time()
-        self.logger.debug("BUFFER RECEIVED (len %d)" % len(newdata), newLine=True)
+        self.logger.log("%s.BUFFER RECEIVED (len %d)" % (id, len(newdata)))
         READ_ERR = False
       except socket.error as e:
         READ_ERR = True
@@ -758,7 +768,9 @@ class MyJSONComms(object):
       # Keep reading unless accumulated data is a likely candidate for successful parsing...
       if not READ_ERR and data != "" and (data[-1:] == "}" or data[-2:] == "}\n"):
         try:
-          self.logger.debug("PARSING RESPONSE", newLine=True)
+          if self.logger.LOGGING: self.logger.log("%s.PARSING JSON DATA: %s" % (id, data), maxLen=256)
+
+          START_PARSE_TIME = time.time()
 
           # Parse messages, to ensure the entire buffer is valid
           # If buffer is not (VALUE EXCEPTION), may need to read more data.
@@ -766,120 +778,73 @@ class MyJSONComms(object):
           for m in self.parseResponse(data):
             messages.append(m)
 
+          self.logger.log("%s.PARSING COMPLETE, elapsed time: %f seconds" % (id, time.time() - START_PARSE_TIME))
+
           # Process any notifications first.
           # Any message with an id must be processed after notification - should only be one at most...
           result = False
           jdata = {}
           for m in messages:
             if not "id" in m:
-              if processNotifications and self.handleResponse(m, callback, processNotifications=True):
-                result = True
-            else:
+              if callback:
+                if self.handleResponse(id, m, callback):
+                  result = True
+              elif self.logger.LOGGING:
+                self.logger.log("%s.IGNORING NOTIFICATION" % id, jsonrequest=m, maxLen=256)
+            elif m["id"] == id:
               jdata = m
 
           messages = []
 
-          self.logger.debug("CONVERSION COMPLETE, elapsed time: %f seconds" % (time.time() - START_TIME), newLine=True)
-
           if ("result" in jdata and "limits" in jdata["result"]):
-            self.logger.debug("RECEIVED LIMITS: %s" % jdata["result"]["limits"], newLine=True)
+            self.logger.log("%s.RECEIVED LIMITS: %s" % (id, jdata["result"]["limits"]))
 
-          if self.logger.LOGGING: self.logger.log("RESPONSE: %s" % data, maxLen=256)
-
+          # Flag to reset buffers next time we read the socket.
           ENDOFDATA = True
 
-          # Result from callback for a Notification - stop blocking and return
+          # callback result for a comingled Notification - stop blocking/reading and
+          # return to caller with response (jdata)
           if result: break
 
+          # Got a response...
           if jdata != {}:
-            # If callback defined, pass it the message and break if result is True.
+            # If callback defined, pass it the message then break if result is True.
             # Otherwise break only if message has an id, that is to
-            # say continue reading data (blocking) until a message
+            # say, continue reading data (blocking) until a message (response)
             # with an id is available.
             if callback:
-              if self.handleResponse(jdata, callback, processNotifications=False): break
+              if self.handleResponse(id, jdata, callback): break
             elif "id" in jdata:
               break
+
+          if callback:
+            self.logger.log("%s.READING SOCKET UNTIL CALLBACK SUCCEEDS..." % id)
+          else:
+            self.logger.log("%s.READING SOCKET FOR A RESPONSE..." % id)
+
         except ValueError as e:
-          # If we think we've reached EOF and we have invalid data then
-          # raise exception
-          # otherwise continu reading more data
+          # If we think we've reached EOF (no more data) and we have invalid data then
+          # raise exception,  otherwise continu reading more data
           if READ_ERR:
-            self.logger.log("VALUE ERROR EXCEPTION: %s" % str(e))
-            self.logger.log("DATA: %s" % data, maxLen=256)
+            self.logger.log("%s.VALUE ERROR EXCEPTION: %s" % (id, str(e)))
             raise
           else:
-            self.logger.log("Incomplete JSON data - continue reading socket")
+            self.logger.log("%s.Incomplete JSON data - continue reading socket" % id)
             continue
         except Exception as e:
-          self.logger.log("GENERAL EXCEPTION: %s" % str(e))
-          self.logger.log("DATA: %s" % data)
+          self.logger.log("%s.GENERAL EXCEPTION: %s" % (id, str(e)))
           raise
 
+      # Still more data to be read...
       if not ENDOFDATA:
         if (time.time() - LASTIO) > timeout:
           raise socket.error("Socket IO timeout exceeded")
-        else:
-          time.sleep(0.1)
-          continue
 
     if checkResult and not "result" in jdata:
-      self.logger.out("ERROR: JSON response has no result!\n%s\n" % jdata)
+      self.logger.out("%s.ERROR: JSON response has no result!\n%s\n" % (id, jdata))
 
+    self.logger.log("%s.FINISHED, elapsed time: %f seconds" % (id, time.time() - START_IO_TIME))
     return jdata
-
-  def handleResponse(self, jdata, callback, processNotifications=False):
-
-    id = jdata["id"] if "id" in jdata else None
-    method = jdata["method"] if "method" in jdata else jdata["result"]
-    params = jdata["params"] if "params" in jdata else None
-
-    if not id:
-      self.logger.log("JSON NOTIFICATION: Method [%s] with Params [%s]" % (method, params))
-    else:
-      self.logger.log("JSON RESPONSE HANDLER: For id [%s], Method [%s] with Params [%s]" % (id, method, params))
-
-    if method.endswith("Library.OnUpdate") and "data" in params:
-      if method == "AudioLibrary.OnUpdate": self.aUpdateCount += 1
-      if method == "VideoLibrary.OnUpdate": self.vUpdateCount += 1
-
-      if "item" in params["data"]:
-        item = params["data"]["item"]
-      elif "type" in params["data"]:
-        item = params["data"]
-      else:
-        item = None
-
-      if item:
-        iType = item["type"]
-        libraryId = item["id"]
-
-        if iType == "song":
-          title = self.getSongName(libraryId, processNotifications=processNotifications)
-        elif iType == "movie":
-          title = self.getMovieName(libraryId, processNotifications=processNotifications)
-        elif iType == "tvshow":
-          title = self.getTVShowName(libraryId, processNotifications=processNotifications)
-        elif iType == "episode":
-          title = self.getEpisodeName(libraryId, processNotifications=processNotifications)
-        else:
-          title = None
-
-        if title:
-          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (iType + "id", libraryId, title))
-        else:
-          self.logger.out("Updating Library: New %-9s %5d\n" % (iType + "id", libraryId))
-
-  # If we've got a callback defined, call it
-  # If no callback, return response if it has an id
-  # Responses without ids are notification, ignore and continue reading
-    if callback:
-      self.logger.log("Calling callback function: For id [%s], Method [%s] with Params [%s]" % (id, method, params))
-      result =  callback(id, method, params)
-      self.logger.log("Callback function result: %s for id [%s], method [%s]" % (result, id, method))
-      return result
-
-    return False
 
   # Split data into individual json objects.
   def parseResponse(self, data):
@@ -898,7 +863,74 @@ class MyJSONComms(object):
     except ValueError as exc:
       raise ValueError('%s (%r at position %d).' % (exc, data[idx:], idx))
 
+  # Process Notifications, optionally executing a callback function for
+  # additional custom processing.
+  def handleResponse(self, callingId, jdata, callback):
+    id = jdata["id"] if "id" in jdata else None
+    method = jdata["method"] if "method" in jdata else jdata["result"]
+    params = jdata["params"] if "params" in jdata else None
+
+    if callback:
+      cname = callback.__name__
+      self.logger.log("%s.PERFORMING CALLBACK: Name [%s], with Id [%s], Method [%s], Params [%s]" % (callingId, cname, id, method, params))
+      result =  callback(id, method, params)
+      self.logger.log("%s.CALLBACK RESULT: [%s] Name [%s], Id [%s], Method [%s], Params [%s]" % (callingId, result, cname, id, method, params))
+      return result
+
+    return False
+
+  def listen(self):
+    REQUEST = {"method": "JSONRPC.Ping"}
+    self.sendJSON(REQUEST, "libListen", callback=self.speak, checkResult=False)
+
+  def speak(self,id, method, params):
+    # Only interested in Notifications...
+    if id: return False
+
+    item = None
+    title = None
+    pmsg = None
+
+    if params["data"]:
+      pmsg = json.dumps(params["data"])
+      if type(params["data"]) is dict:
+        if "item" in params["data"]:
+          item = params["data"]["item"]
+        elif "type" in params["data"]:
+          item = params["data"]
+
+      if item:
+        title = self.getTitleForLibraryItem(item.get("type", None), item.get("id", None))
+
+    if title:
+      self.logger.out("%s: %-21s: %s [%s]" % (datetime.datetime.now(), method, pmsg, title), newLine=True)
+    else:
+      self.logger.out("%s: %-21s: %s" % (datetime.datetime.now(), method, pmsg), newLine=True)
+
+    return True if method == "System.OnQuit" else False
+
   def jsonWaitForScanFinished(self, id, method, params):
+    if method.endswith("Library.OnUpdate") and "data" in params:
+      if method == "AudioLibrary.OnUpdate": self.aUpdateCount += 1
+      if method == "VideoLibrary.OnUpdate": self.vUpdateCount += 1
+
+      if "item" in params["data"]:
+        item = params["data"]["item"]
+      elif "type" in params["data"]:
+        item = params["data"]
+      else:
+        item = None
+
+      if item:
+        iType = item["type"]
+        libraryId = item["id"]
+        title = self.getTitleForLibraryItem(iType, libraryId)
+
+        if title:
+          self.logger.out("Updating Library: New %-9s %5d [%s]\n" % (iType + "id", libraryId, title))
+        else:
+          self.logger.out("Updating Library: New %-9s %5d\n" % (iType + "id", libraryId))
+
     return True if method.endswith("Library.OnScanFinished") else False
 
   def jsonWaitForCleanFinished(self, id, method, params):
@@ -975,12 +1007,12 @@ class MyJSONComms(object):
       self.logger.out("Rescanning library...", newLine=True, log=True)
       REQUEST = {"method": scanMethod, "params":{"directory": ""}}
 
-    self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False, processNotifications=True)
+    self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
 
   def cleanLibrary(self, cleanMethod):
     self.logger.out("Cleaning library...", newLine=True, log=True)
     REQUEST = {"method": cleanMethod}
-    self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False, processNotifications=True)
+    self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
 
   def getDirectoryList(self, mediatype, path):
     REQUEST = {"method":"Files.GetDirectory",
@@ -1047,10 +1079,27 @@ class MyJSONComms(object):
     else:
       return None
 
-  def getSongName(self, songid, processNotifications=False):
+  def getTitleForLibraryItem(self, iType, libraryId):
+    title = None
+
+    if iType and libraryId:
+      # Use the secondary socket object to avoid consuming
+      # notifications that are meant for the caller.
+      if iType == "song":
+        title = self.getLookupObject().getSongName(libraryId)
+      elif iType == "movie":
+        title = self.getLookupObject().getMovieName(libraryId)
+      elif iType == "tvshow":
+        title = self.getLookupObject().getTVShowName(libraryId)
+      elif iType == "episode":
+        title = self.getLookupObject().getEpisodeName(libraryId)
+
+    return title
+
+  def getSongName(self, songid):
     REQUEST = {"method":"AudioLibrary.GetSongDetails",
                "params":{"songid": songid, "properties":["title", "artist", "albumartist"]}}
-    data = self.sendJSON(REQUEST, "libSong", processNotifications=processNotifications)
+    data = self.sendJSON(REQUEST, "libSong")
     if "result" in data and "songdetails" in data["result"]:
       s = data["result"]["songdetails"]
       if s["artist"]:
@@ -1060,30 +1109,30 @@ class MyJSONComms(object):
     else:
       return None
 
-  def getTVShowName(self, tvshowid, processNotifications=False):
+  def getTVShowName(self, tvshowid):
     REQUEST = {"method":"VideoLibrary.GetTVShowDetails",
                "params":{"tvshowid": tvshowid, "properties":["title"]}}
-    data = self.sendJSON(REQUEST, "libTVShow", processNotifications=processNotifications)
+    data = self.sendJSON(REQUEST, "libTVShow")
     if "result" in data and "tvshowdetails" in data["result"]:
       t = data["result"]["tvshowdetails"]
       return "%s" % t["title"]
     else:
       return None
 
-  def getEpisodeName(self, episodeid, processNotifications=False):
+  def getEpisodeName(self, episodeid):
     REQUEST = {"method":"VideoLibrary.GetEpisodeDetails",
                "params":{"episodeid": episodeid, "properties":["title", "showtitle", "season", "episode"]}}
-    data = self.sendJSON(REQUEST, "libEpisode", processNotifications=processNotifications)
+    data = self.sendJSON(REQUEST, "libEpisode")
     if "result" in data and "episodedetails" in data["result"]:
       e = data["result"]["episodedetails"]
       return "%s S%02dE%02d (%s)" % (e["showtitle"], e["season"], e["episode"], e["title"])
     else:
       return None
 
-  def getMovieName(self, movieid, processNotifications=False):
+  def getMovieName(self, movieid):
     REQUEST = {"method":"VideoLibrary.GetMovieDetails",
                "params":{"movieid": movieid, "properties":["title"]}}
-    data = self.sendJSON(REQUEST, "libMovie", processNotifications=processNotifications)
+    data = self.sendJSON(REQUEST, "libMovie")
     if "result" in data and "moviedetails" in data["result"]:
       m = data["result"]["moviedetails"]
       return "%s" % m["title"]
@@ -1865,7 +1914,7 @@ def evaluateURL(imgtype, url, imagecache):
   if gConfig.CACHE_IGNORE_TYPES:
     for ignore in gConfig.CACHE_IGNORE_TYPES:
       if ignore.search(url):
-        gLogger.log("Ignored image due to rule [%s]" % ignore.pattern)
+        gLogger.log("Ignored image due to rule [%s]: %s" % (ignore.pattern, url))
         TOTALS.bump("Ignored", imgtype)
         imagecache[url] = 1
         return False
@@ -2402,11 +2451,14 @@ def showStatus(idleTime=600):
   if STATUS != []:
     gLogger.out("\n".join(STATUS), newLine=True)
 
+def showNotifications():
+  MyJSONComms(gConfig, gLogger).listen()
+
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update | status [idleTime]")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update | status [idleTime] | monitor")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2436,6 +2488,7 @@ def usage(EXIT_CODE):
   print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs)")
   print("directory Retrieve list of files in a specific directory (see sources)")
   print("  status  Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
+  print("  monitor Display client event notifications as they occur")
   print("")
   print("  config  Show current configuration")
   print("  version Show current version and check for new version")
@@ -2471,7 +2524,8 @@ def checkConfig(option):
     needWeb = False
 
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","p","P",
-                "vscan", "ascan", "vclean", "aclean", "directory", "sources", "status"]:
+                "vscan", "ascan", "vclean", "aclean", "directory", "sources",
+                "status", "monitor"]:
     needSocket = True
   else:
     needSocket = False
@@ -2785,6 +2839,9 @@ def main(argv):
       showStatus(idleTime = argv[1])
     else:
       showStatus()
+
+  elif argv[0] == "monitor":
+    showNotifications()
 
   elif argv[0] == "version":
     print("Current Version: v%s" % gConfig.VERSION)
