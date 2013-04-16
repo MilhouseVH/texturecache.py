@@ -2430,10 +2430,12 @@ def showStatus(idleTime=600):
 
         if "result" in data and "item" in data["result"]:
           item = data["result"]["item"]
-          iType = item["type"]
-          libraryId = item["id"]
+          iType = item.get("type", None)
+          libraryId = item.get("id", None)
 
-          if iType == "song":
+          if libraryId == None and "label" in item:
+            title = item["label"]
+          elif iType == "song":
             title = jcomms.getSongName(libraryId)
           elif iType == "movie":
             title = jcomms.getMovieName(libraryId)
