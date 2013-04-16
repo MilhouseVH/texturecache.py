@@ -21,7 +21,7 @@
 * Update json socket communication to better handle concatenated messages (response + notification(s))
 
 ##Version 0.4.7 (11/04/2013)
-* Added `lastrunfile` property. Modification time of this file will be used to restrict cache updates for movies and tvshows (other media classes, while valid, do not support the `dateadded` filter so its not possible to restricty by data). With this property enabled, only new content added since the file was last modified will be considered for re-caching. The new options `lc` and `lnc` will respect the `lastrunfile` property. If the file is missing or unreadable, no `dateadded` filter will be applied. Manually `touch` the `lastrunfile` to advance the modification date, the script will only ever read the details of this file, and never update it.
+* Added `lastrunfile` property. Modification time of this file will be used to restrict cache updates for movies and tvshows (other media classes, while valid, do not support the `dateadded` filter so its not possible to restricty by date). With this property enabled, only new content added since the file was last modified will be considered for re-caching. The new options `lc` and `lnc` will respect the `lastrunfile` property. If the file is missing or unreadable, no `dateadded` filter will be applied. Manually `touch` the `lastrunfile` to advance the modification date, the script will only ever read the details of this file, and never update it.
 
 ##Version 0.4.6 (09/04/2013)
 * Fix running totals for "Not in Cache" when `nc` run for multiple media classes.
