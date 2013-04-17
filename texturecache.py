@@ -31,10 +31,19 @@
 ################################################################################
 
 import sqlite3 as lite
-import os, sys, ConfigParser, StringIO, json, re, datetime, time
-import httplib, urllib2, socket, base64, hashlib
-import Queue, threading
+import os, sys, json, re, datetime, time
+import socket, base64, hashlib
+import threading
 import errno
+
+if sys.version_info[0] >= 3:
+    import configparser as ConfigParser
+    import io as StringIO
+    import http.client as httplib
+    import urllib.request as urllib2
+    import queue as Queue
+else:
+  import ConfigParser, StringIO, httplib, urllib2, Queue
 
 #
 # Config class. Will be a global object.
@@ -42,7 +51,7 @@ import errno
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.2"
+    self.VERSION="0.5.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -281,7 +290,7 @@ class MyConfiguration(object):
       for dt in self.DOWNLOAD_THREADS:
         if self.DOWNLOAD_THREADS[dt] != self.DOWNLOAD_THREADS_DEFAULT:
           print("  %s = %d" % (dt, self.DOWNLOAD_THREADS[dt]))
-    print("  singlethread.urls = %s") % self.NoneIsBlank(single_urls)
+    print("  singlethread.urls = %s" % self.NoneIsBlank(single_urls))
     print("  extrajson.addons  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.addons"]))
     print("  extrajson.albums  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.albums"]))
     print("  extrajson.artists = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.artists"]))
@@ -497,7 +506,7 @@ class MyImageLoader(threading.Thread):
     while ATTEMPT > 0:
       try:
         # Don't need to download the whole image for it to be cached so just grab the first 1KB
-        PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount = 1024)
+        PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount = 1024, rawData=True)
         if self.json.WEB_LAST_STATUS == httplib.OK:
           self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
                         % (len(PAYLOAD), (retry - ATTEMPT + 1), filename))
@@ -642,7 +651,10 @@ class MyDB(object):
     line= ("%s%s%14s%s%04d%s%04d%s%04d%s%19s%s%19s%s%s\n" % \
            ((self.config.IDFORMAT % row[0]), self.config.FSEP, row[1], self.config.FSEP, row[4],
              self.config.FSEP,      row[5],  self.config.FSEP, row[6], self.config.FSEP, row[7],
-             self.config.FSEP,      row[2],  self.config.FSEP, row[3])).encode("utf-8")
+             self.config.FSEP,      row[2],  self.config.FSEP, row[3]))
+
+    if sys.version_info[0] < 3: line = line.encode("utf-8")
+
     self.logger.out(line, pure=True)
 
 #
@@ -695,7 +707,7 @@ class MyJSONComms(object):
       if self.config.DEBUG: self.myweb.set_debuglevel(1)
     return self.myweb
 
-  def sendWeb(self, request_type, url, request=None, headers={}, readAmount = 0, timeout=15.0):
+  def sendWeb(self, request_type, url, request=None, headers={}, readAmount = 0, timeout=15.0, rawData=False):
     if self.config.WEB_AUTH_TOKEN:
       headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
 
@@ -711,8 +723,12 @@ class MyJSONComms(object):
       self.WEB_LAST_STATUS = response.status
       if self.WEB_LAST_STATUS == httplib.UNAUTHORIZED:
         raise httplib.HTTPException("Remote web host requires webserver.username/webserver.password properties")
-      if readAmount == 0: return response.read()
-      else: return response.read(readAmount)
+      if sys.version_info[0] >= 3 and not rawData:
+        if readAmount == 0: return response.read().decode("utf-8")
+        else: return response.read(readAmount).decode("utf-8")
+      else:
+        if readAmount == 0: return response.read()
+        else: return response.read(readAmount)
     except socket.timeout:
       self.logger.log("** iotimeout occurred during web request **")
       self.WEB_LAST_STATUS = httplib.REQUEST_TIMEOUT
@@ -743,7 +759,11 @@ class MyJSONComms(object):
     s = self.getSocket()
     self.logger.log("%s.JSON SOCKET REQUEST:" % id, jsonrequest=request)
     START_IO_TIME=time.time()
-    s.send(json.dumps(request))
+
+    if sys.version_info[0] >= 3:
+      s.send(bytes(json.dumps(request), "utf-8"))
+    else:
+      s.send(json.dumps(request))
 
     ENDOFDATA = True
     LASTIO = 0
@@ -756,7 +776,11 @@ class MyJSONComms(object):
         data = ""
 
       try:
-        newdata = s.recv(BUFFER_SIZE)
+        if sys.version_info[0] >= 3:
+          newdata = s.recv(BUFFER_SIZE).decode("utf-8")
+        else:
+          newdata = s.recv(BUFFER_SIZE)
+
         if data == "": s.settimeout(1.0)
         data += newdata
         LASTIO=time.time()
@@ -2052,7 +2076,7 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
         database.dumpRow(row)
 
     if ACTION == "STATS":
-      gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(FSIZE/1024, ",d")))
+      gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
 
     if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
 
@@ -2113,7 +2137,10 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
             orphanedfiles.append(hash)
           elif libraryFiles:
             row = dbfiles[hash]
-            URL = removeNonAscii(row[3].encode("utf-8"))
+            if sys.version_info[0] >= 3:
+              URL = removeNonAscii(row[3])
+            else:
+              URL = removeNonAscii(row[3].encode("utf-8"))
 
             isRetained = False
             if gConfig.PRUNE_RETAIN_TYPES:
@@ -2171,7 +2198,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
         database.dumpRow(row)
         FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
         if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1])
-      gLogger.out("\nSummary: %s files; Total size: %s Kbytes\n\n" % (format(len(localfiles),",d"), format(FSIZE/1024, ",d")))
+      gLogger.out("\nSummary: %s files; Total size: %s Kbytes\n\n" % (format(len(localfiles),",d"), format(int(FSIZE/1024), ",d")))
 
 def getHash(string):
   string = string.lower()
@@ -2549,6 +2576,7 @@ def checkConfig(option):
       REQUEST["jsonrpc"] = "2.0"
       REQUEST["method"] = "JSONRPC.Ping"
       REQUEST["id"] =  "libPing"
+
       data = json.loads(jcomms.sendWeb("POST", "/jsonrpc", json.dumps(REQUEST), timeout=5))
       if "result" in data and data["result"] == "pong":
         gotWeb = True

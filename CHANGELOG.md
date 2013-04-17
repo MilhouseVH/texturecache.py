@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.5.3 (17/04/2013)
+* Add Python3 support (should now work with Python 2.7.3 and Python 3.2.3)
+
 ##Version 0.5.2 (16/04/2013)
 * Clean up comms logging
 * Remove re-entrant lookup
