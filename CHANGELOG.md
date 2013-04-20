@@ -1,5 +1,13 @@
 #Changelog
 
+##Version 0.5.4 (18/04/2013)
+* Fixed sqlite3 characterset decode issue
+* Default value for `singlethread.urls` is now `assets\.fanart\.tv`, to avoid hammering fanart.tv (logos, clearart, discart, etc.) as this site appears to reject multiple concurrent requests
+* Write command line args and current version to logfile (if logfile is enabled)
+* Added `orphan.limit.check` property to allow disabling of safety check when removing orphan files - default value is `yes` (safety check enabled).
+* Updated directory traversing code to traverse an arbitrary number of directory levels (`r`, `R`, `p`, `P`) - previously limited to 2-3 directory levels.
+* Fix base64.encodestring() in Python3.
+
 ##Version 0.5.3 (17/04/2013)
 * Add Python3 support (should now work with Python 2.7.3 and Python 3.2.3)
 
@@ -146,7 +154,7 @@
 * Add URL decode functionality (`jd`, `Jd`)
 
 ##Version 0.2.7 (25/03/2013)
-* Add "Duplicate" statistic for images that are cached more than once - only first cache attempt will succeed, subsequent attempts will be ignored and account for as a duplicate.
+* Add "Duplicate" statistic for images that are cached more than once - only first cache attempt will succeed, subsequent attempts will be ignored and accounted for as a duplicate.
 * Use classes for configuration and logging.
 * Allow absolute paths to be used for `thumbnails` and `dbfile` properties.
 * Add `qa.file = yes/no` (default:no) property, to verify existence of media file (will not initiate remove/rescan in `qax` option, obviously).
@@ -156,7 +164,7 @@
 
 ##Version 0.2.5 (24/03/2013)
 * Fix hash calculation error in `R` option (sorry charrua!)
-* Apply 5% limit when identifying orphaned files (option `R`). Abort file orphaned file removal if limit is exceeded.
+* Apply 5% limit when identifying orphaned files (option `R`). Abort orphaned file removal if limit is exceeded.
 
 ##Version 0.2.4 (24/03/2013)
 * Added `cache.ignore.types` property, to ignore (don't delete, don't cache) certain image types, such as image://video and image://music (both the default). Use comma delimited patterns, eg. "image://video, ^nfs.*". Set to None to process all URLs. Matches anywhere within URL.

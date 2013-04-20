@@ -321,6 +321,7 @@ logfile =
 logfile.verbose = no
 checkupdate = yes
 lastrunfile =
+orphan.limit.check = yes
 ```
 
 The `dbfile` and `thumbbnails` properties represent folders that are normally relative to the `userdata` property, however full paths can be specified.

@@ -51,9 +51,11 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.3"
+    self.VERSION="0.5.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
+
+    serial_urls = "assets\.fanart\.tv"
 
     config = ConfigParser.SafeConfigParser(defaults={
                                             "format": "%%06d",
@@ -68,7 +70,7 @@ class MyConfiguration(object):
                                             "webserver.password": None,
                                             "rpc.port": "9090",
                                             "download.threads": "2",
-                                            "singlethread.urls": None,
+                                            "singlethread.urls": serial_urls,
                                             "qaperiod": "30",
                                             "qafile": "no",
                                             "cache.castthumb": "no",
@@ -78,7 +80,8 @@ class MyConfiguration(object):
                                             "logfile.verbose": "no",
                                             "allow.recacheall": "no",
                                             "checkupdate": "yes",
-                                            "lastrunfile": None
+                                            "lastrunfile": None,
+                                            "orphan.limit.check": "yes"
                                             }
                                           )
 
@@ -182,8 +185,16 @@ class MyConfiguration(object):
 
     web_user = config.get("xbmc", "webserver.username")
     web_pass = config.get("xbmc", "webserver.password")
-    if (web_user and web_pass): self.WEB_AUTH_TOKEN = base64.encodestring('%s:%s' % (web_user, web_pass)).replace('\n', '')
-    else: self.WEB_AUTH_TOKEN = None
+
+    if (web_user and web_pass):
+      token = '%s:%s' % (web_user, web_pass)
+      if sys.version_info[0] >= 3:
+        self.WEB_AUTH_TOKEN = base64.encodestring(bytes(token, "utf-8")).decode()
+      else:
+        self.WEB_AUTH_TOKEN = base64.encodestring(token)
+      self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace('\n', '')
+    else:
+      self.WEB_AUTH_TOKEN = None
 
     self.LOGFILE = config.get("xbmc", "logfile")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
@@ -205,6 +216,8 @@ class MyConfiguration(object):
     if self.LASTRUNFILE and os.path.exists(self.LASTRUNFILE):
         temp = datetime.datetime.utcfromtimestamp(os.path.getmtime(self.LASTRUNFILE))
         self.LASTRUNFILE_DATE = temp.strftime("%Y-%m-%d")
+
+    self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
 
   # default value will be used if key is present, but without a value
   def getBoolean(self, parser, key, default="no"):
@@ -237,15 +250,15 @@ class MyConfiguration(object):
 
   def getFilePath( self, filename = "" ):
     if os.path.isabs(self.THUMBNAILS):
-      return "%s%s" % (self.THUMBNAILS, filename)
+      return os.path.join(self.THUMBNAILS, filename)
     else:
-      return "%s%s%s" % (self.XBMC_BASE, self.THUMBNAILS, filename)
+      return os.path.join(self.XBMC_BASE, self.THUMBNAILS, filename)
 
   def getDBPath( self ):
     if os.path.isabs(self.TEXTUREDB):
       return self.TEXTUREDB
     else:
-      return "%s%s" % (self.XBMC_BASE, self.TEXTUREDB)
+      return os.path.join(self.XBMC_BASE, self.TEXTUREDB)
 
   def NoneIsBlank(self, x):
     return x if x else ""
@@ -316,6 +329,7 @@ class MyConfiguration(object):
       print("  allow.recacheall = yes")
     temp = " (%s)" % self.LASTRUNFILE_DATE if self.LASTRUNFILE and self.LASTRUNFILE_DATE else ""
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
+    print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -341,6 +355,22 @@ class MyLogger():
   def __del__( self ):
     if self.LOGFILE: self.LOGFILE.close()
 
+  def setLogFile(self, filename):
+    with threading.Lock():
+      if filename:
+        self.LOGFLUSH = filename.startswith("+")
+        if self.LOGFLUSH: filename = filename[1:]
+        try:
+          self.LOGFILE = open(filename, "w")
+          self.LOGGING = True
+        except:
+          raise IOError("Unable to open logfile for writing!")
+      else:
+        self.LOGGING = False
+        if self.LOGFILE:
+          self.LOGFILE.close()
+          self.LOGFILE = None
+
   def progress(self, data, every=0, finalItem = False, newLine=False, noBlank=False):
     with threading.Lock():
       if every != 0 and not finalItem:
@@ -351,9 +381,10 @@ class MyLogger():
       else:
         self.reset(initialValue=0)
 
-      udata = self.removeNonAscii(data, "?")
-      spaces = self.lastlen - len(udata)
-      self.lastlen = len(udata)
+      udata = self.toUnicode(data)
+      ulen = len(data)
+      spaces = self.lastlen - ulen
+      self.lastlen = ulen
 
       if spaces > 0 and not noBlank:
         sys.stderr.write("%-s%*s\r" % (udata, spaces, " "))
@@ -367,11 +398,12 @@ class MyLogger():
   def reset(self, initialValue=0):
     self.now = initialValue
 
-  def out( self, data, pure=False, newLine=False, log=False ):
+  def out( self, data, newLine=False, log=False ):
     with threading.Lock():
-      udata = data if pure else self.removeNonAscii(data, "?")
-      spaces = self.lastlen - len(udata)
-      self.lastlen = len(udata) if udata.rfind("\n") == -1 else 0
+      udata = self.toUnicode(data)
+      ulen = len(data)
+      spaces = self.lastlen - ulen
+      self.lastlen = ulen if udata.rfind("\n") == -1 else 0
       if spaces > 0:
         sys.stdout.write("%-s%*s" % (udata, spaces, " "))
       else:
@@ -385,41 +417,37 @@ class MyLogger():
   def debug(self, data, jsonrequest=None, every=0, newLine=False, newLineBefore=False):
     if self.DEBUG:
       with threading.Lock():
+        udata = self.toUnicode(data)
         if newLineBefore: sys.stderr.write("\n")
         self.progress("%s: %s" % (datetime.datetime.now(), data), every, newLine)
     self.log(data, jsonrequest=jsonrequest)
 
-  def setLogFile(self, filename):
-    with threading.Lock():
-      if filename:
-        self.LOGGING = True
-        self.LOGFLUSH = filename.startswith("+")
-        if self.LOGFLUSH: filename = filename[1:]
-
-        self.LOGFILE = open(filename, "w")
-      else:
-        self.LOGGING = False
-        if self.LOGFILE:
-          self.LOGFILE.close()
-          self.LOGFILE = None
-
   def log(self, data, jsonrequest = None, maxLen=0):
     if self.LOGGING:
       with threading.Lock():
+        udata = self.toUnicode(data)
+
         t = threading.current_thread().name
         if jsonrequest == None:
-          if maxLen != 0 and not self.VERBOSE and len(data) > maxLen:
-            d = "%s (truncated)" % self.removeNonAscii(data[:maxLen])
-          else:
-            d = self.removeNonAscii(data)
+          d = udata
+          if maxLen != 0 and not self.VERBOSE and len(d) > maxLen:
+            d = "%s (truncated)" % d[:maxLen]
           self.LOGFILE.write("%s:%-10s: %s\n" % (datetime.datetime.now(), t, d))
         else:
-          if maxLen != 0 and len(data) > maxLen:
-            d = "%s (truncated)" % json.dumps(jsonrequest,ensure_ascii=True)[:maxLen]
-          else:
-            d = json.dumps(jsonrequest,ensure_ascii=True)
-          self.LOGFILE.write("%s:%-10s: %s [%s]\n" % (datetime.datetime.now(), t, data.encode("utf-8"), d))
+          d = json.dumps(jsonrequest, ensure_ascii=True)
+          if maxLen != 0 and len(d) > maxLen:
+            d = "%s (truncated)" % d[:maxLen]
+          self.LOGFILE.write("%s:%-10s: %s [%s]\n" % (datetime.datetime.now(), t, udata, d))
         if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
+
+  def toUnicode(self, data):
+    if sys.version_info[0] >= 3:
+      return data
+    else:
+      try:
+        return data.encode("utf-8")
+      except UnicodeDecodeError:
+        return data
 
   def removeNonAscii(self, s, replaceWith = ""):
     if replaceWith == "":
@@ -555,6 +583,7 @@ class MyDB(object):
       if not os.path.exists(self.config.getDBPath()):
         raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
       self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
+      self.mydb.text_factory = lambda x: x.decode('iso-8859-1')
       self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
@@ -653,9 +682,7 @@ class MyDB(object):
              self.config.FSEP,      row[5],  self.config.FSEP, row[6], self.config.FSEP, row[7],
              self.config.FSEP,      row[2],  self.config.FSEP, row[3]))
 
-    if sys.version_info[0] < 3: line = line.encode("utf-8")
-
-    self.logger.out(line, pure=True)
+    self.logger.out(line)
 
 #
 # Handle all JSON RPC communication.
@@ -848,7 +875,7 @@ class MyJSONComms(object):
 
         except ValueError as e:
           # If we think we've reached EOF (no more data) and we have invalid data then
-          # raise exception,  otherwise continu reading more data
+          # raise exception,  otherwise continue reading more data
           if READ_ERR:
             self.logger.log("%s.VALUE ERROR EXCEPTION: %s" % (id, str(e)))
             raise
@@ -1069,8 +1096,8 @@ class MyJSONComms(object):
       for f in data["result"]["files"]:
         if f["filetype"] == "file":
           fname = f["label"].lower()
-          if fname.find("season-all.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif fname.find("season-all-poster.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          if fname.find("season-all-poster.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif not poster_url and fname.find("season-all.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
           elif fname.find("season-all-banner.") != -1: banner_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
           elif fname.find("season-all-fanart.") != -1: fanart_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
       return (poster_url, fanart_url, banner_url)
@@ -1542,8 +1569,8 @@ class MyTotals(object):
 
     print("       Loading: %s" % self.secondsToTime(self.TimeDuration("Load")))
     print("       Parsing: %s" % self.secondsToTime(self.TimeDuration("Parse")))
-    if self.gotTimeDuration("Match"):
-      print("     Comparing: %s" % self.secondsToTime(self.TimeDuration("Match")))
+    if self.gotTimeDuration("Compare"):
+      print("     Comparing: %s" % self.secondsToTime(self.TimeDuration("Compare")))
     if self.gotTimeDuration("Rescan"):
       print("    Rescanning: %s" % self.secondsToTime(self.TimeDuration("Rescan")))
 
@@ -1591,9 +1618,9 @@ class MyMediaItem(object):
 
   def __str__(self):
     return "{%d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s}" % \
-      (self.status, self.mtype, self.itype, self.name, self.season, \
-       self.episode, self.filename,  self.dbid, self.cachedurl, \
-       self.libraryid, self.missingOK)
+            (self.status, self.mtype, self.itype, self.name, self.season, \
+             self.episode, self.filename,  self.dbid, self.cachedurl, \
+             self.libraryid, self.missingOK)
 
   def getFullName(self):
     if self.episode:
@@ -1654,14 +1681,14 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   if mediatype == "tvshows":
     for tvshow in data:
       title = tvshow["title"]
-      gLogger.progress("Loading TV Show: [%s]..." % title.encode("utf-8"), every = 1)
+      gLogger.progress("Loading TV Show: [%s]..." % title, every = 1)
       (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun = lastRun)
       limits = data2["result"]["limits"]
       if limits["total"] == 0: break
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
-        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title.encode("utf-8"), seasonid), every = 1)
+        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid), every = 1)
         (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun = lastRun)
         limits = data3["result"]["limits"]
         if limits["total"] == 0: break
@@ -1709,38 +1736,42 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   del data
   del imagecache
 
-  TOTALS.TimeStart(mediatype, "Match")
+  TOTALS.TimeStart(mediatype, "Compare")
 
   gLogger.progress("Loading database items...")
   dbfiles = {}
   with database:
     rows = database.getAllColumns().fetchall()
-    for r in rows:
-      dbfiles[r[3].encode("ascii", "ignore")] = r
+    for r in rows: dbfiles[r[3]] = r
 
   gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
 
   gLogger.progress("Matching database items...")
 
-  ITEMLIMIT = 1e9 if nodownload else 100
+  ITEMLIMIT = -1 if nodownload else 100
 
   itemCount = 0
   for item in mediaitems:
-    filename = urllib2.unquote(item.filename[8:-1]).encode("ascii", "ignore")
-    if not filename in dbfiles:
-      filename = item.filename[:-1].encode("ascii", "ignore")
-
     if item.mtype == "tvshows" and item.season == "Season All": TOTALS.bump("Season-all", item.itype)
 
-    # Don't need to cache it if it's already in the cache, unless forced...
+    filename = urllib2.unquote(re.sub("^image://(.*)/","\\1",item.filename))
+    if sys.version_info[0] >= 3:
+      filename = bytes(filename, "utf-8").decode("iso-8859-1")
+
+    dbrow = dbfiles.get(filename, None)
+
+    if not dbrow:
+      filename = item.filename[:-1]
+      dbrow = dbfiles.get(filename, None)
+
+    # Don't need to cache file if it's already in the cache, unless forced...
     # Assign the texture cache database id and cachedurl so that removal will be quicker.
-    if filename in dbfiles:
+    if dbrow:
       if force:
-        db = dbfiles[filename]
         itemCount += 1
         item.status = 1
-        item.dbid = db[0]
-        item.cachedurl = db[1]
+        item.dbid = dbrow[0]
+        item.cachedurl = dbrow[1]
       else:
         if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
         TOTALS.bump("Skipped", item.itype)
@@ -1750,13 +1781,13 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       itemCount += 1
       item.status = 1
       if not force:
-        if itemCount < ITEMLIMIT:
+        if ITEMLIMIT > 0 and itemCount < ITEMLIMIT:
           MSG = "Need to cache: [%-10s] for %s: %s\n" % (item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
           gLogger.out(MSG)
         elif itemCount == ITEMLIMIT:
           gLogger.out("...and many more! (First %d items shown)\n" % ITEMLIMIT)
 
-  TOTALS.TimeEnd(mediatype, "Match")
+  TOTALS.TimeEnd(mediatype, "Compare")
 
   # Don't need this data anymore, make it available for garbage collection
   del dbfiles
@@ -1867,7 +1898,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName = None, season = None):
   gLogger.reset()
 
-  SEASON_ALL = True
+  SEASON_ALL = (showName != None and season == None)
 
   for item in data:
     if title_name in item: title = item[title_name]
@@ -1895,7 +1926,7 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
         mediaitems.append(MyMediaItem(mediatype, a, name, season, episode, item[a], 0, None, item[id_name], False))
 
     if "art" in item:
-      if season and SEASON_ALL and "poster" in item["art"]:
+      if SEASON_ALL and "poster" in item["art"]:
         SEASON_ALL = False
         (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(item["art"]["poster"])
         if poster_url and evaluateURL("poster", poster_url, imagecache):
@@ -1904,6 +1935,7 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
           mediaitems.append(MyMediaItem(mediatype, "fanart", name, "Season All", None, fanart_url, 0, None, item[id_name], False))
         if banner_url and evaluateURL("banner", banner_url, imagecache):
           mediaitems.append(MyMediaItem(mediatype, "banner", name, "Season All", None, banner_url, 0, None, item[id_name], False))
+
       for a in item["art"]:
         imgtype_short = a.replace("tvshow.","")
         if evaluateURL(imgtype_short, item["art"][a], imagecache):
@@ -1928,7 +1960,7 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
 # be excluded in future if seen again.
 #
 def evaluateURL(imgtype, url, imagecache):
-  if url == "": return False
+  if not url or url == "": return False
 
   if url in imagecache:
     TOTALS.bump("Duplicate", imgtype)
@@ -2020,7 +2052,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       if len(name) > 50: name = "%s...%s" % (name[0:23], name[-24:])
       mtype = mediatype[:-1].capitalize()
       if mtype == "Tvshow": mtype = "TVShow"
-      mediaitems.append("%s [%-50s]: Missing %s" % (mtype, name.encode("utf-8")[0:50], ", ".join(missing)))
+      mediaitems.append("%s [%-50s]: Missing %s" % (mtype, name[0:50], ", ".join(missing)))
       if "".join(["Y" if missing[m] else "" for m in missing]) != "":
         if "file" in item:
           dir = "%s;%s" % (mediatype, os.path.dirname(item["file"]))
@@ -2068,12 +2100,13 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
 
       if ACTION == "NONE":
         database.dumpRow(row)
-      elif not os.path.exists(gConfig.getFilePath(row[1])):
-        if ACTION == "EXISTS":
+      elif ACTION == "EXISTS":
+        if not os.path.exists(gConfig.getFilePath(row[1])):
           database.dumpRow(row)
       elif ACTION == "STATS":
-        FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
-        database.dumpRow(row)
+        if os.path.exists(gConfig.getFilePath(row[1])):
+          FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
+          database.dumpRow(row)
 
     if ACTION == "STATS":
       gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
@@ -2108,74 +2141,74 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
     rows = database.getAllColumns().fetchall()
     for r in rows: dbfiles[r[1]] = r
     for r in rows: ddsmap[r[1][:-4]] = r[1]
-    gLogger.log("Loaded %d rows from texture cache" % len(dbfiles))
+    gLogger.log("Loaded %d rows from texture cache" % len(rows))
 
     gLogger.progress("Scanning Thumbnails directory...")
 
     path = gConfig.getFilePath()
 
-    for (p, dirs, files) in os.walk(path): break
+    for (root, dirs, files) in os.walk(path):
+      newroot = root.replace(path,"")
+      basedir = os.path.basename(newroot)
+      for file in files:
+        if basedir == "":
+          hash = file
+        else:
+          hash = "%s/%s" % (basedir, file)
 
-    for dir in sorted(dirs, key=str.lower):
-      for (p, d, files) in os.walk(path + dir):
-        for f in sorted(files, key=str.lower):
-          hash = "%s/%s" % (dir, f)
+        gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
 
-          gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
+        # If its a dds file, it should be associated with another
+        # file with the same hash, but different extension. Find
+        # this other file in the ddsmap - if its there, ignore
+        # the dds file, otherwise leave the dds file to be reported
+        # as an orphaned file.
+        if hash[-4:] == ".dds":
+          ddsfile = hash[:-4]
+          if ddsmap.get(ddsfile, None): continue
 
-          # If its a dds file, it should be associated with another
-          # file with the same hash, but different extension. Find
-          # this other file in the ddsmap - if its there, ignore
-          # the dds file, otherwise leave the dds file to be reported
-          # as an orphaned file.
-          if hash[-4:] == ".dds":
-            ddsfile = hash[:-4]
-            baseFile = ddsmap.get(ddsfile, None)
-            if baseFile: continue
+        row = dbfiles.get(hash, None)
+        if not row:
+          filename = os.path.join(newroot, file)
+          gLogger.log("Orphan file detected: [%s] with likely hash [%s]" % (filename, hash))
+          orphanedfiles.append(filename)
+        elif libraryFiles:
+          URL = removeNonAscii(row[3])
 
-          if not hash in dbfiles:
-            orphanedfiles.append(hash)
-          elif libraryFiles:
-            row = dbfiles[hash]
-            if sys.version_info[0] >= 3:
-              URL = removeNonAscii(row[3])
-            else:
-              URL = removeNonAscii(row[3].encode("utf-8"))
+          isRetained = False
+          if gConfig.PRUNE_RETAIN_TYPES:
+            for retain in gConfig.PRUNE_RETAIN_TYPES:
+              if retain.search(URL):
+                gLogger.log("Retained image due to rule [%s]" % retain.pattern)
+                isRetained = True
+                break
 
-            isRetained = False
-            if gConfig.PRUNE_RETAIN_TYPES:
-              for retain in gConfig.PRUNE_RETAIN_TYPES:
-                if retain.search(URL):
-                  gLogger.log("Retained image due to rule [%s]" % retain.pattern)
-                  isRetained = True
-                  break
+          # Ignore add-on/mirror related images
+          if not re_search_addon.search(URL) and \
+             not re_search_mirror.search(URL) and \
+             not isRetained:
 
-            # Ignore add-on/mirror related images
-            if not re_search_addon.search(URL) and \
-               not re_search_mirror.search(URL) and \
-               not isRetained:
+            key = hash[:-4] if keyIsHash else URL
 
-              key = hash[:-4] if keyIsHash else URL
-
-              if not key in libraryFiles:
-                # Last ditch attempt to find a matching key, database might be
-                # slightly mangled
-                if not keyIsHash:
-                  key = getKeyFromFilename(row[3])
-                  if key in libraryFiles:
-                    del libraryFiles[key]
-                  else:
-                    localfiles.append(row)
+            if not key in libraryFiles:
+              # Last ditch attempt to find a matching key, database might be
+              # slightly mangled
+              if not keyIsHash:
+                key = getKeyFromFilename(row[3])
+                if key in libraryFiles:
+                  del libraryFiles[key]
                 else:
                   localfiles.append(row)
               else:
-                 del libraryFiles[key]
+                localfiles.append(row)
+            else:
+               del libraryFiles[key]
 
     gLogger.progress("")
 
     if not libraryFiles:
       gLogger.log("Identified %d orphaned files" % len(orphanedfiles))
-      if removeOrphans and len(orphanedfiles) > (len(dbfiles)/20):
+      if removeOrphans and gConfig.ORPHAN_LIMIT_CHECK and len(orphanedfiles) > (len(dbfiles)/20):
         gLogger.log("Something is wrong here, that's far too many orphaned files - 5% limit exceeded!")
         gLogger.out("Found %d orphaned files for %d database files.\n"  % (len(orphanedfiles), len(dbfiles)))
         gLogger.out("This is far too many orphaned files for this number of database files, something may be wrong.\n")
@@ -2187,7 +2220,9 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
            time.ctime(os.path.getctime(gConfig.getFilePath(ofile))),
            os.path.getsize(gConfig.getFilePath(ofile)),
            ", REMOVING..." if removeOrphans else ""))
-        if removeOrphans: os.remove(gConfig.getFilePath(ofile))
+        if removeOrphans:
+          gLogger.log("Removing orphan file: %s" % gConfig.getFilePath(ofile))
+          os.remove(gConfig.getFilePath(ofile))
 
     if libraryFiles:
       if localfiles != []:
@@ -2220,11 +2255,16 @@ def getHash(string):
 def getKeyFromHash(filename):
   url = re.sub("^image://(.*)/","\\1",filename)
   url = urllib2.unquote(url)
-  hash = getHash(url.encode("utf-8"))
+  hash = getHash(url)
   return "%s%s%s" % (hash[0:1], os.sep, hash)
 
 def getKeyFromFilename(filename):
-  return removeNonAscii(urllib2.unquote(re.sub("^image://(.*)/","\\1",filename)))
+  f = urllib2.unquote(re.sub("^image://(.*)/","\\1",filename))
+
+  if sys.version_info[0] >= 3:
+    f = bytes(f, "utf-8").decode("iso-8859-1")
+
+  return removeNonAscii(f)
 
 def getAllFiles(keyFunction):
 
@@ -2282,21 +2322,20 @@ def getAllFiles(keyFunction):
 
   for r in REQUEST:
     mediatype = re.sub(".*\.Get(.*)","\\1",r["method"])
-    interval = 0 if mediatype in ["MovieSets","Addons","Genres"] else 50
 
     gLogger.progress("Loading: %s..." % mediatype)
     data = jcomms.sendJSON(r, "libFiles")
 
     for items in data["result"]:
       if items != "limits":
+        if mediatype in ["MovieSets","Addons","Genres"]:
+          inteval = 0
+        else:
+          interval = int(int(data["result"]["limits"]["total"])/10)
+          interval = 50 if interval > 50 else interval
         title = ""
         for i in data["result"][items]:
-          if "title" in i:
-            title = i["title"]
-          elif "artis" in i:
-            title = i["artist"]
-          elif "name" in i:
-            title = i["name"]
+          title = i.get("title", i.get("artist", i.get("name", None)))
           gLogger.progress("Parsing: %s [%s]..." % (mediatype, title), every = interval)
           if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
           if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
@@ -2330,6 +2369,7 @@ def getAllFiles(keyFunction):
 
       REQUEST = {"method":"VideoLibrary.GetSeasons",
                  "params":{"tvshowid": tvshowid,
+                           "sort": {"order": "ascending", "method": "season"},
                            "properties":["season", "art"]}}
 
       seasondata = jcomms.sendJSON(REQUEST, "libTV")
@@ -2338,6 +2378,7 @@ def getAllFiles(keyFunction):
         SEASON_ALL = True
         for season in seasondata["result"]["seasons"]:
           seasonid = season["season"]
+          gLogger.progress("Parsing: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
           for a in season["art"]:
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
               SEASON_ALL = False
@@ -2542,6 +2583,9 @@ def loadConfig():
   gLogger.DEBUG = gConfig.DEBUG
   gLogger.VERBOSE = gConfig.LOGVERBOSE
   gLogger.setLogFile(gConfig.LOGFILE)
+
+  gLogger.log("Command line args: %s" % sys.argv)
+  gLogger.log("Current version #: %s" % gConfig.VERSION)
 
 def checkConfig(option):
 
@@ -2896,4 +2940,4 @@ if __name__ == "__main__":
     main(sys.argv[1:])
   except (KeyboardInterrupt, SystemExit) as e:
     if type(e) == SystemExit: sys.exit(int(str(e)))
-    pass
+
