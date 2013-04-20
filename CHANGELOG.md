@@ -1,6 +1,6 @@
 #Changelog
 
-##Version 0.5.4 (18/04/2013)
+##Version 0.5.4 (20/04/2013)
 * Fixed sqlite3 characterset decode issue
 * Default value for `singlethread.urls` is now `assets\.fanart\.tv`, to avoid hammering fanart.tv (logos, clearart, discart, etc.) as this site appears to reject multiple concurrent requests
 * Write command line args and current version to logfile (if logfile is enabled)
