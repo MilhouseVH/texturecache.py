@@ -15,9 +15,9 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[p, P]** Prune texture cache by removing accumulated **cruft** such as image previews, previously deleted movies/tv shows/music and whose artwork remains in the texture cache even after cleaning the media library database. Essentially, remove any cached file that is no longer associated with an entry in the media library, or an addon
 
-**[s, S]** Search texture cache for specific files and view database content, can help explain reason for incorrect artwork. Option **S** returns only those items that no longer have a matching image in the file system.
+**[s, S]** Search texture cache for specific files and view database content, can help explain reason for incorrect artwork. **S** will only return database results for items that no longer exist in the filesystem.
 
-**[x, X]** Extract rows from texture cache database, with optional SQL filter. Can also be used to return only those database rows referencing a cached image that no longer exists in the file system
+**[x, X]** Extract rows from texture cache database, with optional SQL filter.  **X** will only return database results for items that no longer exist in the filesystem.
 
 **[d]** Delete specific database rows and corresponding files from the texture cache using database row identifier (see **s/S**)
 
@@ -29,7 +29,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
-**[ascan, vscan]** Initiate audio/video library scan, either entire library or a specific path (see **sources**). The exit status is the number of items added during scan, 0 or +n.
+**[ascan, vscan]** Initiate audio/video library scan, either entire library or a specific path (see **sources**). The exit status is the number of items added during each scan, ie. 0 or +n.
 
 **[aclean, vclean]** Clean audio/video library
 
@@ -39,7 +39,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[status]** Display status of client - ScreenSaver active, IsIdle (default period 600 seconds, or user specified) and active Player type (audio or video), plus title of any media currently being played.
 
-**[monitor]** Display event notifications as they occur
+**[monitor]** Display client event notifications as they occur
 
 ##Installation instructions
 
