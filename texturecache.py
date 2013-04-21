@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.4"
+    self.VERSION="0.5.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -212,10 +212,10 @@ class MyConfiguration(object):
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
 
     self.LASTRUNFILE = config.get("xbmc", "lastrunfile")
-    self.LASTRUNFILE_DATE = None
+    self.LASTRUNFILE_DATETIME = None
     if self.LASTRUNFILE and os.path.exists(self.LASTRUNFILE):
         temp = datetime.datetime.utcfromtimestamp(os.path.getmtime(self.LASTRUNFILE))
-        self.LASTRUNFILE_DATE = temp.strftime("%Y-%m-%d")
+        self.LASTRUNFILE_DATETIME = temp.strftime("%Y-%m-%d %H:%M:%S")
 
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
 
@@ -327,7 +327,7 @@ class MyConfiguration(object):
     print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
     if self.RECACHEALL:
       print("  allow.recacheall = yes")
-    temp = " (%s)" % self.LASTRUNFILE_DATE if self.LASTRUNFILE and self.LASTRUNFILE_DATE else ""
+    temp = " (%s)" % self.LASTRUNFILE_DATETIME if self.LASTRUNFILE and self.LASTRUNFILE_DATETIME else ""
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
     print("")
@@ -1313,8 +1313,8 @@ class MyJSONComms(object):
         self.addFilter(REQUEST, {"field": FILTER, "operator": "contains", "value": filter})
 
     if mediatype in ["movies", "tags", "episodes"]:
-      if lastRun and self.config.LASTRUNFILE_DATE:
-        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATE })
+      if lastRun and self.config.LASTRUNFILE_DATETIME:
+        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATETIME })
 
     if action == "qa":
       qaSinceDate = self.config.QADATE
@@ -1342,7 +1342,9 @@ class MyJSONComms(object):
 # Hold and print some pretty totals.
 #
 class MyTotals(object):
-  def __init__(self):
+  def __init__(self, lastRunDateTime):
+    self.LASTRUNDATETIME = lastRunDateTime
+
     self.TIMES = {}
 
     self.ETIMES = {}
@@ -1462,7 +1464,7 @@ class MyTotals(object):
     eta = self.secondsToTime(remaining / tpersec, withMillis=False)
     return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 
-  def libraryStats(self, item="", filter=""):
+  def libraryStats(self, item="", filter="", lastRun=False):
     items = {}
     for a in self.TOTALS:
       for c in self.TOTALS[a]:
@@ -1513,6 +1515,7 @@ class MyTotals(object):
 
     line0 = "Cache pre-load activity summary for \"%s\"" % item
     if filter != "": line0 = "%s, filtered by \"%s\"" % (line0, filter)
+    if lastRun and self.LASTRUNDATETIME: line0 = "%s, added since %s" % (line0, self.LASTRUNDATETIME)
     line0 = "%s:" % line0
 
     line1 = "%-14s" % " "
@@ -1684,15 +1687,40 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       gLogger.progress("Loading TV Show: [%s]..." % title, every = 1)
       (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun = lastRun)
       limits = data2["result"]["limits"]
-      if limits["total"] == 0: break
+      if limits["total"] == 0: continue
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
         gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid), every = 1)
         (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun = lastRun)
         limits = data3["result"]["limits"]
-        if limits["total"] == 0: break
+        if limits["total"] == 0: continue
         season[s3] = data3["result"][s3]
+
+  if lastRun and mediatype in ["movies", "tvshows"]:
+    # Create a new list containing only tvshows with episodes...
+    if mediatype == "tvshows":
+      newData = []
+      for tvshow in data:
+        newtvshow = {}
+        epCount = 0
+        for season in tvshow.get("seasons", {}):
+          if season.get("episodes", None):
+            if newtvshow == {}:
+              newtvshow = tvshow
+              del newtvshow["seasons"]
+              newtvshow["seasons"] = []
+            newtvshow["seasons"].append(season)
+            epCount += len(season.get("episodes", {}))
+        if newtvshow != {}:
+          newData.append(newtvshow)
+          gLogger.out("Recently added TV Show: %s (%d episode%s)" % (tvshow.get("title"), epCount, "s"[epCount==1:]), newLine=True)
+      data = newData
+    else:
+      for item in data:
+        gLogger.out("Recently added Movie: %s" % item.get("title", item.get("artist", item.get("name", None))), newLine=True)
+
+    if len(data) != 0: gLogger.out("", newLine=True)
 
   TOTALS.TimeEnd(mediatype, "Load")
 
@@ -1781,7 +1809,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       itemCount += 1
       item.status = 1
       if not force:
-        if ITEMLIMIT > 0 and itemCount < ITEMLIMIT:
+        if ITEMLIMIT == -1 or itemCount < ITEMLIMIT:
           MSG = "Need to cache: [%-10s] for %s: %s\n" % (item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
           gLogger.out(MSG)
         elif itemCount == ITEMLIMIT:
@@ -2576,10 +2604,10 @@ def loadConfig():
 
   DBVERSION = MYWEB = MYSOCKET = MYDB = None
 
-  TOTALS = MyTotals()
-
   gConfig = MyConfiguration()
   gLogger = MyLogger()
+  TOTALS  = MyTotals(gConfig.LASTRUNFILE_DATETIME)
+
   gLogger.DEBUG = gConfig.DEBUG
   gLogger.VERBOSE = gConfig.LOGVERBOSE
   gLogger.setLogFile(gConfig.LOGFILE)
@@ -2795,55 +2823,55 @@ def main(argv):
 
   elif argv[0] == "c" and len(argv) == 1:
     for x in multi_call: jsonQuery("cache", x)
-    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
+    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows")
   elif argv[0] == "c" and len(argv) == 2:
     jsonQuery("cache", argv[1])
-    TOTALS.libraryStats(argv[1])
+    TOTALS.libraryStats(item=argv[1])
   elif argv[0] == "c" and len(argv) == 3:
     jsonQuery("cache", argv[1], argv[2])
-    TOTALS.libraryStats(argv[1], argv[2])
+    TOTALS.libraryStats(item=argv[1], filter=argv[2])
 
   elif argv[0] == "nc" and len(argv) == 1:
     for x in multi_call: jsonQuery("cache", x, nodownload=True)
-    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
+    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows")
   elif argv[0] == "nc" and len(argv) == 2:
     jsonQuery("cache", argv[1], nodownload=True)
-    TOTALS.libraryStats(argv[1])
+    TOTALS.libraryStats(item=argv[1])
   elif argv[0] == "nc" and len(argv) == 3:
     jsonQuery("cache", argv[1], argv[2], nodownload=True)
-    TOTALS.libraryStats(argv[1], argv[2])
+    TOTALS.libraryStats(item=argv[1], filter=argv[2])
 
   elif argv[0] == "lc" and len(argv) == 1:
     for x in multi_call: jsonQuery("cache", x, lastRun=True)
-    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
+    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows", lastRun=True)
   elif argv[0] == "lc" and len(argv) == 2:
     jsonQuery("cache", argv[1], lastRun=True)
-    TOTALS.libraryStats(argv[1])
+    TOTALS.libraryStats(item=argv[1], lastRun=True)
 
   elif argv[0] == "lnc" and len(argv) == 1:
     for x in multi_call: jsonQuery("cache", x, nodownload=True, lastRun=True)
-    TOTALS.libraryStats("addons/albums/artists/movies/sets/tvshows")
+    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows", lastRun=True)
   elif argv[0] == "lnc" and len(argv) == 2:
     jsonQuery("cache", argv[1], nodownload=True, lastRun=True)
-    TOTALS.libraryStats(argv[1])
+    TOTALS.libraryStats(item=argv[1], lastRun=True)
 
   elif argv[0] == "c" and len(argv) == 2:
     jsonQuery("cache", argv[1])
-    TOTALS.libraryStats(argv[1])
+    TOTALS.libraryStats(item=argv[1])
   elif argv[0] == "c" and len(argv) == 3:
     jsonQuery("cache", argv[1], argv[2])
-    TOTALS.libraryStats(argv[1], argv[2])
+    TOTALS.libraryStats(item=argv[1], filter=argv[2])
 
   elif argv[0] == "C" and len(argv) == 2:
     if gConfig.RECACHEALL:
       jsonQuery("cache", argv[1], force=True)
-      TOTALS.libraryStats(argv[1])
+      TOTALS.libraryStats(item=argv[1])
     else:
       print("Forcing re-cache of all items is disabled. Enable by setting \"allow.recacheall=yes\" in property file.")
       sys.exit(2)
   elif argv[0] == "C" and len(argv) == 3:
     jsonQuery("cache", argv[1], argv[2], force=True)
-    TOTALS.libraryStats(argv[1], argv[2])
+    TOTALS.libraryStats(item=argv[1], filter=argv[2])
 
   elif argv[0] == "j" and len(argv) == 2:
     jsonQuery("dump", argv[1])

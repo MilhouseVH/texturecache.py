@@ -1,5 +1,12 @@
 #Changelog
 
+##Version 0.5.5 (21/04/2013)
+* Fix: Not processing all seasons correctly during `lnc` and `lc`
+* Modified `lnc`/`lc` to discard tvshow seasons that do not have a new episode - previously considered for caching all seasons of any tvshow with a new episode
+* Show summary of recently added movies/tvshows (`lnc`, `lc`)
+* Added `lastrunfile` date/time to stats summary information (`lnc`, `lc`)
+* Fix: "Need to cache" message not appearing (`lnc`, `nc`)
+
 ##Version 0.5.4 (20/04/2013)
 * Fixed sqlite3 characterset decode issue
 * Default value for `singlethread.urls` is now `assets\.fanart\.tv`, to avoid hammering fanart.tv (logos, clearart, discart, etc.) as this site appears to reject multiple concurrent requests
