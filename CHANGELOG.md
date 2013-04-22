@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.5.6 (22/04/2013)
+* Change: Use local time and not UTC for `lastrunfile` timestamp (media library dateadded appears to be using local time, so this is more consistent)
+
 ##Version 0.5.5 (21/04/2013)
 * Fix: Not processing all seasons correctly during `lnc` and `lc`
 * Modified `lnc`/`lc` to discard tvshow seasons that do not have a new episode - previously considered for caching all seasons of any tvshow with a new episode

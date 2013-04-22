@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.5"
+    self.VERSION="0.5.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -214,7 +214,7 @@ class MyConfiguration(object):
     self.LASTRUNFILE = config.get("xbmc", "lastrunfile")
     self.LASTRUNFILE_DATETIME = None
     if self.LASTRUNFILE and os.path.exists(self.LASTRUNFILE):
-        temp = datetime.datetime.utcfromtimestamp(os.path.getmtime(self.LASTRUNFILE))
+        temp = datetime.datetime.fromtimestamp(os.path.getmtime(self.LASTRUNFILE))
         self.LASTRUNFILE_DATETIME = temp.strftime("%Y-%m-%d %H:%M:%S")
 
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
