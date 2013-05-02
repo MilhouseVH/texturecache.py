@@ -41,6 +41,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[monitor]** Display client event notifications as they occur
 
+**[power]** Set power state of client - `suspend`, `hibernate`, `shutdown` or `reboot`
+
 ##Installation instructions
 
 Download the single Python file required from github. A default properties file is available on github, rename this to texturecache.cfg in order to use it.
@@ -287,6 +289,8 @@ extrajson.tvshows.season =
 extrajson.tvshows.episode =
 qaperiod = 30
 qa.file = no
+qa.fail.urls = image://video, image://music
+qa.warn.urls =
 qa.art.addons =
 qa.art.albums =
 qa.art.artists =

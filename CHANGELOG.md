@@ -1,5 +1,12 @@
 #Changelog
 
+##Version 0.5.7 (02/05/2013)
+* Don't check for error during title lookup - if an OnRemove notification is received, the item being removed may already have been removed from the media library before the lookup is executed (but sometimes not). Return `None` for the title whenever an item no longer exists.
+* Add `power` option, supporting states of `suspend`, `hibernate`, `reboot` or `shutdown`. This allows the XBMC client to be rebooted, shutdown etc.
+* Add `albums`, `artists` and `songs` support to `qa` option (but no `qax` support as music items can't be removed from the media library).
+* Add QA checks for artwork urls during `qa`/`qax`, failing/warning QA if found. Default fail urls are "image://video, image://music", there is no default "warn" url. Specify alternative urls using `qa.fail.urls` and `qa.warn.urls` properties (comma delimited patterns). Rescan will be triggered only for fail, not warn.
+* Ignore JSON encode errors
+
 ##Version 0.5.6 (22/04/2013)
 * Change: Use local time and not UTC for `lastrunfile` timestamp (media library dateadded appears to be using local time, so this is more consistent)
 
