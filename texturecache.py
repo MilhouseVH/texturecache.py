@@ -37,11 +37,11 @@ import threading
 import errno, codecs
 
 if sys.version_info >= (3, 0):
-    import configparser as ConfigParser
-    import io as StringIO
-    import http.client as httplib
-    import urllib.request as urllib2
-    import queue as Queue
+  import configparser as ConfigParser
+  import io as StringIO
+  import http.client as httplib
+  import urllib.request as urllib2
+  import queue as Queue
 else:
   import ConfigParser, StringIO, httplib, urllib2, Queue
 
@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.7"
+    self.VERSION="0.5.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -343,9 +343,11 @@ class MyLogger():
     self.DEBUG = False
     self.VERBOSE = False
 
-    #Ensure stdout/stderr use utf-8 encoding... seems to work
-    #only in Python2.
-    if not sys.version_info >= (3, 0):
+    #Ensure stdout/stderr use utf-8 encoding...
+    if sys.version_info >= (3, 1):
+      sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+      sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
+    else:
       sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
       sys.stderr = codecs.getwriter("utf-8")(sys.stderr)
 
@@ -696,7 +698,7 @@ class MyDB(object):
 #
 # Handle all JSON RPC communication.
 #
-# Mostly uses sockets, etc. for those methods (Files.*) that must
+# Uses sockets except for those methods (Files.*) that must
 # use HTTP.
 #
 class MyJSONComms(object):
@@ -905,6 +907,7 @@ class MyJSONComms(object):
       # Still more data to be read...
       if not ENDOFDATA:
         if (time.time() - LASTIO) > timeout:
+          self.logger.log("SOCKET IO TIMEOUT EXCEEDED")
           raise socket.error("Socket IO timeout exceeded")
 
     if checkResult and not "result" in jdata:
@@ -2661,7 +2664,10 @@ def loadConfig():
   gLogger.setLogFile(gConfig.LOGFILE)
 
   gLogger.log("Command line args: %s" % sys.argv)
-  gLogger.log("Current version #: %s" % gConfig.VERSION)
+  gLogger.log("Current version #: v%s" % gConfig.VERSION)
+  gLogger.log("Current platform : %s" % sys.platform)
+  gLogger.log("Python  version #: v%d.%d.%d.%d (%s)" % (sys.version_info[0], sys.version_info[1], \
+                                               sys.version_info[2], sys.version_info[4], sys.version_info[3]))
 
 def checkConfig(option):
 

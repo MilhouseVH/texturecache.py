@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.5.8 (04/05/2013)
+* Fix utf-8 console output in Python 3.x
+
 ##Version 0.5.7 (02/05/2013)
 * Don't check for error during title lookup - if an OnRemove notification is received, the item being removed may already have been removed from the media library before the lookup is executed (but sometimes not). Return `None` for the title whenever an item no longer exists.
 * Add `power` option, supporting states of `suspend`, `hibernate`, `reboot` or `shutdown`. This allows the XBMC client to be rebooted, shutdown etc.
