@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.8"
+    self.VERSION="0.5.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -65,25 +65,13 @@ class MyConfiguration(object):
                                             "thumbnails": "Thumbnails",
                                             "xbmc.host": "localhost",
                                             "webserver.port": "8080",
-                                            "webserver.singleshot": "no",
                                             "webserver.username": None,
                                             "webserver.password": None,
                                             "rpc.port": "9090",
                                             "download.threads": "2",
-                                            "singlethread.urls": serial_urls,
                                             "qaperiod": "30",
-                                            "qafile": "no",
-                                            "qa.fail.urls": "image://video, image://music",
-                                            "qa.warn.urls": None,
-                                            "cache.castthumb": "no",
-                                            "cache.ignore.types": "image://video, image://music",
-                                            "prune.retain.types": None,
                                             "logfile": None,
-                                            "logfile.verbose": "no",
-                                            "allow.recacheall": "no",
-                                            "checkupdate": "yes",
-                                            "lastrunfile": None,
-                                            "orphan.limit.check": "yes"
+                                            "lastrunfile": None
                                             }
                                           )
 
@@ -132,7 +120,7 @@ class MyConfiguration(object):
         pass
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
 
-    self.SINGLETHREAD_URLS = self.getPatternFromList(config.get("xbmc", "singlethread.urls"))
+    self.SINGLETHREAD_URLS = self.getPatternFromList(config, "singlethread.urls", serial_urls)
 
     self.XTRAJSON = {}
     self.QA_FIELDS = {}
@@ -182,12 +170,12 @@ class MyConfiguration(object):
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
     self.QADATE = adate.strftime("%Y-%m-%d")
 
-    self.QA_FILE = self.getBoolean(config, "qafile", "yes")
-    self.QA_FAIL_TYPES = self.getPatternFromList(config.get("xbmc", "qa.fail.urls"))
-    self.QA_WARN_TYPES = self.getPatternFromList(config.get("xbmc", "qa.warn.urls"))
+    self.QA_FILE = self.getBoolean(config, "qafile", "no")
+    self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", "image://video, image://music")
+    self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", None)
 
-    self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "yes")
-    self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "yes")
+    self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
+    self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
 
     web_user = config.get("xbmc", "webserver.username")
     web_pass = config.get("xbmc", "webserver.password")
@@ -203,12 +191,12 @@ class MyConfiguration(object):
       self.WEB_AUTH_TOKEN = None
 
     self.LOGFILE = config.get("xbmc", "logfile")
-    self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
+    self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "no")
 
-    self.CACHE_IGNORE_TYPES = self.getPatternFromList(config.get("xbmc", "cache.ignore.types"))
-    self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config.get("xbmc", "prune.retain.types"))
+    self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", "image://video, image://music")
+    self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", None)
 
-    self.RECACHEALL = self.getBoolean(config, "allow.recacheall")
+    self.RECACHEALL = self.getBoolean(config, "allow.recacheall","no")
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
 
     self.LASTRUNFILE = config.get("xbmc", "lastrunfile")
@@ -220,13 +208,32 @@ class MyConfiguration(object):
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
 
   # default value will be used if key is present, but without a value
-  def getBoolean(self, parser, key, default="no"):
-    temp = parser.get("xbmc", key)
-    temp = temp.lower() if temp else default
+  def getBoolean(self, config, aKey, default="no"):
+    temp = default
+
+    try:
+      temp = config.get("xbmc", aKey)
+    except ConfigParser.NoOptionError:
+      pass
+
+    temp = temp.lower()
+
     return True if (temp == "yes" or temp == "true") else False
 
-  def getPatternFromList(self, aList, default=None):
-    if aList != None and aList.lower() == "none": aList = default
+  def getPatternFromList(self, config, aKey, default=None):
+
+    aList = default
+
+    try:
+      aList = config.get("xbmc", aKey)
+
+      if aList and aList.startswith("+"):
+        aList = aList[1:]
+        if default and default != "" and aList != "":
+          aList = "%s,%s " % (default, aList.strip())
+    except ConfigParser.NoOptionError:
+      pass
+
     return [re.compile(x.strip()) for x in aList.split(',')] if aList else aList
 
   def getListFromPattern(self, aPattern):
@@ -2545,13 +2552,27 @@ def showStatus(idleTime=600):
 
   STATUS = []
 
-  REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": ["System.ScreenSaverActive "] }}
+  REQUEST = {"method": "XBMC.GetInfoBooleans",
+             "params": { "booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo"] }}
   data = jcomms.sendJSON(REQUEST, "libSSaver")
-  if "result" in data and "System.ScreenSaverActive " in data["result"]:
-    if data["result"]["System.ScreenSaverActive "]:
-      STATUS.append("ScreenSaverActive: Yes")
-    else:
-      STATUS.append("ScreenSaverActive: No")
+  if "result" in data:
+    if "Library.IsScanningMusic" in data["result"]:
+      if data["result"]["Library.IsScanningMusic"]:
+        STATUS.append("Scanning Music: Yes")
+      else:
+        STATUS.append("Scanning Music: No")
+
+    if "Library.IsScanningVideo" in data["result"]:
+      if data["result"]["Library.IsScanningVideo"]:
+        STATUS.append("Scanning Video: Yes")
+      else:
+        STATUS.append("Scanning Video: No")
+
+    if "System.ScreenSaverActive" in data["result"]:
+      if data["result"]["System.ScreenSaverActive"]:
+        STATUS.append("ScreenSaverActive: Yes")
+      else:
+        STATUS.append("ScreenSaverActive: No")
 
   property = "System.IdleTime(%s) " % idleTime
   REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
@@ -2597,7 +2618,9 @@ def showStatus(idleTime=600):
       STATUS.append("Player: None")
 
   if STATUS != []:
-    gLogger.out("\n".join(STATUS), newLine=True)
+    for x in STATUS:
+      pos = x.find(":")
+      gLogger.out("%-20s: %s" % (x[:pos], x[pos+2:]), newLine=True)
 
 def showNotifications():
   MyJSONComms(gConfig, gLogger).listen()

@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.5.9 (04/05/2013)
+* Add "Scanning Video" and "Scanning Music" entries to `status`
+* Make regex property patterns additive with "+" prefix (`singlethread.urls`, `qa.fail.urls`, `cache.ignore.types`, etc.).
+
 ##Version 0.5.8 (04/05/2013)
 * Fix utf-8 console output in Python 3.x
 
