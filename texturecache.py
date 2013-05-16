@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.6.0"
+    self.VERSION="0.6.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -2547,6 +2547,14 @@ def setPower(state):
   else:
     gLogger.out("Invalid power state: %s" % state, newLine=True)
 
+def execAddon(addon, params, wait=False):
+  REQUEST = {"method":"Addons.ExecuteAddon",
+             "params": {"addonid": addon, "wait": wait}}
+
+  if params: REQUEST["params"]["params"] = params
+
+  MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libAddon")
+
 def showStatus(idleTime=600):
   jcomms = MyJSONComms(gConfig, gLogger)
 
@@ -2629,7 +2637,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update | status [idleTime] | monitor | power <state>")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2661,6 +2669,8 @@ def usage(EXIT_CODE):
   print("  status  Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor Display client event notifications as they occur")
   print("  power   Control power state of client, where state is one of suspend, hibernate, shutdown and reboot")
+  print("  exec    Execute specified addon, with optional parameters")
+  print("  execw   Execute specified addon, with optional parameters and wait (although often wait has no effect)")
   print("")
   print("  config  Show current configuration")
   print("  version Show current version and check for new version")
@@ -2703,7 +2713,8 @@ def checkConfig(option):
 
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","p","P",
                 "vscan", "ascan", "vclean", "aclean", "directory", "sources",
-                "status", "monitor", "power"]:
+                "status", "monitor", "power",
+                "exec", "execw"]:
     needSocket = True
   else:
     needSocket = False
@@ -3033,6 +3044,11 @@ def main(argv):
     downloadLatestVersion()
   elif argv[0] == "fupdate":
     downloadLatestVersion(force=True)
+
+  elif argv[0] == "exec" and len(argv) > 1:
+    execAddon(argv[1], argv[2:], wait=False)
+  elif argv[0] == "execw" and len(argv) > 1:
+    execAddon(argv[1], argv[2:], wait=True)
 
   elif argv[0] == "power" and len(argv) == 2:
     setPower(argv[1])

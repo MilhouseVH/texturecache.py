@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.6.1 (16/05/2013)
+* Add `exec` and `execw` options to execute XBMC addon, with optional parameters.
+
 ##Version 0.6.0 (16/05/2013)
 * Add "poster" to `qa.art.tvshows.season`
 
