@@ -43,6 +43,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[power]** Set power state of client - `suspend`, `hibernate`, `shutdown` or `reboot`
 
+**[exec, execw]** Execute the specified addon, with optional parameters. eg. `exec script.artwork.downloader silent=true mediatype=tvshow`. Use `execw` to wait, but this rarely has any effect (possibly not implemented by JSON?)
+
 ##Installation instructions
 
 Download the single Python file required from github. A default properties file is available on github, rename this to texturecache.cfg in order to use it.
