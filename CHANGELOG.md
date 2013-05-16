@@ -1,6 +1,9 @@
 #Changelog
 
-##Version 0.5.9 (04/05/2013)
+##Version 0.6.0 (16/05/2013)
+* Add "poster" to `qa.art.tvshows.season`
+
+##Version 0.5.9 (12/05/2013)
 * Add "Scanning Video" and "Scanning Music" entries to `status`
 * Make regex property patterns additive with "+" prefix (`singlethread.urls`, `qa.fail.urls`, `cache.ignore.types`, etc.).
 

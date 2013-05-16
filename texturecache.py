@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.5.9"
+    self.VERSION="0.6.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -135,9 +135,9 @@ class MyConfiguration(object):
     self.QA_FIELDS["qa.art.sets"] = "fanart, poster"
 
     self.QA_FIELDS["qa.blank.tvshows.tvshow"] = "plot"
-    self.QA_FIELDS["qa.art.tvshows.tvshow"] = "fanart, banner, poster"
-
     self.QA_FIELDS["qa.blank.tvshows.episode"] = "plot"
+    self.QA_FIELDS["qa.art.tvshows.tvshow"] = "fanart, banner, poster"
+    self.QA_FIELDS["qa.art.tvshows.season"] = "poster"
     self.QA_FIELDS["qa.art.tvshows.episode"] = "thumb"
 
     for x in ["addons",
