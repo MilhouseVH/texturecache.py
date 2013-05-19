@@ -1283,7 +1283,7 @@ class MyJSONComms(object):
             else:
               source_list.append(file[:-1])
 
-    return source_list
+    return sorted(source_list)
 
   def getAllFilesForSource(self, mediatype, label):
     if mediatype == "songs":
@@ -1315,7 +1315,10 @@ class MyJSONComms(object):
         if isVIDEOTS and fext != ".vob": continue
         if isBDMV    and fext != ".m2ts": continue
 
-        fileList.append(file)
+        # Avoiding adding file to list more than once, possible
+        # if sources reference same folder multiple times
+        if not file in fileList:
+          fileList.append(file)
 
     return sorted(fileList)
 
