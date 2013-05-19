@@ -29,13 +29,15 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
+**[missing]** Locate media files missing from the specified media library and source label, eg. `missing movies "My Movies"`
+
 **[ascan, vscan]** Initiate audio/video library scan, either entire library or a specific path (see **sources**). The exit status is the number of items added during each scan, ie. 0 or +n.
 
 **[aclean, vclean]** Clean audio/video library
 
 **[directory]** Obtain directory listing for a specific path (see **sources**)
 
-**[sources]** List of sources for a specific media class (video, music, pictures, files, programs)
+**[sources]** List of sources for a specific media class (video, music, pictures, files, programs), optionally filtered by label (eg. "My Movies")
 
 **[status]** Display status of client - ScreenSaver active, IsIdle (default period 600 seconds, or user specified) and active Player type (audio or video), plus title of any media currently being played.
 
@@ -328,6 +330,7 @@ logfile.verbose = no
 checkupdate = yes
 lastrunfile =
 orphan.limit.check = yes
+nonmedia.filetypes =
 ```
 
 The `dbfile` and `thumbbnails` properties represent folders that are normally relative to the `userdata` property, however full paths can be specified.

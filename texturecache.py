@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.6.1"
+    self.VERSION="0.6.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -207,21 +207,35 @@ class MyConfiguration(object):
 
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
 
+    self.NONMEDIA_FILETYPES = self.getSimpleList(config, "nonmedia.filetypes")
+
   # default value will be used if key is present, but without a value
   def getBoolean(self, config, aKey, default="no"):
-    temp = default
-
     try:
       temp = config.get("xbmc", aKey)
     except ConfigParser.NoOptionError:
-      pass
+      temp = default
 
     temp = temp.lower()
 
     return True if (temp == "yes" or temp == "true") else False
 
-  def getPatternFromList(self, config, aKey, default=None):
+  def getSimpleList(self, config, aKey, default=None):
 
+    try:
+      aStr = config.get("xbmc", aKey)
+    except ConfigParser.NoOptionError:
+      aStr = default
+
+    newlist = []
+
+    if aStr:
+      for item in aStr.split(","):
+        newlist.append(item)
+
+    return newlist
+
+  def getPatternFromList(self, config, aKey, default=None):
     aList = default
 
     try:
@@ -328,6 +342,7 @@ class MyConfiguration(object):
     temp = " (%s)" % self.LASTRUNFILE_DATETIME if self.LASTRUNFILE and self.LASTRUNFILE_DATETIME else ""
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
+    print("  nonmedia.filetypes = %s" % self.NoneIsBlank(",".join(self.NONMEDIA_FILETYPES)))
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -1243,7 +1258,7 @@ class MyJSONComms(object):
             if "thumbnail" in cast:
               cast["thumbnail"] = urllib2.unquote(cast["thumbnail"])
 
-  def getSources(self, media):
+  def getSources(self, media, labelPrefix=False, withLabel=None):
     REQUEST = {"method": "Files.GetSources", "params":{"media": media}}
 
     data = self.sendJSON(REQUEST, "libSources")
@@ -1253,14 +1268,79 @@ class MyJSONComms(object):
     if "result" in data and "sources" in data["result"]:
       for source in data["result"]["sources"]:
         file = source["file"]
-        if file.startswith("multipath://"):
-          for qfile in file[12:].split("/"):
-            if qfile != "":
-              source_list.append(urllib2.unquote(qfile)[:-1])
-        else:
-          source_list.append(file[:-1])
+        label = source["label"]
+        if not withLabel or withLabel.lower() == label.lower():
+          if file.startswith("multipath://"):
+            for qfile in file[12:].split("/"):
+              if qfile != "":
+                if labelPrefix:
+                  source_list.append("%s: %s" % (label, urllib2.unquote(qfile)[:-1]))
+                else:
+                  source_list.append(urllib2.unquote(qfile)[:-1])
+          else:
+            if labelPrefix:
+              source_list.append("%s: %s" % (label, file[:-1]))
+            else:
+              source_list.append(file[:-1])
 
     return source_list
+
+  def getAllFilesForSource(self, mediatype, label):
+    if mediatype == "songs":
+      mtype = "music"
+    else:
+      mtype = "video"
+
+    sources = self.getSources(mtype, withLabel=label)
+
+    # Mostly image and nfo file types, but also some random junk...
+    ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".m3u", ".pls", \
+                  ".bak", ".info", ".db", ".gz", ".tar", ".ini", ".txt"]
+    for extension in self.config.NONMEDIA_FILETYPES: ignoreList.append(".%s" % extension.lower())
+
+    fileList = []
+
+    for path in sources:
+      self.logger.progress("Walking source: [%s]" % path)
+      files = self.getFilesForPath(path)
+      for file in files:
+        fext = os.path.splitext(file)[1].lower()
+
+        if fext in ignoreList: continue
+        if os.path.splitext(file)[0].lower().endswith("trailer"): continue
+
+        isVIDEOTS = (file.find("/VIDEO_TS/") != -1 or file.find("\\VIDEO_TS\\") != -1)
+        isBDMV    = (file.find("/BDMV/") != -1 or file.find("\\BDMV\\") != -1)
+
+        if isVIDEOTS and fext != ".vob": continue
+        if isBDMV    and fext != ".m2ts": continue
+
+        fileList.append(file)
+
+    return sorted(fileList)
+
+  def getFilesForPath(self, path):
+    fileList = []
+    self.getFilesForPath_recurse(fileList, path)
+    return fileList
+
+  def getFilesForPath_recurse(self, fileList, path):
+    data = self.getDirectoryList("files", path)
+    if not "result" in data: return
+
+    files = data["result"]["files"]
+    if not files: return
+
+    for file in files:
+      ftype = file["filetype"]
+      fname = file["file"]
+      fext = os.path.splitext(fname)[1].lower()
+      #Real directories won't have extensions, but .m3u and .pls playlists will
+      #leading to infinite recursion, so don't try to traverse playlists
+      if ftype == "directory" and fext == "":
+        self.getFilesForPath_recurse(fileList, os.path.dirname(fname))
+      else:
+        fileList.append(fname)
 
   def setPower(self, state):
     REQUEST = {"method": "System.%s" % state.capitalize()}
@@ -1348,6 +1428,13 @@ class MyJSONComms(object):
     if mediatype in ["movies", "tags", "episodes"]:
       if lastRun and self.config.LASTRUNFILE_DATETIME:
         self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATETIME })
+
+    if action == "missing":
+      for unwanted in ["artist", "art", "fanart", "thumbnail"]:
+        if unwanted in REQUEST["params"]["properties"]:
+          REQUEST["params"]["properties"].remove(unwanted)
+      if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
+        self.addProperties(REQUEST, "file")
 
     if action == "qa":
       qaSinceDate = self.config.QADATE
@@ -1683,14 +1770,19 @@ def removeNonAscii(s, replaceWith = ""):
 #
 # Sets doesn't support filters, so filter this list after retrieval.
 #
-def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False, lastRun=False):
+def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False, lastRun=False, label=None):
   if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
 
-  # Only QA movies and tvshows for now...
+  # Only QA movies and tvshows (and sub-types) for now...
   if action == "qa" and rescan and not mediatype in ["movies", "tags", "sets", "tvshows", "seasons", "episodes"]:
     gLogger.out("Error: media class [%s] is not currently supported by qax" % mediatype, newLine=True)
+    sys.exit(2)
+
+  # Only songa, movies and tvshows (and sub-types) valid for missing...
+  if action == "missing" and not mediatype in ["songs", "movies", "tvshows", "seasons", "episodes"]:
+    gLogger.out("Error: media class [%s] is not currently supported by missing" % mediatype, newLine=True)
     sys.exit(2)
 
   TOTALS.TimeStart(mediatype, "Total")
@@ -1768,6 +1860,9 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       qaData(mediatype, jcomms, database, data, title_name, id_name, rescan)
     elif action == "dump":
       jcomms.dumpJSON(data, decode)
+    elif action == "missing":
+      fileList = jcomms.getAllFilesForSource(mediatype, label)
+      missingFiles(mediatype, data, fileList, title_name, id_name)
 
   gLogger.progress("")
 
@@ -2040,7 +2135,7 @@ def evaluateURL(imgtype, url, imagecache):
   imagecache[url] = 0
   return True
 
-def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=None, mitems=None, showName = None, season = None):
+def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=None, mitems=None, showName=None, season=None):
   gLogger.reset()
 
   if mitems == None:
@@ -2149,8 +2244,56 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     TOTALS.TimeStart(mediatype, "Rescan")
     jcomms.rescanDirectories(workItems)
     TOTALS.TimeEnd(mediatype, "Rescan")
-
     gLogger.out("\n")
+
+def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, season=None):
+  gLogger.reset()
+
+  if showName == None:
+      TOTALS.TimeStart(mediatype, "Parse")
+
+  for item in data:
+    libraryid = item[id_name]
+
+    if title_name in item: title = item[title_name]
+
+    if showName:
+      name = showName
+      if season:
+        episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        name = "%s, %s Episode %s" % (showName, season, episode)
+      else:
+        season = title
+        episode = None
+        name = "%s, %s" % (showName, season)
+    else:
+      name = title
+      season = None
+      episode = None
+
+    gLogger.progress("Parsing [%s]..." % name, every = 25)
+
+    # Remove matched file from fileList - what files remain at the end
+    # will be reported to the user
+    if "file" in item and mediatype != "tvshows":
+      file = "%s" % item["file"]
+      try:
+        fileList.remove(file)
+      except ValueError:
+        pass
+
+    if "seasons" in item:
+      missingFiles("seasons", item["seasons"], fileList, "label", "season", showName=title)
+    if "episodes" in item:
+      missingFiles("episodes", item["episodes"], fileList, "label", "episodeid", showName=showName, season=title)
+      season = None
+
+  if showName == None:
+    TOTALS.TimeEnd(mediatype, "Parse")
+    gLogger.progress("")
+    if fileList != []:
+      gLogger.out("The following media files are not present in the media library:\n\n")
+      for file in fileList: gLogger.out("%s\n" % file)
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter=""):
@@ -2532,13 +2675,13 @@ def getDirectoryList(path, mediatype = "files"):
 
     print("%s: %s") % (FTYPE, FNAME)
 
-def showSources(media=None):
+def showSources(media=None, withLabel=None):
   jcomms = MyJSONComms(gConfig, gLogger)
 
   mlist = [media] if media else ["video", "music", "pictures", "files", "programs"]
 
   for m in mlist:
-    for s in jcomms.getSources(m):
+    for s in jcomms.getSources(m, labelPrefix=True, withLabel=withLabel):
       gLogger.out("%s: %s" % (m, s), newLine=True)
 
 def setPower(state):
@@ -2637,7 +2780,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | ascan [path] |vscan [path] | aclean | vclean | sources [media] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | missing class label | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2660,11 +2803,12 @@ def usage(EXIT_CODE):
   print("          Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
   print("  p       Display files present in texture cache that don't exist in the media library")
   print("  P       Prune (automatically remove) cached items that don't exist in the media library")
+  print("  missing Locate media files missing from the specified media library and source label, eg. missing movies \"My Movies\"")
   print("  ascan   Scan entire audio library, or specific path")
   print("  vscan   Scan entire video library, or specific path")
   print("  aclean  Clean audio library")
   print("  vclean  Clean video library")
-  print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs)")
+  print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs) or label (eg. \"My Movies\")")
   print("directory Retrieve list of files in a specific directory (see sources)")
   print("  status  Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor Display client event notifications as they occur")
@@ -2714,7 +2858,7 @@ def checkConfig(option):
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","p","P",
                 "vscan", "ascan", "vclean", "aclean", "directory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw"]:
+                "exec", "execw", "missing"]:
     needSocket = True
   else:
     needSocket = False
@@ -3021,8 +3165,10 @@ def main(argv):
   elif argv[0] == "directory" and len(argv) == 2:
     getDirectoryList(argv[1])
 
-  elif argv[0] == "sources":
+  elif argv[0] == "sources" and len(argv) < 3:
     showSources(media = argv[1] if len(argv) == 2 else None)
+  elif argv[0] == "sources" and len(argv) == 3:
+    showSources(media = argv[1], withLabel = argv[2])
 
   elif argv[0] == "status":
     if len(argv) == 2:
@@ -3045,13 +3191,16 @@ def main(argv):
   elif argv[0] == "fupdate":
     downloadLatestVersion(force=True)
 
+  elif argv[0] == "power" and len(argv) == 2:
+    setPower(argv[1])
+
   elif argv[0] == "exec" and len(argv) > 1:
     execAddon(argv[1], argv[2:], wait=False)
   elif argv[0] == "execw" and len(argv) > 1:
     execAddon(argv[1], argv[2:], wait=True)
 
-  elif argv[0] == "power" and len(argv) == 2:
-    setPower(argv[1])
+  elif argv[0] == "missing" and len(argv) == 3:
+    jsonQuery(action="missing", mediatype=argv[1], label=argv[2])
 
   else:
     usage(1)
@@ -3064,4 +3213,3 @@ if __name__ == "__main__":
     main(sys.argv[1:])
   except (KeyboardInterrupt, SystemExit) as e:
     if type(e) == SystemExit: sys.exit(int(str(e)))
-

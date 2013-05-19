@@ -1,5 +1,19 @@
 #Changelog
 
+##Version 0.6.2 (19/05/2013)
+* Added: `sources` can now be filtered by label (case insensitive). Each corresponding label is now displayed in the `sources` list.
+* Added: `missing` option, listing those media files that are not present in your media library, for example:
+
+  `texturecache.py missing songs "My Music"`
+  `texturecache.py missing movies "My Movies"`
+  `texturecache.py missing tvshows "My TV Shows"`
+
+  where "My Music" etc. is the label name of one of my sources.
+  
+  Valid media libraries for the `missing` option are: `songs`, `movies` and `tvshows`.
+  
+  Non-media files (eg. artwork, NFO files etc.) are identified by their file extension and excluded from the comparison. Additional non-media file extensions can be added using the `nonmedia.filetypes` property (commad delimited list).
+
 ##Version 0.6.1 (16/05/2013)
 * Add `exec` and `execw` options to execute XBMC addon, with optional parameters.
 
