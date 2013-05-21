@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.6.3 (21/05/2013)
+* Added additional default non-media filetypes (.cue, .log, .sub, .idx, .zip, .rar etc.)
+* Added `video`, `music` and `all` meta media-classes to `c`/`C`, `nc`, `lc`/`lnc`, `j`/`J`/`jd`/`Jd` and `qa`/`qax` options - eg. `c video` will cache movies+sets+tvshows, while `c music` will cache artists+albums+songs. `all` is addons+music+video.
+* `missing` now supports multiple sources, eg. `missing movies "New Movies" "Archive Movies" "Yet another movie source"`
+
 ##Version 0.6.2 (19/05/2013)
 * Added: `sources` can now be filtered by label (case insensitive). Each corresponding label is now displayed in the `sources` list.
 * Added: `missing` option, listing those media files that are not present in your media library, for example:
