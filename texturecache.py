@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self ):
 
-    self.VERSION="0.6.2"
+    self.VERSION="0.6.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1285,40 +1285,50 @@ class MyJSONComms(object):
 
     return sorted(source_list)
 
-  def getAllFilesForSource(self, mediatype, label):
+  def getAllFilesForSource(self, mediatype, labels):
     if mediatype == "songs":
       mtype = "music"
     else:
       mtype = "video"
 
-    sources = self.getSources(mtype, withLabel=label)
+    # Mostly image, nfo and audio-related playlist file types,
+    # but also some random junk...
+    ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".sub", ".idx", \
+                  ".m3u", ".pls", ".cue", \
+                  ".log", ".ini", ".txt", \
+                  ".bak", ".info", ".db", ".gz", ".tar", ".rar", ".zip"]
 
-    # Mostly image and nfo file types, but also some random junk...
-    ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".m3u", ".pls", \
-                  ".bak", ".info", ".db", ".gz", ".tar", ".ini", ".txt"]
-    for extension in self.config.NONMEDIA_FILETYPES: ignoreList.append(".%s" % extension.lower())
+    for extension in self.config.NONMEDIA_FILETYPES:
+      if extension.startswith("."):
+        ignoreList.append("%s" % extension.lower())
+      else:
+        ignoreList.append(".%s" % extension.lower())
 
     fileList = []
 
-    for path in sources:
-      self.logger.progress("Walking source: [%s]" % path)
-      files = self.getFilesForPath(path)
-      for file in files:
-        fext = os.path.splitext(file)[1].lower()
+    for label in labels:
+      sources = self.getSources(mtype, withLabel=label)
 
-        if fext in ignoreList: continue
-        if os.path.splitext(file)[0].lower().endswith("trailer"): continue
+      for path in sources:
+        self.logger.progress("Walking source: [%s]" % path)
 
-        isVIDEOTS = (file.find("/VIDEO_TS/") != -1 or file.find("\\VIDEO_TS\\") != -1)
-        isBDMV    = (file.find("/BDMV/") != -1 or file.find("\\BDMV\\") != -1)
+        for file in self.getFilesForPath(path):
+          ext = os.path.splitext(file)[1].lower()
+          if ext in ignoreList: continue
 
-        if isVIDEOTS and fext != ".vob": continue
-        if isBDMV    and fext != ".m2ts": continue
+          if os.path.splitext(file)[0].lower().endswith("trailer"): continue
 
-        # Avoiding adding file to list more than once, possible
-        # if sources reference same folder multiple times
-        if not file in fileList:
-          fileList.append(file)
+          isVIDEOTS = (file.find("/VIDEO_TS/") != -1 or file.find("\\VIDEO_TS\\") != -1)
+          isBDMV    = (file.find("/BDMV/") != -1 or file.find("\\BDMV\\") != -1)
+
+          if isVIDEOTS and ext != ".vob": continue
+          if isBDMV    and ext != ".m2ts": continue
+
+          # Avoiding adding file to list more than once, which is possible
+          # if a folder appears within multiple different sources, or the
+          # same source is processed more than once...
+          if not file in fileList:
+            fileList.append(file)
 
     return sorted(fileList)
 
@@ -1587,7 +1597,9 @@ class MyTotals(object):
     eta = self.secondsToTime(remaining / tpersec, withMillis=False)
     return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 
-  def libraryStats(self, item="", filter="", lastRun=False):
+  def libraryStats(self, item="", multi=[], filter="", lastRun=False):
+    if multi: item = "/".join(multi)
+
     items = {}
     for a in self.TOTALS:
       for c in self.TOTALS[a]:
@@ -1773,7 +1785,7 @@ def removeNonAscii(s, replaceWith = ""):
 #
 # Sets doesn't support filters, so filter this list after retrieval.
 #
-def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False, lastRun=False, label=None):
+def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False, lastRun=False, labels=None):
   if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
@@ -1864,7 +1876,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     elif action == "dump":
       jcomms.dumpJSON(data, decode)
     elif action == "missing":
-      fileList = jcomms.getAllFilesForSource(mediatype, label)
+      fileList = jcomms.getAllFilesForSource(mediatype, labels)
       missingFiles(mediatype, data, fileList, title_name, id_name)
 
   gLogger.progress("")
@@ -2241,13 +2253,11 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     for m in mediaitems: gLogger.out("%s\n" % m)
-    gLogger.out("\n")
 
   if rescan:
     TOTALS.TimeStart(mediatype, "Rescan")
     jcomms.rescanDirectories(workItems)
     TOTALS.TimeEnd(mediatype, "Rescan")
-    gLogger.out("\n")
 
 def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, season=None):
   gLogger.reset()
@@ -2295,7 +2305,7 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     if fileList != []:
-      gLogger.out("The following media files are not present in the media library:\n\n")
+      gLogger.out("The following media files are not present in the \"%s\" media library:\n\n" % mediatype)
       for file in fileList: gLogger.out("%s\n" % file)
 
 # Extract data, using optional simple search, or complex SQL filter.
@@ -2783,7 +2793,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | missing class label | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | missing class label [label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2806,7 +2816,7 @@ def usage(EXIT_CODE):
   print("          Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
   print("  p       Display files present in texture cache that don't exist in the media library")
   print("  P       Prune (automatically remove) cached items that don't exist in the media library")
-  print("  missing Locate media files missing from the specified media library and source label, eg. missing movies \"My Movies\"")
+  print("  missing Locate media files missing from the specified media library, matched against one or more source labels, eg. missing movies \"My Movies\"")
   print("  ascan   Scan entire audio library, or specific path")
   print("  vscan   Scan entire video library, or specific path")
   print("  aclean  Clean audio library")
@@ -3034,10 +3044,11 @@ def main(argv):
 
   EXIT_CODE = 0
 
-  multi_call = ["addons", "albums", "artists", "movies", "sets", "tvshows"]
+  multi_call_m = ["albums", "artists", "songs"]
+  multi_call_v = ["movies", "sets", "tvshows"]
+  multi_call   = ["addons"] + multi_call_m + multi_call_v
 
-  if gConfig.CHECKUPDATE:
-    if not argv[0] in ["version","update"]: checkUpdate()
+  if gConfig.CHECKUPDATE and not argv[0] in ["version","update"]: checkUpdate()
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")
@@ -3056,87 +3067,53 @@ def main(argv):
   elif argv[0] == "f" and len(argv) == 2:
     sqlExtract("STATS", "", argv[1])
 
-  elif argv[0] == "c" and len(argv) == 1:
-    for x in multi_call: jsonQuery("cache", x)
-    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows")
-  elif argv[0] == "c" and len(argv) == 2:
-    jsonQuery("cache", argv[1])
-    TOTALS.libraryStats(item=argv[1])
-  elif argv[0] == "c" and len(argv) == 3:
-    jsonQuery("cache", argv[1], argv[2])
-    TOTALS.libraryStats(item=argv[1], filter=argv[2])
+  elif argv[0] in ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "qa", "qax"]:
 
-  elif argv[0] == "nc" and len(argv) == 1:
-    for x in multi_call: jsonQuery("cache", x, nodownload=True)
-    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows")
-  elif argv[0] == "nc" and len(argv) == 2:
-    jsonQuery("cache", argv[1], nodownload=True)
-    TOTALS.libraryStats(item=argv[1])
-  elif argv[0] == "nc" and len(argv) == 3:
-    jsonQuery("cache", argv[1], argv[2], nodownload=True)
-    TOTALS.libraryStats(item=argv[1], filter=argv[2])
-
-  elif argv[0] == "lc" and len(argv) == 1:
-    for x in multi_call: jsonQuery("cache", x, lastRun=True)
-    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows", lastRun=True)
-  elif argv[0] == "lc" and len(argv) == 2:
-    jsonQuery("cache", argv[1], lastRun=True)
-    TOTALS.libraryStats(item=argv[1], lastRun=True)
-
-  elif argv[0] == "lnc" and len(argv) == 1:
-    for x in multi_call: jsonQuery("cache", x, nodownload=True, lastRun=True)
-    TOTALS.libraryStats(item="addons/albums/artists/movies/sets/tvshows", lastRun=True)
-  elif argv[0] == "lnc" and len(argv) == 2:
-    jsonQuery("cache", argv[1], nodownload=True, lastRun=True)
-    TOTALS.libraryStats(item=argv[1], lastRun=True)
-
-  elif argv[0] == "c" and len(argv) == 2:
-    jsonQuery("cache", argv[1])
-    TOTALS.libraryStats(item=argv[1])
-  elif argv[0] == "c" and len(argv) == 3:
-    jsonQuery("cache", argv[1], argv[2])
-    TOTALS.libraryStats(item=argv[1], filter=argv[2])
-
-  elif argv[0] == "C" and len(argv) == 2:
-    if gConfig.RECACHEALL:
-      jsonQuery("cache", argv[1], force=True)
-      TOTALS.libraryStats(item=argv[1])
+    if argv[0] in ["j", "J", "jd", "Jd"]:
+      _action = "dump"
+      _stats  = False
+    elif argv[0] in ["qa", "qax"]:
+      _action = "qa"
+      _stats  = False
     else:
+      _action = "cache"
+      _stats  = True
+
+    _force      = True if argv[0] == "C" else False
+    _rescan     = True if argv[0] == "qax" else False
+    _lastRun    = True if argv[0] in ["lc", "lnc"] else False
+    _nodownload = True if argv[0] in ["nc", "lnc"] else False
+    _decode     = True if argv[0] in ["jd", "Jd"] else False
+    _extraFields= True if argv[0] in ["J", "Jd"] else False
+
+    _filter     = argv[2] if len(argv) > 2 else ""
+
+    if _force and not gConfig.RECACHEALL and _filter == "":
       print("Forcing re-cache of all items is disabled. Enable by setting \"allow.recacheall=yes\" in property file.")
       sys.exit(2)
-  elif argv[0] == "C" and len(argv) == 3:
-    jsonQuery("cache", argv[1], argv[2], force=True)
-    TOTALS.libraryStats(item=argv[1], filter=argv[2])
 
-  elif argv[0] == "j" and len(argv) == 2:
-    jsonQuery("dump", argv[1])
-  elif argv[0] == "j" and len(argv) == 3:
-    jsonQuery("dump", argv[1], argv[2])
+    _multi_call = []
+    if len(argv) == 1:
+      multi_call.remove("songs")
+      _multi_call = multi_call
+    else:
+      if argv[1] == "video": _multi_call = multi_call_v
+      if argv[1] == "music": _multi_call = multi_call_m
+      if argv[1] == "all":   _multi_call = multi_call
 
-  elif argv[0] == "jd" and len(argv) == 2:
-    jsonQuery("dump", argv[1], decode=True)
-  elif argv[0] == "jd" and len(argv) == 3:
-    jsonQuery("dump", argv[1], argv[2], decode=True)
-
-  elif argv[0] == "J" and len(argv) == 2:
-    jsonQuery("dump", argv[1], extraFields=True)
-  elif argv[0] == "J" and len(argv) == 3:
-    jsonQuery("dump", argv[1], argv[2], extraFields=True)
-
-  elif argv[0] == "Jd" and len(argv) == 2:
-    jsonQuery("dump", argv[1], extraFields=True, decode=True)
-  elif argv[0] == "Jd" and len(argv) == 3:
-    jsonQuery("dump", argv[1], argv[2], extraFields=True, decode=True)
-
-  elif argv[0] == "qa" and len(argv) == 2:
-    jsonQuery("qa", argv[1])
-  elif argv[0] == "qa" and len(argv) == 3:
-    jsonQuery("qa", argv[1], argv[2])
-
-  elif argv[0] == "qax" and len(argv) == 2:
-    jsonQuery("qa", argv[1], rescan=True)
-  elif argv[0] == "qax" and len(argv) == 3:
-    jsonQuery("qa", argv[1], argv[2], rescan=True)
+    if _multi_call != []:
+      for x in _multi_call:
+        jsonQuery(_action, mediatype=x, filter=_filter,
+                  force=_force, lastRun=_lastRun, nodownload=_nodownload,
+                  rescan=_rescan, decode=_decode, extraFields=_extraFields)
+      if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun)
+    elif len(argv) in [2, 3]:
+      jsonQuery(_action, mediatype=argv[1], filter=_filter,
+                force=_force, lastRun=_lastRun, nodownload=_nodownload,
+                rescan=_rescan, decode=_decode, extraFields=_extraFields)
+      if _stats: TOTALS.libraryStats(item=argv[1], filter=_filter, lastRun=_lastRun)
+    else:
+      usage(1)
 
   elif argv[0] == "d" and len(argv) >= 2:
     sqlDelete(argv[1:])
@@ -3202,8 +3179,8 @@ def main(argv):
   elif argv[0] == "execw" and len(argv) > 1:
     execAddon(argv[1], argv[2:], wait=True)
 
-  elif argv[0] == "missing" and len(argv) == 3:
-    jsonQuery(action="missing", mediatype=argv[1], label=argv[2])
+  elif argv[0] == "missing" and len(argv) >= 3:
+    jsonQuery(action="missing", mediatype=argv[1], labels=argv[2:])
 
   else:
     usage(1)
