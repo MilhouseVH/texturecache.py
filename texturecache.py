@@ -167,7 +167,7 @@ class MyConfiguration(object):
         try:
           temp = config.get("xbmc", key)
         except ConfigParser.NoOptionError:
-          temp = ""
+          temp = None
         if temp and temp.startswith("+"):
           temp = temp[1:]
           temp2 = self.QA_FIELDS.get(key, "")
@@ -175,7 +175,7 @@ class MyConfiguration(object):
           temp = "%s%s " % (temp2, temp.strip())
           self.QA_FIELDS[key] = temp
         else:
-          self.QA_FIELDS[key] = temp if temp != "" else self.QA_FIELDS.get(key, None)
+          self.QA_FIELDS[key] = temp if temp != None else self.QA_FIELDS.get(key, None)
 
     self.QAPERIOD = int(config.get("xbmc", "qaperiod"))
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
