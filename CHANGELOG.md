@@ -1,5 +1,31 @@
 #Changelog
 
+##Version 0.6.5 (22/05/2013)
+* Added `@config=filename` so that alternative property files can be specified at run time. Specify either an absolute path and filename, or just the filename to be searched in current directory and then the directory of the script.
+* Added `@section=name` so that properties from a specific property section will be used. Sections are processed in addition to the "global" (default, un-named) section.
+
+  `@config` and `@section` can be used in conjunction.
+
+  #####Example properties file:
+  <pre>webserver.port = 8080
+  webserver.username = username
+  webserver.password = password
+  extrajson.movies = streamdetails, file, mpaa, rating, plot
+  
+  [lounge]
+  xbmc.host = htpc
+  download.threads = 10
+  cache.castthumb = yes
+  lastrunfile=/tmp/lrf_lounge.dat
+  
+  [bedroom]
+  xbmc.host = rpi1
+  download.threads = 2
+  cache.castthumb = no
+  lastrunfile=/tmp/lrf_bedroom.dat</pre>
+
+  eg. `lc movies @config=./cache.cfg @section=lounge`
+
 ##Version 0.6.4 (22/05/2013)
 * Added support for properties as command line arguments - eg. @xbmc.host=192.168.0.8. Each property must be prefixed with @ and be a key=value pair. Properties can appear anywhere in the command line, and will be processed from left to right. Command line properties will be appeneded to those properties retrieved from the properties file.
 

@@ -51,42 +51,46 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.6.4"
+    self.VERSION="0.6.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
-    serial_urls = "assets\.fanart\.tv"
-
-    config = ConfigParser.SafeConfigParser(defaults={
-                                            "format": "%%06d",
-                                            "sep": "|",
-                                            "userdata": "~/.xbmc/userdata",
-                                            "dbfile": "Database/Textures13.db",
-                                            "thumbnails": "Thumbnails",
-                                            "xbmc.host": "localhost",
-                                            "webserver.port": "8080",
-                                            "webserver.username": None,
-                                            "webserver.password": None,
-                                            "rpc.port": "9090",
-                                            "download.threads": "2",
-                                            "qaperiod": "30",
-                                            "logfile": None,
-                                            "lastrunfile": None
-                                            }
-                                          )
-
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
+    self.GLOBAL_SECTION = "global"
+    self.THIS_SECTION = self.GLOBAL_SECTION
     self.CONFIG_NAME = "texturecache.cfg"
 
-    # Try and find a config file in current directory, else look in
-    # same directory as script itself
-    self.FILENAME = "%s%s%s" % (os.getcwd(), os.sep, self.CONFIG_NAME)
-    if not os.path.exists(self.FILENAME):
-      self.FILENAME = "%s%s%s" % (os.path.dirname(__file__), os.sep, self.CONFIG_NAME)
+    serial_urls = "assets\.fanart\.tv"
+    embedded_urls = "image://video, image://music"
+
+    config = ConfigParser.SafeConfigParser()
+
+    #Use @section argument if passed on command line
+    for arg in list(argv):
+      if arg.startswith("@section") and arg.find("=") != -1:
+        self.THIS_SECTION = arg.split("=")[1].strip()
+        argv.remove(arg)
+        break
+
+    #Use @config if passed on command line
+    for arg in list(argv):
+      if arg.startswith("@config") and arg.find("=") != -1:
+        self.CONFIG_NAME = arg.split("=")[1].strip()
+        argv.remove(arg)
+        break
+
+    # Use the default or user specified config filename.
+    # If it doesn't exist and is a relative filename, try and find a config
+    # file in the current directory, otherwise look in same directory as script itself.
+    self.FILENAME = os.path.expanduser(self.CONFIG_NAME)
+    if not os.path.exists(self.FILENAME) and not os.path.isabs(self.FILENAME):
+      self.FILENAME = "%s%s%s" % (os.getcwd(), os.sep, self.CONFIG_NAME)
+      if not os.path.exists(self.FILENAME):
+        self.FILENAME = "%s%s%s" % (os.path.dirname(__file__), os.sep, self.CONFIG_NAME)
 
     cfg = StringIO.StringIO()
-    cfg.write("[xbmc]\n")
+    cfg.write("[%s]\n" % self.GLOBAL_SECTION)
 
     if os.path.exists(self.FILENAME):
       cfg.write(open(self.FILENAME, "r").read())
@@ -102,12 +106,12 @@ class MyConfiguration(object):
     cfg.seek(0, os.SEEK_SET)
     config.readfp(cfg)
 
-    self.IDFORMAT = config.get("xbmc", "format")
-    self.FSEP = config.get("xbmc", "sep")
+    self.IDFORMAT = self.getValue(config, "format", "%%06d")
+    self.FSEP = self.getValue(config, "sep", "|")
 
-    self.XBMC_BASE = os.path.expanduser(config.get("xbmc", "userdata"))
-    self.TEXTUREDB = config.get("xbmc", "dbfile")
-    self.THUMBNAILS = config.get("xbmc", "thumbnails")
+    self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", "~/.xbmc/userdata"))
+    self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
+    self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
     if self.XBMC_BASE[-1:] != "/": self.XBMC_BASE += "/"
     if self.THUMBNAILS[-1:] != "/": self.THUMBNAILS += "/"
@@ -116,19 +120,28 @@ class MyConfiguration(object):
     self.TEXTUREDB = self.TEXTUREDB.replace("/", os.sep)
     self.THUMBNAILS = self.THUMBNAILS.replace("/", os.sep)
 
-    self.XBMC_HOST = config.get("xbmc", "xbmc.host")
-    self.WEB_PORT = config.get("xbmc", "webserver.port")
-    self.RPC_PORT = config.get("xbmc", "rpc.port")
+    self.XBMC_HOST = self.getValue(config, "xbmc.host", "localhost")
+    self.WEB_PORT = self.getValue(config, "webserver.port", "8080")
+    self.RPC_PORT = self.getValue(config, "rpc.port", "9090")
+    self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
+    web_user = self.getValue(config, "webserver.username", "")
+    web_pass = self.getValue(config, "webserver.password", "")
 
-    self.DOWNLOAD_THREADS_DEFAULT = int(config.get("xbmc", "download.threads"))
+    if (web_user and web_pass):
+      token = '%s:%s' % (web_user, web_pass)
+      if sys.version_info >= (3, 0):
+        self.WEB_AUTH_TOKEN = base64.encodestring(bytes(token, "utf-8")).decode()
+      else:
+        self.WEB_AUTH_TOKEN = base64.encodestring(token)
+      self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace('\n', '')
+    else:
+      self.WEB_AUTH_TOKEN = None
+
+    self.DOWNLOAD_THREADS_DEFAULT = int(self.getValue(config, "download.threads", "2"))
 
     self.DOWNLOAD_THREADS = {}
     for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
-      temp = self.DOWNLOAD_THREADS_DEFAULT
-      try:
-        temp = int(config.get("xbmc", "download.threads.%s" % x))
-      except ConfigParser.NoOptionError:
-        pass
+      temp = int(self.getValue(config, "download.threads.%s" % x, self.DOWNLOAD_THREADS_DEFAULT))
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
 
     self.SINGLETHREAD_URLS = self.getPatternFromList(config, "singlethread.urls", serial_urls)
@@ -156,18 +169,12 @@ class MyConfiguration(object):
               "movies", "sets",
               "tvshows.tvshow", "tvshows.season", "tvshows.episode"]:
       key = "extrajson.%s" % x
-      try:
-        temp = config.get("xbmc", key)
-      except ConfigParser.NoOptionError:
-        temp = ""
+      temp = self.getValue(config, key, "")
       self.XTRAJSON[key] = temp if temp != "" else None
 
       for f in ["zero", "blank", "art"]:
         key = "qa.%s.%s" % (f, x)
-        try:
-          temp = config.get("xbmc", key)
-        except ConfigParser.NoOptionError:
-          temp = None
+        temp = self.getValue(config, key, "")
         if temp and temp.startswith("+"):
           temp = temp[1:]
           temp2 = self.QA_FIELDS.get(key, "")
@@ -177,40 +184,26 @@ class MyConfiguration(object):
         else:
           self.QA_FIELDS[key] = temp if temp != None else self.QA_FIELDS.get(key, None)
 
-    self.QAPERIOD = int(config.get("xbmc", "qaperiod"))
+    self.QAPERIOD = int(self.getValue(config, "qaperiod", "30"))
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
     self.QADATE = adate.strftime("%Y-%m-%d")
 
     self.QA_FILE = self.getBoolean(config, "qafile", "no")
-    self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", "image://video, image://music")
-    self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", None)
+    self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls)
+    self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
-    self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
 
-    web_user = config.get("xbmc", "webserver.username")
-    web_pass = config.get("xbmc", "webserver.password")
-
-    if (web_user and web_pass):
-      token = '%s:%s' % (web_user, web_pass)
-      if sys.version_info >= (3, 0):
-        self.WEB_AUTH_TOKEN = base64.encodestring(bytes(token, "utf-8")).decode()
-      else:
-        self.WEB_AUTH_TOKEN = base64.encodestring(token)
-      self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace('\n', '')
-    else:
-      self.WEB_AUTH_TOKEN = None
-
-    self.LOGFILE = config.get("xbmc", "logfile")
+    self.LOGFILE = self.getValue(config, "logfile", "")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "no")
 
-    self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", "image://video, image://music")
-    self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", None)
+    self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls)
+    self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", "")
 
     self.RECACHEALL = self.getBoolean(config, "allow.recacheall","no")
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
 
-    self.LASTRUNFILE = config.get("xbmc", "lastrunfile")
+    self.LASTRUNFILE = self.getValue(config, "lastrunfile", "")
     self.LASTRUNFILE_DATETIME = None
     if self.LASTRUNFILE and os.path.exists(self.LASTRUNFILE):
         temp = datetime.datetime.fromtimestamp(os.path.getmtime(self.LASTRUNFILE))
@@ -218,25 +211,33 @@ class MyConfiguration(object):
 
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
 
-    self.NONMEDIA_FILETYPES = self.getSimpleList(config, "nonmedia.filetypes")
+    self.NONMEDIA_FILETYPES = self.getSimpleList(config, "nonmedia.filetypes", "")
+
+  def getValue(self, config, aKey, default=None):
+    value = default
+
+    try:
+      value = config.get(self.THIS_SECTION, aKey)
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+      if self.THIS_SECTION != self.GLOBAL_SECTION:
+        try:
+          value = config.get(self.GLOBAL_SECTION, aKey)
+        except ConfigParser.NoOptionError:
+          if default == None:
+            raise ConfigParser.NoOptionError(aKey, "%s (or global section)" % self.THIS_SECTION)
+      else:
+        if default == None:
+          raise ConfigParser.NoOptionError(aKey, self.GLOBAL_SECTION)
+
+    return value
 
   # default value will be used if key is present, but without a value
   def getBoolean(self, config, aKey, default="no"):
-    try:
-      temp = config.get("xbmc", aKey)
-    except ConfigParser.NoOptionError:
-      temp = default
-
-    temp = temp.lower()
-
+    temp = self.getValue(config, aKey, default).lower()
     return True if (temp == "yes" or temp == "true") else False
 
-  def getSimpleList(self, config, aKey, default=None):
-
-    try:
-      aStr = config.get("xbmc", aKey)
-    except ConfigParser.NoOptionError:
-      aStr = default
+  def getSimpleList(self, config, aKey, default=""):
+    aStr = self.getValue(config, aKey, default)
 
     newlist = []
 
@@ -246,18 +247,13 @@ class MyConfiguration(object):
 
     return newlist
 
-  def getPatternFromList(self, config, aKey, default=None):
-    aList = default
+  def getPatternFromList(self, config, aKey, default=""):
+    aList = self.getValue(config, aKey, default)
 
-    try:
-      aList = config.get("xbmc", aKey)
-
-      if aList and aList.startswith("+"):
-        aList = aList[1:]
-        if default and default != "" and aList != "":
-          aList = "%s,%s " % (default, aList.strip())
-    except ConfigParser.NoOptionError:
-      pass
+    if aList and aList.startswith("+"):
+      aList = aList[1:]
+      if default and default != "" and aList != "":
+        aList = "%s,%s " % (default, aList.strip())
 
     return [re.compile(x.strip()) for x in aList.split(',')] if aList else aList
 
@@ -281,7 +277,7 @@ class MyConfiguration(object):
     newlist = []
 
     if aStr:
-      alist = aStr.replace(","," ").split()
+      alist = aStr.replace(",", " ").split()
       for item in alist:
         if stripModifier and item.startswith("?"):
           newlist.append(item[1:])
@@ -317,7 +313,6 @@ class MyConfiguration(object):
     print("  thumbnails = %s " % self.THUMBNAILS)
     print("  xbmc.host = %s" % self.XBMC_HOST)
     print("  webserver.port = %s" % self.WEB_PORT)
-    print("  webserver.singleshot = %s" % self.BooleanIsYesNo(self.WEB_SINGLESHOT))
     print("  rpc.port = %s" % self.RPC_PORT)
     print("  download.threads = %d" % self.DOWNLOAD_THREADS_DEFAULT)
     if self.DOWNLOAD_THREADS != {}:

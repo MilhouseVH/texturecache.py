@@ -353,10 +353,35 @@ Use `download.threads` to vary number of threads used when caching data. Class s
 
 Specify a comma delimited list of pattherns in `singlethread.urls` to force download on a single thread, necessary for sites that limit the number of concurrent requests. Example: `singlethread.urls = assets.fanart.tv`.
 
-Properties may also be specified on the command line, using the syntax `@<key>=<value>` - such command line property values will override any matching property retrieved from the properties file.
+##Command Line Properties
+
+As an alterantive or in addition to a properties file, properties may be specified on the command line, using the syntax `@<key>=<value>` - such command line property values will override any matching property retrieved from the properties file.
+
+In addition, the name of the properties file may be specified using the `@config` command line property, eg. `@config=./myconfig.cfg`.
+
+Also, a specific property section may be used, @section=name, allowing multiple clients to be configured within a single property file, sharing a "global" (default, un-named) section with unique properties specified within each section. For example:
+
+  <pre>webserver.port = 8080
+  webserver.username = username
+  webserver.password = password
+  extrajson.movies = streamdetails, file, mpaa, rating, plot
+
+  [lounge]
+  xbmc.host = 192.168.0.4
+  download.threads = 10
+  cache.castthumb = yes
+  lastrunfile=/tmp/lrf_lounge.dat
+
+  [bedroom]
+  xbmc.host = 192.168.0.8
+  download.threads = 2
+  cache.castthumb = no
+  lastrunfile=/tmp/lrf_bedroom.dat</pre>
+
+  `texturecache.py lc movies @config=/home/user/cache.cfg @section=lounge`
 
 
-Run the script without arguments for basic usage, and with `config` parameter to view current configuration information.
+Run the script without arguments for basic usage, and with `config` option to view current configuration information.
 
 See texturecache.py @ XBMC Forums: [Click here to goto Forum](http://forum.xbmc.org/showthread.php?tid=158373)
 =====
