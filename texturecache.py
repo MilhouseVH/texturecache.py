@@ -49,9 +49,9 @@ else:
 # Config class. Will be a global object.
 #
 class MyConfiguration(object):
-  def __init__( self ):
+  def __init__( self, argv ):
 
-    self.VERSION="0.6.3"
+    self.VERSION="0.6.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -87,7 +87,18 @@ class MyConfiguration(object):
 
     cfg = StringIO.StringIO()
     cfg.write("[xbmc]\n")
-    if os.path.exists(self.FILENAME): cfg.write(open(self.FILENAME, "r").read())
+
+    if os.path.exists(self.FILENAME):
+      cfg.write(open(self.FILENAME, "r").read())
+      cfg.write("\n")
+
+    #Append any command line settings - eg. @xbmc.host=192.168.0.8
+    #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
+    for arg in list(argv):
+      if arg.startswith("@") and arg.find("=") != -1:
+        cfg.write("%s\n" % arg[1:])
+        argv.remove(arg)
+
     cfg.seek(0, os.SEEK_SET)
     config.readfp(cfg)
 
@@ -2838,14 +2849,14 @@ def usage(EXIT_CODE):
 
   sys.exit(EXIT_CODE)
 
-def loadConfig():
+def loadConfig(argv):
   global DBVERSION, MYWEB, MYSOCKET, MYDB
   global TOTALS
   global gConfig, gLogger
 
   DBVERSION = MYWEB = MYSOCKET = MYDB = None
 
-  gConfig = MyConfiguration()
+  gConfig = MyConfiguration(argv)
   gLogger = MyLogger()
   TOTALS  = MyTotals(gConfig.LASTRUNFILE_DATETIME)
 
@@ -3036,7 +3047,7 @@ def downloadLatestVersion(force=False):
 
 def main(argv):
 
-  loadConfig()
+  loadConfig(argv)
 
   if len(argv) == 0: usage(1)
 
@@ -3094,8 +3105,8 @@ def main(argv):
 
     _multi_call = []
     if len(argv) == 1:
-      multi_call.remove("songs")
       _multi_call = multi_call
+      _multi_call.remove("songs")
     else:
       if argv[1] == "video": _multi_call = multi_call_v
       if argv[1] == "music": _multi_call = multi_call_m

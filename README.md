@@ -353,6 +353,8 @@ Use `download.threads` to vary number of threads used when caching data. Class s
 
 Specify a comma delimited list of pattherns in `singlethread.urls` to force download on a single thread, necessary for sites that limit the number of concurrent requests. Example: `singlethread.urls = assets.fanart.tv`.
 
+Properties may also be specified on the command line, using the syntax `@<key>=<value>` - such command line property values will override any matching property retrieved from the properties file.
+
 
 Run the script without arguments for basic usage, and with `config` parameter to view current configuration information.
 

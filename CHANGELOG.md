@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.6.4 (22/05/2013)
+* Added support for properties as command line arguments - eg. @xbmc.host=192.168.0.8. Each property must be prefixed with @ and be a key=value pair. Properties can appear anywhere in the command line, and will be processed from left to right. Command line properties will be appeneded to those properties retrieved from the properties file.
+
 ##Version 0.6.3 (21/05/2013)
 * Added additional default non-media filetypes (.cue, .log, .sub, .idx, .zip, .rar etc.)
 * Added `video`, `music` and `all` meta media-classes to `c`/`C`, `nc`, `lc`/`lnc`, `j`/`J`/`jd`/`Jd` and `qa`/`qax` options - eg. `c video` will cache movies+sets+tvshows, while `c music` will cache artists+albums+songs. `all` is addons+music+video.
