@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.6.6 (23/05/2013)
+* Fix: Incorrect default `format` property
+
 ##Version 0.6.5 (22/05/2013)
 * Added `@config=filename` so that alternative property files can be specified at run time. Specify either an absolute path and filename, or just the filename to be searched in current directory and then the directory of the script.
 * Added `@section=name` so that properties from a specific property section will be used. Sections are processed in addition to the "global" (default, un-named) section.

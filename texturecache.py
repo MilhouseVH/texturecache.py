@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.6.5"
+    self.VERSION="0.6.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -106,7 +106,7 @@ class MyConfiguration(object):
     cfg.seek(0, os.SEEK_SET)
     config.readfp(cfg)
 
-    self.IDFORMAT = self.getValue(config, "format", "%%06d")
+    self.IDFORMAT = self.getValue(config, "format", "%06d")
     self.FSEP = self.getValue(config, "sep", "|")
 
     self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", "~/.xbmc/userdata"))
