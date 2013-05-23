@@ -359,7 +359,7 @@ As an alterantive or in addition to a properties file, properties may be specifi
 
 In addition, the name of the properties file may be specified using the `@config` command line property, eg. `@config=./myconfig.cfg`.
 
-Also, a specific property section may be used, @section=name, allowing multiple clients to be configured within a single property file, sharing a "global" (default, un-named) section with unique properties specified within each section. For example:
+Also, a specific property section may be used, `@section=name`, allowing multiple clients to be configured within a single property file, sharing a "global" (default, un-named) section with unique properties specified within each section. For example:
 
   <pre>webserver.port = 8080
   webserver.username = username
@@ -378,10 +378,10 @@ Also, a specific property section may be used, @section=name, allowing multiple 
   cache.castthumb = no
   lastrunfile=/tmp/lrf_bedroom.dat</pre>
 
-  `texturecache.py lc movies @config=/home/user/cache.cfg @section=lounge`
+  then: `texturecache.py lc movies @config=/home/user/cache.cfg @section=lounge`
 
 
 Run the script without arguments for basic usage, and with `config` option to view current configuration information.
 
-See texturecache.py @ XBMC Forums: [Click here to goto Forum](http://forum.xbmc.org/showthread.php?tid=158373)
+See [texturecache.py @ XBMC Forums](http://forum.xbmc.org/showthread.php?tid=158373).
 =====
