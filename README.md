@@ -101,9 +101,9 @@ The utility has several options that operate on media library items grouped into
 * tvshows
 
 The following "meta" media classes can also be used in place of one of the above media classes:
-* video - movies + sets + tvshows
-* music - albums + artists + songs
-* all - addons + pvr.tv + pvr.radio + movies + sets + tvshows + albums + artists + songs
+* video (equivalent to: `movies` + `sets` + `tvshows`)
+* music (equivalent to: `albums` + `artists` + `songs`)
+* all (equivalent to: `addons` + `pvr.tv` + `pvr.radio` + `movies` + `sets` + `tvshows` + `albums` + `artists` + `songs`)
 
 In most cases, when performing an operation it is possible to specify a filter to further restrict processing/selection of particular items, for example, to extract the default media library details for all movies whose name contains "zombie":
 ####Code:
