@@ -51,11 +51,13 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.6.6"
+    self.VERSION="0.6.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
+
+    self.HAS_PVR = False
 
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
@@ -98,8 +100,13 @@ class MyConfiguration(object):
 
     #Append any command line settings - eg. @xbmc.host=192.168.0.8
     #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
+    #Output a section header if using non-global section - sections are merged together.
+    SECTION_HDR=False
     for arg in list(argv):
       if arg.startswith("@") and arg.find("=") != -1:
+        if self.GLOBAL_SECTION != self.THIS_SECTION and not SECTION_HDR:
+          SECTION_HDR = True
+          cfg.write("[%s]\n" % self.THIS_SECTION)
         cfg.write("%s\n" % arg[1:])
         argv.remove(arg)
 
@@ -140,7 +147,7 @@ class MyConfiguration(object):
     self.DOWNLOAD_THREADS_DEFAULT = int(self.getValue(config, "download.threads", "2"))
 
     self.DOWNLOAD_THREADS = {}
-    for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
+    for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
       temp = int(self.getValue(config, "download.threads.%s" % x, self.DOWNLOAD_THREADS_DEFAULT))
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
 
@@ -164,17 +171,24 @@ class MyConfiguration(object):
     self.QA_FIELDS["qa.art.tvshows.season"] = "poster"
     self.QA_FIELDS["qa.art.tvshows.episode"] = "thumb"
 
+    self.QA_FIELDS["qa.art.pvr.tv.channel"] = "thumbnail"
+    self.QA_FIELDS["qa.art.pvr.radio.channel"] = "thumbnail"
+
     for x in ["addons",
               "albums", "artists", "songs",
               "movies", "sets",
-              "tvshows.tvshow", "tvshows.season", "tvshows.episode"]:
+              "tvshows.tvshow", "tvshows.season", "tvshows.episode",
+              "pvr.tv", "pvr.radio", "pvr.tv.channel", "pvr.radio.channel"]:
       key = "extrajson.%s" % x
       temp = self.getValue(config, key, "")
       self.XTRAJSON[key] = temp if temp != "" else None
 
       for f in ["zero", "blank", "art"]:
         key = "qa.%s.%s" % (f, x)
-        temp = self.getValue(config, key, "")
+        try:
+          temp = self.getValue(config, key, None)
+        except:
+          temp = None
         if temp and temp.startswith("+"):
           temp = temp[1:]
           temp2 = self.QA_FIELDS.get(key, "")
@@ -264,9 +278,10 @@ class MyConfiguration(object):
     return ", ".join(t)
 
   def getQAFields(self, qatype, mediatype, stripModifier=True):
-
     if mediatype in ["tvshows", "seasons", "episodes"]:
       mediatype = "tvshows.%s" % mediatype[:-1]
+    elif mediatype in ["pvr.tv", "pvr.radio", "pvr.channel"]:
+      mediatype = "pvr.%s" % mediatype.split(".")[1]
     elif mediatype == "tags":
       mediatype = "movies"
 
@@ -277,8 +292,7 @@ class MyConfiguration(object):
     newlist = []
 
     if aStr:
-      alist = aStr.replace(",", " ").split()
-      for item in alist:
+      for item in aStr.split(","):
         if stripModifier and item.startswith("?"):
           newlist.append(item[1:])
         else:
@@ -425,7 +439,7 @@ class MyLogger():
   def reset(self, initialValue=0):
     self.now = initialValue
 
-  def out( self, data, newLine=False, log=False ):
+  def out(self, data, newLine=False, log=False):
     with threading.Lock():
       udata = self.toUnicode(data)
       ulen = len(data)
@@ -1035,12 +1049,12 @@ class MyJSONComms(object):
     return True if method.endswith("Library.OnCleanFinished") else False
 
   def addProperties(self, request, fields):
+    if not "properties" in request["params"]: return
     aList = request["params"]["properties"]
     if fields != None:
-      for f in fields.split():
-        newField = f.replace(",", "")
-        if not newField in aList:
-          aList.append(newField)
+      for f in fields.split(","):
+        if not f in aList:
+          aList.append(f.strip())
     request["params"]["properties"] = aList
 
   def addFilter(self, request, newFilter, condition="and"):
@@ -1250,7 +1264,7 @@ class MyJSONComms(object):
   def unquoteArtwork(self, items):
     for item in items:
       for field in item:
-        if field in ["seasons", "episodes"]: self.unquoteArtwork(item[field])
+        if field in ["seasons", "episodes", "channels"]: self.unquoteArtwork(item[field])
 
         if field in ["fanart", "thumbnail"]: item[field] = urllib2.unquote(item[field])
 
@@ -1367,7 +1381,7 @@ class MyJSONComms(object):
 
   def getData(self, action, mediatype,
               filter = None, useExtraFields = False, secondaryFields = None,
-              showid = None, seasonid = None, lastRun = False):
+              showid = None, seasonid = None, channelgroupid = None, lastRun = False):
 
     XTRA = mediatype
     SECTION = mediatype
@@ -1380,6 +1394,21 @@ class MyJSONComms(object):
                  "params":{"properties":["name", "thumbnail", "fanart"]}}
       FILTER = "name"
       TITLE = "name"
+    elif mediatype in ["pvr.tv", "pvr.radio"]:
+      REQUEST = {"method":"PVR.GetChannelGroups",
+                 "params":{"channeltype": mediatype.split(".")[1]}}
+      SECTION = "channelgroups"
+      FILTER = "channeltype"
+      TITLE = "label"
+      IDENTIFIER = "channelgroupid"
+    elif mediatype in ["pvr.tv.channel", "pvr.radio.channel"]:
+      REQUEST = {"method":"PVR.GetChannels",
+                 "params":{"channelgroupid": channelgroupid,
+                           "properties": ["channeltype", "channel", "thumbnail", "hidden", "locked", "lastplayed"]}}
+      SECTION = "channels"
+      FILTER = "channel"
+      TITLE = "channel"
+      IDENTIFIER = "channelid"
     elif mediatype == "albums":
       REQUEST = {"method":"AudioLibrary.GetAlbums",
                  "params":{"sort": {"order": "ascending", "method": "label"},
@@ -1441,7 +1470,7 @@ class MyJSONComms(object):
             word += 1
             if (word%2 == 0) and tag in ["and","or"]: filterBoolean = tag
             else: self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
-    elif filter and filter.strip() != "" and not mediatype in ["addons", "sets", "seasons", "episodes"]:
+    elif filter and filter.strip() != "" and not mediatype in ["addons", "sets", "seasons", "episodes", "pvr.tv", "pvr.radio", "pvr.channels"]:
         self.addFilter(REQUEST, {"field": FILTER, "operator": "contains", "value": filter})
 
     if mediatype in ["movies", "tags", "episodes"]:
@@ -1469,6 +1498,9 @@ class MyJSONComms(object):
       xtraFields = self.config.XTRAJSON["extrajson.%s" % XTRA] if XTRA != "" else None
       if useExtraFields and xtraFields:
         self.addProperties(REQUEST, xtraFields)
+      if secondaryFields:
+        self.addProperties(REQUEST, secondaryFields)
+    elif action == "query" and not mediatype in ["tvshows", "seasons", "pvr.tv", "pvr.radio"]:
       if secondaryFields:
         self.addProperties(REQUEST, secondaryFields)
     elif action == "cache":
@@ -1606,13 +1638,17 @@ class MyTotals(object):
   def libraryStats(self, item="", multi=[], filter="", lastRun=False):
     if multi: item = "/".join(multi)
 
+    # Determine the artwork types that have been accumulated
     items = {}
     for a in self.TOTALS:
       for c in self.TOTALS[a]:
         if not c in items: items[c] = None
 
-  # Ensure some basic items are included in the summary
-    if not "fanart" in items: items["fanart"] = None
+    # Ensure some basic items are included in the summary
+    if item.find("pvr.") != -1:
+      if not "thumbnail" in items: items["thumbnail"] = None
+    else:
+      if not "fanart" in items: items["fanart"] = None
     if item.find("movies") != -1:
       if not "poster" in items: items["poster"] = None
     if item.find("tvshows") != -1:
@@ -1791,8 +1827,10 @@ def removeNonAscii(s, replaceWith = ""):
 #
 # Sets doesn't support filters, so filter this list after retrieval.
 #
-def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, decode=False, nodownload=False, lastRun=False, labels=None):
-  if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows"]:
+def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, \
+                      decode=False, nodownload=False, lastRun=False, labels=None, query=""):
+
+  if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
 
@@ -1817,32 +1855,57 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   TOTALS.TimeStart(mediatype, "Load")
 
-  (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun = lastRun)
+  if action == "query":
+    secondaryFields = parseQuery(query)[0]
+  else:
+    secondaryFields = None
 
-  if "result" in data and section_name in data["result"]:
+  if mediatype in ["pvr.tv", "pvr.radio"] and not gConfig.HAS_PVR:
+    (section_name, title_name, id_name, data) = ("", "", "", [])
+  else:
+    (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun=lastRun, secondaryFields=secondaryFields)
+
+  if data and "result" in data and section_name in data["result"]:
     data = data["result"][section_name]
   else:
     data = []
 
-  if mediatype in ["addons", "sets"] and filter:
+  if data and filter and mediatype in ["addons", "sets", "pvr.tv", "pvr.radio"]:
+    gLogger.log("Filtering %s on %s = %s" % (mediatype, title_name, filter))
     filteredData = []
     for d in data:
       if re.search(filter, d[title_name], re.IGNORECASE):
         filteredData.append(d)
     data = filteredData
 
+  # Combine PVR channelgroups with PVR channels to create a hierarchical structure that can be parsed
+  if mediatype in ["pvr.tv", "pvr.radio"]:
+    pvrdata = []
+    for cg in data:
+      (s1, t1, i1, data1) = jcomms.getData(action, "%s.channel" % mediatype, filter, extraFields, channelgroupid=cg["channelgroupid"], lastRun=lastRun, secondaryFields=secondaryFields)
+      if "result" in data1:
+        channels = []
+        for channel in data1["result"].get(s1, None):
+          if "label" in channel: del channel["label"]
+          channels.append(channel)
+        pvrdata.append({"label":          cg["label"],
+                        "channeltype":    cg["channeltype"],
+                        "channelgroupid": cg["channelgroupid"],
+                        "channels": channels})
+    data = pvrdata
+
   if mediatype == "tvshows":
     for tvshow in data:
       title = tvshow["title"]
       gLogger.progress("Loading TV Show: [%s]..." % title, every = 1)
-      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun = lastRun)
+      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun=lastRun)
       limits = data2["result"]["limits"]
       if limits["total"] == 0: continue
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
         gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid), every = 1)
-        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun = lastRun)
+        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun=lastRun, secondaryFields=secondaryFields)
         limits = data3["result"]["limits"]
         if limits["total"] == 0: continue
         season[s3] = data3["result"][s3]
@@ -1884,6 +1947,8 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     elif action == "missing":
       fileList = jcomms.getAllFilesForSource(mediatype, labels)
       missingFiles(mediatype, data, fileList, title_name, id_name)
+    elif action == "query":
+      queryLibrary(mediatype, query, data, title_name, id_name)
 
   gLogger.progress("")
 
@@ -2073,7 +2138,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 # Iterate over all the elements, seeking out artwork to be stored in a list.
 # Use recursion to process season and episode sub-elements.
 #
-def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName = None, season = None):
+def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName = None, season = None, pvrGroup = None):
   gLogger.reset()
 
   SEASON_ALL = (showName != None and season == None)
@@ -2082,13 +2147,17 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
     if title_name in item: title = item[title_name]
 
     if showName:
+      mediatype = "tvshows"
       name = showName
       if season:
         episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        name = "%s, %s Episode %s" % (showName, season, episode)
       else:
-        season = title
         episode = None
-      mediatype = "tvshows"
+        name = "%s, %s" % (showName, title)
+    elif pvrGroup:
+        name = "%s, %s" % (pvrGroup, title)
+        episode = None
     else:
       name = title
       if title_name != "artist" and "artist" in item:
@@ -2125,10 +2194,12 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
           mediaitems.append(MyMediaItem(mediatype, "cast.thumb", a["name"], name, None, a["thumbnail"], 0, None, item[id_name], False))
 
     if "seasons" in item:
-      parseURLData(jcomms, "seasons", mediaitems, imagecache, item["seasons"], "label", "season", showName = title)
+      parseURLData(jcomms, "seasons", mediaitems, imagecache, item["seasons"], "label", "season", showName=title)
     if "episodes" in item:
-      parseURLData(jcomms, "episodes", mediaitems, imagecache, item["episodes"], "label", "episodeid", showName = showName, season = title)
+      parseURLData(jcomms, "episodes", mediaitems, imagecache, item["episodes"], "label", "episodeid", showName=showName, season=title)
       season = None
+    if "channels" in item:
+      parseURLData(jcomms, "%s.channel" % mediatype, mediaitems, imagecache, item["channels"], "channel", "channelid", pvrGroup=title)
 
 # Include or exclude url depending on basic properties - has it
 # been "seen" before (in which case, discard as no point caching
@@ -2156,7 +2227,7 @@ def evaluateURL(imgtype, url, imagecache):
   imagecache[url] = 0
   return True
 
-def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=None, mitems=None, showName=None, season=None):
+def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=None, mitems=None, showName=None, season=None, pvrGroup=None):
   gLogger.reset()
 
   if mitems == None:
@@ -2184,14 +2255,14 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     if title_name in item: title = item[title_name]
 
     if showName:
-      name = showName
       if season:
         episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
         name = "%s, %s Episode %s" % (showName, season, episode)
       else:
-        season = title
         episode = None
-        name = "%s, %s" % (showName, season)
+        name = "%s, %s" % (showName, title)
+    elif pvrGroup:
+        name = "%s, %s" % (pvrGroup, title)
     else:
       name = title
       season = None
@@ -2236,16 +2307,22 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
 
     if "seasons" in item:
       qaData("seasons", jcomms, database, item["seasons"], "label", "season", False, \
-              work=workItems, mitems=mediaitems, showName = title)
+              work=workItems, mitems=mediaitems, showName=title)
     if "episodes" in item:
       qaData("episodes", jcomms, database, item["episodes"], "label", "episodeid", False, \
-              work=workItems, mitems=mediaitems, showName = showName, season = title)
+              work=workItems, mitems=mediaitems, showName=showName, season=title)
       season = None
+    if "channels" in item:
+      qaData("%s.channel" % mediatype, jcomms, database, item["channels"], "channel", "channelid", False, \
+              work=workItems, mitems=mediaitems, pvrGroup=title)
 
     if missing != {}:
       if len(name) > 50: name = "%s...%s" % (name[0:23], name[-24:])
-      mtype = mediatype[:-1].capitalize()
-      if mtype == "Tvshow": mtype = "TVShow"
+      if mediatype.startswith("pvr."):
+        mtype = mediatype
+      else:
+        mtype = mediatype[:-1].capitalize()
+        if mtype == "Tvshow": mtype = "TVShow"
       mediaitems.append("%s [%-50s]: %s" % (mtype, name[0:50], ", ".join(missing)))
       if "file" in item and "".join(["Y" if missing[m] else "" for m in missing]) != "":
         dir = "%s;%s" % (mediatype, os.path.dirname(item["file"]))
@@ -2352,6 +2429,182 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
 
     if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
 
+def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=None, showName=None, season=None, pvrGroup=None):
+  gLogger.reset()
+
+  if mitems == None:
+      TOTALS.TimeStart(mediatype, "Parse")
+      workItems= {}
+      mediaitems = []
+  else:
+      workItems = work
+      mediaitems = mitems
+
+  fields, tuples = parseQuery(query)
+
+  for item in data:
+    libraryid = item[id_name]
+
+    if id_name == "songid":
+      if title_name in item and "artist" in item:
+        title = "%s (%s)" % (item[title_name], "/".join(item["artist"]))
+    else:
+      if title_name in item: title = item[title_name]
+
+    if showName:
+      if season:
+        episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        name = "%s, %s Episode %s" % (showName, season, episode)
+      else:
+        episode = None
+        name = "%s, %s" % (showName, title)
+    elif pvrGroup:
+        name = "%s, %s" % (pvrGroup, title)
+    else:
+      name = title
+      season = None
+      episode = None
+
+    gLogger.progress("Parsing [%s]..." % name, every = 25)
+
+    MATCHED=False
+    DISPLAY=""
+    try:
+      RESULTS=[]
+      for field, field_split, condition, value, logic in tuples:
+        temp = item
+        for f in field_split:
+          temp = searchItem(temp, f)
+          if temp == None: break
+
+        if temp != None:
+          if type(temp) is list:
+            for t in temp:
+              MATCHED = evaluateCondition(t, condition, value)
+              if MATCHED:
+                matched_value = t
+                break
+          else:
+            MATCHED = evaluateCondition(temp, condition, value)
+            if MATCHED: matched_value = temp
+        else:
+          MATCHED=False
+
+        RESULTS.append([MATCHED, logic])
+
+        if MATCHED:
+          try:
+            throw_exception = matched_value + 1
+            DISPLAY = "%s, %s = %s" % (DISPLAY, field, matched_value)
+          except:
+            DISPLAY = "%s, %s = \"%s\"" % (DISPLAY, field, matched_value)
+
+      MATCHED=False
+      for b, l in RESULTS:
+        if l == "and":
+          if b == False: MATCHED = False
+        elif l == "or":
+          if b == True: MATCHED = True
+        elif l == None:
+          MATCHED = b
+        else:
+          MATCHED = False
+    except:
+      pass
+
+    if MATCHED: mediaitems.append([name, DISPLAY[2:]])
+
+    if "seasons" in item:
+      queryLibrary("seasons", query, item["seasons"], "label", "season", \
+              work=workItems, mitems=mediaitems, showName=title)
+    if "episodes" in item:
+      queryLibrary("episodes", query, item["episodes"], "label", "episodeid", \
+              work=workItems, mitems=mediaitems, showName=showName, season=title)
+      season = None
+    if "channels" in item:
+      queryLibrary("%s.channel" % mediatype, query, item["channels"], "channel", "channelid", \
+              work=workItems, mitems=mediaitems, pvrGroup=title)
+
+  if mitems == None:
+    TOTALS.TimeEnd(mediatype, "Parse")
+    gLogger.progress("")
+    for m in mediaitems:
+      gLogger.out("Matched: [%-50s] %s" % (m[0], m[1]), newLine=True)
+
+def searchItem(data, field):
+  if field in data: return data[field]
+
+  if type(data) is list:
+    tList = []
+    for item in data:
+      value = searchItem(item, field)
+      if value: tList.append(value)
+    return tList
+
+  return None
+
+def evaluateCondition(input, condition, value):
+  if type(input) is int: value = int(value)
+  if type(input) is float: value = float(value)
+
+  if condition in ["=", "=="]:    return (input == value)
+  elif condition == "!=":         return (input != value)
+  elif condition == ">":          return (input > value)
+  elif condition == "<":          return (input < value)
+  elif condition == ">=":         return (input >= value)
+  elif condition == "<=":         return (input <= value)
+  elif condition == "contains":   return (input.find(value) != -1)
+  elif condition == "startswith": return (input.startswith(value))
+  elif condition == "endswith":   return (input.endswith(value))
+
+  return False
+
+def parseQuery(query):
+  condition = ["==", "=", "!=", ">", ">=", "<", "<=", "contains", "startswith", "endswith"]
+  logic = ["and", "or"]
+
+  fields = []
+  tuples = []
+
+  FIELDNAME_NEXT = True
+  tField = tValue = tCondition = tLogic = None
+
+  newValue = ""
+  IN_STR=False
+  for value in query:
+    if value == "'" or value == '"': IN_STR = not IN_STR
+    if value == " " and IN_STR:
+      newValue = "%s\t" % newValue
+    else:
+      newValue = "%s%s" % (newValue, value)
+
+  for value in newValue.split(" "):
+    if value == "": continue
+    value_lower = value.lower()
+    #and, or etc.
+    if value_lower  in logic:
+      FIELDNAME_NEXT=True
+      tLogic = value
+    # ==, >=, contains etc.
+    elif value_lower in condition:
+      if value == "=": value = "=="
+      FIELDNAME_NEXT=False
+      tCondition = value
+    #Value
+    elif not FIELDNAME_NEXT:
+      if value.startswith("'") or value.startswith('"'): value = value[1:]
+      if value.endswith("'") or value.endswith('"'): value = value[:-1]
+      FIELDNAME_NEXT=True
+      tValue = value.replace("\t", " ")
+      tuples.append([tField, tField.split("."), tCondition, tValue, tLogic])
+    #Field name
+    else:
+      tField = value_lower
+      fields.append(tField.split(".")[0])
+      FIELDNAME_NEXT=False
+
+  return ",".join(fields), tuples
+
 # Delete row by id, and corresponding file item
 def sqlDelete( ids=[] ):
   database = MyDB(gConfig, gLogger)
@@ -2452,7 +2705,8 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
         gLogger.log("Something is wrong here, that's far too many orphaned files - 5% limit exceeded!")
         gLogger.out("Found %d orphaned files for %d database files.\n"  % (len(orphanedfiles), len(dbfiles)))
         gLogger.out("This is far too many orphaned files for this number of database files, something may be wrong.\n")
-        gLogger.out("Check your configuration, database, and Thumbnails folder.\n")
+        gLogger.out("Check your configuration, database, and Thumbnails folder.\n\n")
+        gLogger.out("Add \"orphan.limit.check = no\" to the properties file if you want to disable this check.\n")
         return
       for ofile in orphanedfiles:
         gLogger.out("Orphaned file found: Name [%s], Created [%s], Size [%d]%s\n" % \
@@ -2467,8 +2721,11 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
     # Prune, with optional remove...
     if libraryFiles != None:
       if localfiles != []:
-        if purge_nonlibrary_artwork: gLogger.progress("Pruning cached images from texture cache...", newLine=True)
-        else: gLogger.out("The following items are present in the texture cache but not the media library:\n")
+        if purge_nonlibrary_artwork:
+          gLogger.out("Pruning cached images from texture cache...", newLine=True)
+        else:
+          gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
+        gLogger.out("", newLine=True)
       FSIZE=0
       for row in localfiles:
         database.dumpRow(row)
@@ -2644,6 +2901,23 @@ def getAllFiles(keyFunction):
                 if "thumbnail" in c:
                   files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
+  # PVR Channels
+  if gConfig.HAS_PVR:
+    gLogger.progress("Loading: PVR Channels...")
+    for channelType in ["tv", "radio"]:
+      REQUEST = {"method":"PVR.GetChannelGroups",
+                 "params":{"channeltype": channelType}}
+      pvrdata = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
+      if "result" in pvrdata:
+        for channelgroup in pvrdata["result"].get("channelgroups", None):
+          REQUEST = {"method":"PVR.GetChannels",
+                     "params":{"channelgroupid": channelgroup["channelgroupid"],
+                               "properties": ["channeltype", "channel", "thumbnail"]}}
+          channeldata = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
+          if "result" in channeldata:
+            for channel in channeldata["result"].get("channels", None):
+              files[keyFunction(channel["thumbnail"])] = "pvr.thumb"
+
   return files
 
 def pruneCache( purge_nonlibrary_artwork=False ):
@@ -2726,32 +3000,17 @@ def showStatus(idleTime=600):
              "params": { "booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo"] }}
   data = jcomms.sendJSON(REQUEST, "libSSaver")
   if "result" in data:
-    if "Library.IsScanningMusic" in data["result"]:
-      if data["result"]["Library.IsScanningMusic"]:
-        STATUS.append("Scanning Music: Yes")
-      else:
-        STATUS.append("Scanning Music: No")
-
-    if "Library.IsScanningVideo" in data["result"]:
-      if data["result"]["Library.IsScanningVideo"]:
-        STATUS.append("Scanning Video: Yes")
-      else:
-        STATUS.append("Scanning Video: No")
-
-    if "System.ScreenSaverActive" in data["result"]:
-      if data["result"]["System.ScreenSaverActive"]:
-        STATUS.append("ScreenSaverActive: Yes")
-      else:
-        STATUS.append("ScreenSaverActive: No")
+    STATUS.append("Scanning Music: %s" % ("Yes" if data["result"].get("Library.IsScanningMusic",False) else "No"))
+    STATUS.append("Scanning Video: %s" % ("Yes" if data["result"].get("Library.IsScanningVideo",False) else "No"))
+    STATUS.append("ScreenSaver Active: %s" % ("Yes" if data["result"].get("System.ScreenSaverActive",False) else "No"))
 
   property = "System.IdleTime(%s) " % idleTime
   REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
   data = jcomms.sendJSON(REQUEST, "libIdleTime")
-  if "result" in data and property in data["result"]:
-    if data["result"][property]:
-      STATUS.append("SystemIdle: Yes (for more than %s seconds)" % idleTime)
-    else:
-      STATUS.append("SystemIdle: No (for more than %s seconds)" % idleTime)
+  if "result" in data:
+    STATUS.append("System Idle > %ss: %s" % (idleTime, ("Yes" if data["result"].get(property,False) else "No")))
+
+  STATUS.append("PVR Enabled: %s" % ("Yes" if gConfig.HAS_PVR else "No"))
 
   REQUEST = {"method":"Player.GetActivePlayers"}
   data = jcomms.sendJSON(REQUEST, "libGetPlayers")
@@ -2799,7 +3058,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | missing class label [label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -2839,6 +3098,10 @@ def usage(EXIT_CODE):
   print("  version Show current version and check for new version")
   print("  update  Update to new version (if available)")
   print("")
+  print("Valid media classes: addons, pvr.tv, pvr.radio, artists, albums, songs, movies, sets, tags, tvshows")
+  print("Valid meta classes:  music (artists + albums + songs) and video (movies + sets + tvshows) and all (music + video + addons + pvr.tv + pvr.radio)")
+  print("Meta classes can be used in place of media classes for: c/C/nc/lc/lnc/j/J/jd/Jd/qa/qax options.")
+  print("")
   print("SQL Filter fields:")
   print("  id, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url")
 
@@ -2874,7 +3137,7 @@ def checkConfig(option):
   else:
     needWeb = False
 
-  if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","p","P",
+  if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
                 "vscan", "ascan", "vclean", "aclean", "directory", "sources",
                 "status", "monitor", "power",
                 "exec", "execw", "missing"]:
@@ -2932,6 +3195,11 @@ def checkConfig(option):
           jsonGotVersion = data["result"]["version"]
           if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
             jsonGotVersion = jsonGotVersion["major"]
+
+      REQUEST = {"method": "XBMC.GetInfoBooleans",
+                 "params": { "booleans": ["System.GetBool(pvrmanager.enabled)"] }}
+      data = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
+      gConfig.HAS_PVR = ("result" in data and data["result"].get("System.GetBool(pvrmanager.enabled)", False))
     except socket.error:
       pass
 
@@ -3052,7 +3320,7 @@ def main(argv):
 
   multi_call_m = ["albums", "artists", "songs"]
   multi_call_v = ["movies", "sets", "tvshows"]
-  multi_call   = ["addons"] + multi_call_m + multi_call_v
+  multi_call   = ["addons", "pvr.tv", "pvr.radio"] + multi_call_m + multi_call_v
 
   if gConfig.CHECKUPDATE and not argv[0] in ["version","update"]: checkUpdate()
 
@@ -3073,13 +3341,16 @@ def main(argv):
   elif argv[0] == "f" and len(argv) == 2:
     sqlExtract("STATS", "", argv[1])
 
-  elif argv[0] in ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "qa", "qax"]:
+  elif argv[0] in ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "qa", "qax", "query"]:
 
     if argv[0] in ["j", "J", "jd", "Jd"]:
       _action = "dump"
       _stats  = False
     elif argv[0] in ["qa", "qax"]:
       _action = "qa"
+      _stats  = False
+    elif argv[0] in ["query"]:
+      _action = "query"
       _stats  = False
     else:
       _action = "cache"
@@ -3092,7 +3363,17 @@ def main(argv):
     _decode     = True if argv[0] in ["jd", "Jd"] else False
     _extraFields= True if argv[0] in ["J", "Jd"] else False
 
-    _filter     = argv[2] if len(argv) > 2 else ""
+    _filter     = ""
+    _query      = ""
+
+    if argv[0] != "query":
+      _filter     = argv[2] if len(argv) > 2 else ""
+    else:
+      if len(argv) == 3:
+        _query      = argv[2] if len(argv) > 2 else ""
+      else:
+        _filter     = argv[2]
+        _query      = argv[3]
 
     if _force and not gConfig.RECACHEALL and _filter == "":
       print("Forcing re-cache of all items is disabled. Enable by setting \"allow.recacheall=yes\" in property file.")
@@ -3112,11 +3393,11 @@ def main(argv):
         jsonQuery(_action, mediatype=x, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
                   rescan=_rescan, decode=_decode, extraFields=_extraFields)
-      if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun)
-    elif len(argv) in [2, 3]:
+      if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
+    elif len(argv) >= 2:
       jsonQuery(_action, mediatype=argv[1], filter=_filter,
                 force=_force, lastRun=_lastRun, nodownload=_nodownload,
-                rescan=_rescan, decode=_decode, extraFields=_extraFields)
+                rescan=_rescan, decode=_decode, extraFields=_extraFields, query=_query)
       if _stats: TOTALS.libraryStats(item=argv[1], filter=_filter, lastRun=_lastRun)
     else:
       usage(1)

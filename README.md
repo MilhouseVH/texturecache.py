@@ -90,6 +90,8 @@ But wait, there's more... another method is to force images to be re-cached, aut
 The utility has several options that operate on media library items grouped into classes:
 
 * addons
+* pvr.tv
+* pvr.radio
 * albums
 * artists
 * songs
@@ -97,6 +99,11 @@ The utility has several options that operate on media library items grouped into
 * sets
 * tags
 * tvshows
+
+The following "meta" media classes can also be used in place of one of the above media classes:
+* video - movies + sets + tvshows
+* music - albums + artists + songs
+* all - addons + pvr.tv + pvr.radio + movies + sets + tvshows + albums + artists + songs
 
 In most cases, when performing an operation it is possible to specify a filter to further restrict processing/selection of particular items, for example, to extract the default media library details for all movies whose name contains "zombie":
 ####Code:
@@ -200,7 +207,7 @@ or hasn't been accessed more than once:
 First, let's see the default fields for a particular media class (movies), filtered for a specific item (avatar):
 ####Code:
 ```
-./texturecache.py j movies "avatar"
+./texturecache.py jd movies "avatar"
 ```
 ####Result:
 ```
@@ -209,11 +216,10 @@ First, let's see the default fields for a particular media class (movies), filte
     "movieid": 22,
     "title": "Avatar",
     "art": {
-      "fanart": "image://nfs%3a%2f%2f192.168.0.3%2fmnt%2fshare%2fmedia%2fVideo%2fMovies%2fAvatar%20(2009)?%5bDVDRip%5d-fanart.jpg/",
-      "discart": "image://http%3a%2f%2fassets.fanart.tv%2ffanart%2fmovies%2f19995%2fmoviedisc%2favatar-4eea31049147b.png/",
-      "poster": "image://nfs%3a%2f%2f192.168.0.3%2fmnt%2fshare%2fmedia%2fVideo%2fMovies%2fAvatar%20(2009)?%5bDVDRip%5d.tbn/",
-      "clearart": "image://http%3a%2f%2fassets.fanart.tv%2ffanart%2fmovies%2f19995%2fmovieart%2favatar-4f803992128b8.png/",
-      "clearlogo": "image://http%3a%2f%2fassets.fanart.tv%2ffanart%2fmovies%2f19995%2fhdmovielogo%2favatar-503e0262ba196.png/"
+      "fanart": "image://nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/Avatar (2009)[DVDRip]-fanart.jpg/",
+      "poster": "image://nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/Avatar (2009)[DVDRip]-poster.jpg/",
+      "clearart": "image://http://assets.fanart.tv/fanart/movies/19995/hdmovieclearart/avatar-51290d15d6163.png/",
+      "clearlogo": "image://http://assets.fanart.tv/fanart/movies/19995/hdmovielogo/avatar-51290d0678d4e.png/"
     },
     "label": "Avatar"
   }
@@ -223,7 +229,7 @@ First, let's see the default fields for a particular media class (movies), filte
 With `extrajson.movies = trailer, streamdetails, file` in the properties file, here is the same query but now returning the extra fields too:
 ####Code:
 ```
-./texturecache.py J movies "Avatar"
+./texturecache.py Jd movies "Avatar"
 ```
 ####Result:
 ```
@@ -234,11 +240,10 @@ With `extrajson.movies = trailer, streamdetails, file` in the properties file, h
     "label": "Avatar",
     "file": "nfs://192.168.0.3/mnt/share/media/Video/Movies/Avatar (2009)[DVDRip].m4v",
     "art": {
-      "fanart": "image://nfs%3a%2f%2f192.168.0.3%2fmnt%2fshare%2fmedia%2fVideo%2fMovies%2fAvatar%20(2009)?%5bDVDRip%5d-fanart.jpg/",
-      "discart": "image://http%3a%2f%2fassets.fanart.tv%2ffanart%2fmovies%2f19995%2fmoviedisc%2favatar-4eea31049147b.png/",
-      "poster": "image://nfs%3a%2f%2f192.168.0.3%2fmnt%2fshare%2fmedia%2fVideo%2fMovies%2fAvatar%20(2009)?%5bDVDRip%5d.tbn/",
-      "clearart": "image://http%3a%2f%2fassets.fanart.tv%2ffanart%2fmovies%2f19995%2fmovieart%2favatar-4f803992128b8.png/",
-      "clearlogo": "image://http%3a%2f%2fassets.fanart.tv%2ffanart%2fmovies%2f19995%2fhdmovielogo%2favatar-503e0262ba196.png/"
+      "fanart": "image://nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/Avatar (2009)[DVDRip]-fanart.jpg/",
+      "poster": "image://nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/Avatar (2009)[DVDRip]-poster.jpg/",
+      "clearart": "image://http://assets.fanart.tv/fanart/movies/19995/hdmovieclearart/avatar-51290d15d6163.png/",
+      "clearlogo": "image://http://assets.fanart.tv/fanart/movies/19995/hdmovielogo/avatar-51290d0678d4e.png/"
     },
     "trailer": "",
     "streamdetails": {
