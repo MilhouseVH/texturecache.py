@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.6.8 (26/05/2013)
+* Fix: Duplicate extrajson properties
+
 ##Version 0.6.7 (26/05/2013)
 * Fix broken command line @properties when also using named @section
 * Add PVR channel artwork support for cache pre-load (`c`, `C`, `nc`, `lc`, `lnc`), dump (`j`, `jd`, `J`, `Jd`) and QA (`qa`) with new media classes `pvr.tv` and `pvr.radio`

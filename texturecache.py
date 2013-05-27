@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.6.7"
+    self.VERSION="0.6.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1052,9 +1052,9 @@ class MyJSONComms(object):
     if not "properties" in request["params"]: return
     aList = request["params"]["properties"]
     if fields != None:
-      for f in fields.split(","):
+      for f in [f.strip() for f in fields.split(",")]:
         if not f in aList:
-          aList.append(f.strip())
+          aList.append(f)
     request["params"]["properties"] = aList
 
   def addFilter(self, request, newFilter, condition="and"):
