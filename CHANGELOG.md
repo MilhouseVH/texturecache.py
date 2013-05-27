@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.6.9 (26/05/2013)
+* Add: Inverted logic for `query` option
+
 ##Version 0.6.8 (26/05/2013)
 * Fix: Duplicate extrajson properties
 

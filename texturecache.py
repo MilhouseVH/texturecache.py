@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.6.8"
+    self.VERSION="0.6.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -2471,7 +2471,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
     DISPLAY=""
     try:
       RESULTS=[]
-      for field, field_split, condition, value, logic in tuples:
+      for field, field_split, condition, inverted, value, logic in tuples:
         temp = item
         for f in field_split:
           temp = searchItem(temp, f)
@@ -2481,11 +2481,15 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
           if type(temp) is list:
             for t in temp:
               MATCHED = evaluateCondition(t, condition, value)
+              if inverted: MATCHED = not MATCHED
+
               if MATCHED:
                 matched_value = t
                 break
           else:
             MATCHED = evaluateCondition(temp, condition, value)
+            if inverted: MATCHED = not MATCHED
+
             if MATCHED: matched_value = temp
         else:
           MATCHED=False
@@ -2578,9 +2582,15 @@ def parseQuery(query):
     else:
       newValue = "%s%s" % (newValue, value)
 
+  INVERT=False
   for value in newValue.split(" "):
     if value == "": continue
     value_lower = value.lower()
+
+    if value_lower == "not":
+      INVERT=True
+      continue
+
     #and, or etc.
     if value_lower  in logic:
       FIELDNAME_NEXT=True
@@ -2596,7 +2606,8 @@ def parseQuery(query):
       if value.endswith("'") or value.endswith('"'): value = value[:-1]
       FIELDNAME_NEXT=True
       tValue = value.replace("\t", " ")
-      tuples.append([tField, tField.split("."), tCondition, tValue, tLogic])
+      tuples.append([tField, tField.split("."), tCondition, INVERT, tValue, tLogic])
+      INVERT=False
     #Field name
     else:
       tField = value_lower
