@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.6.9"
+    self.VERSION="0.7.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -479,15 +479,6 @@ class MyLogger():
             d = "%s (truncated)" % d[:maxLen]
           self.LOGFILE.write("%s:%-10s: %s [%s]\n" % (datetime.datetime.now(), t, udata, d))
         if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
-
-  def xxtoUnicode(self, data):
-    if sys.version_info >= (3, 0):
-      return data
-    else:
-      try:
-        return data.encode("utf-8")
-      except UnicodeDecodeError:
-        return data
 
   def toUnicode(self, data):
     if sys.version_info >= (3, 0):
@@ -1053,7 +1044,7 @@ class MyJSONComms(object):
     aList = request["params"]["properties"]
     if fields != None:
       for f in [f.strip() for f in fields.split(",")]:
-        if not f in aList:
+        if f != "" and not f in aList:
           aList.append(f)
     request["params"]["properties"] = aList
 
@@ -1487,7 +1478,7 @@ class MyJSONComms(object):
     if action == "qa":
       qaSinceDate = self.config.QADATE
       if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
-        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate })
+          self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate })
 
       if mediatype in ["songs", "movies", "tags", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
