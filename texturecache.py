@@ -293,10 +293,11 @@ class MyConfiguration(object):
 
     if aStr:
       for item in [item.strip() for item in aStr.split(",")]:
-        if stripModifier and item.startswith("?"):
-          newlist.append(item[1:])
-        else:
-          newlist.append(item)
+        if item != "":
+          if stripModifier and item.startswith("?"):
+            newlist.append(item[1:])
+          else:
+            newlist.append(item)
 
     return newlist
 
