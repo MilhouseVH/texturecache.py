@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.0"
+    self.VERSION="0.7.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1627,7 +1627,7 @@ class MyTotals(object):
     eta = self.secondsToTime(remaining / tpersec, withMillis=False)
     return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 
-  def libraryStats(self, item="", multi=[], filter="", lastRun=False):
+  def libraryStats(self, item="", multi=[], filter="", lastRun=False, query=""):
     if multi: item = "/".join(multi)
 
     # Determine the artwork types that have been accumulated
@@ -3401,7 +3401,7 @@ def main(argv):
       jsonQuery(_action, mediatype=argv[1], filter=_filter,
                 force=_force, lastRun=_lastRun, nodownload=_nodownload,
                 rescan=_rescan, decode=_decode, extraFields=_extraFields, query=_query)
-      if _stats: TOTALS.libraryStats(item=argv[1], filter=_filter, lastRun=_lastRun)
+      if _stats: TOTALS.libraryStats(item=argv[1], filter=_filter, lastRun=_lastRun, query=_query)
     else:
       usage(1)
 

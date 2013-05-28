@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.7.1 (28/05/2013)
+* Fix: missing parameter on libraryStats()
+
 ##Version 0.7.0 (28/05/2013)
 * Fix: extrajson properties - again
 * Fix: QA field processing
