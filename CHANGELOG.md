@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.7.2 (07/06/2013)
+* Add: version field to `addons` JSON query
+* Add: `section` property, specifying the default section to be used unless an alternative `@section` name is included on the command line
+* Add: Always decode image urls during `query` option
+
 ##Version 0.7.1 (28/05/2013)
 * Fix: missing parameter on libraryStats()
 

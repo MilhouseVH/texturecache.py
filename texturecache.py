@@ -51,13 +51,15 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.1"
+    self.VERSION="0.7.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
     self.HAS_PVR = False
+
+    namedSection = False
 
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
@@ -72,15 +74,14 @@ class MyConfiguration(object):
     for arg in list(argv):
       if arg.startswith("@section") and arg.find("=") != -1:
         self.THIS_SECTION = arg.split("=")[1].strip()
+        namedSection = True
         argv.remove(arg)
-        break
 
     #Use @config if passed on command line
     for arg in list(argv):
       if arg.startswith("@config") and arg.find("=") != -1:
         self.CONFIG_NAME = arg.split("=")[1].strip()
         argv.remove(arg)
-        break
 
     # Use the default or user specified config filename.
     # If it doesn't exist and is a relative filename, try and find a config
@@ -98,15 +99,21 @@ class MyConfiguration(object):
       cfg.write(open(self.FILENAME, "r").read())
       cfg.write("\n")
 
+    # If a specific section is not passed on the command line, read the config
+    # to see if there is a default section property. Reset the seek position so
+    # that additional command line properties can be appended to the config.
+    if not namedSection:
+      cfg.seek(0, os.SEEK_SET)
+      config.readfp(cfg)
+      self.THIS_SECTION = self.getValue(config, "section", self.GLOBAL_SECTION)
+      cfg.seek(0, os.SEEK_END)
+
+    #Output a section header - sections are merged together.
     #Append any command line settings - eg. @xbmc.host=192.168.0.8
     #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
-    #Output a section header if using non-global section - sections are merged together.
-    SECTION_HDR=False
+    cfg.write("[%s]\n" % self.THIS_SECTION)
     for arg in list(argv):
       if arg.startswith("@") and arg.find("=") != -1:
-        if self.GLOBAL_SECTION != self.THIS_SECTION and not SECTION_HDR:
-          SECTION_HDR = True
-          cfg.write("[%s]\n" % self.THIS_SECTION)
         cfg.write("%s\n" % arg[1:])
         argv.remove(arg)
 
@@ -1383,7 +1390,7 @@ class MyJSONComms(object):
 
     if mediatype == "addons":
       REQUEST = {"method":"Addons.GetAddons",
-                 "params":{"properties":["name", "thumbnail", "fanart"]}}
+                 "params":{"properties":["name", "version", "thumbnail", "fanart"]}}
       FILTER = "name"
       TITLE = "name"
     elif mediatype in ["pvr.tv", "pvr.radio"]:
@@ -2461,6 +2468,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
 
     MATCHED=False
     DISPLAY=""
+
     try:
       RESULTS=[]
       for field, field_split, condition, inverted, value, logic in tuples:
@@ -2479,6 +2487,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
                 matched_value = t
                 break
           else:
+            if temp.startswith("image://"): temp = urllib2.unquote(temp)
             MATCHED = evaluateCondition(temp, condition, value)
             if inverted: MATCHED = not MATCHED
 
