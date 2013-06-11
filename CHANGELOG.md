@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.7.3 (11/06/2013)
+* Fix: Python3 incompatibility when loading configuration with a duplicate section
+* Fix: Exception when `query`ing int datatypes
+
 ##Version 0.7.2 (07/06/2013)
 * Add: version field to `addons` JSON query
 * Add: `section` property, specifying the default section to be used unless an alternative `@section` name is included on the command line

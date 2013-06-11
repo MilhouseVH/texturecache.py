@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.2"
+    self.VERSION="0.7.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -71,16 +71,17 @@ class MyConfiguration(object):
     config = ConfigParser.SafeConfigParser()
 
     #Use @section argument if passed on command line
+    #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
     for arg in list(argv):
       if arg.startswith("@section") and arg.find("=") != -1:
-        self.THIS_SECTION = arg.split("=")[1].strip()
+        self.THIS_SECTION = arg.split("=", 1)[1].strip()
         namedSection = True
         argv.remove(arg)
 
     #Use @config if passed on command line
     for arg in list(argv):
       if arg.startswith("@config") and arg.find("=") != -1:
-        self.CONFIG_NAME = arg.split("=")[1].strip()
+        self.CONFIG_NAME = arg.split("=", 1)[1].strip()
         argv.remove(arg)
 
     # Use the default or user specified config filename.
@@ -99,26 +100,25 @@ class MyConfiguration(object):
       cfg.write(open(self.FILENAME, "r").read())
       cfg.write("\n")
 
-    # If a specific section is not passed on the command line, read the config
-    # to see if there is a default section property. Reset the seek position so
-    # that additional command line properties can be appended to the config.
-    if not namedSection:
-      cfg.seek(0, os.SEEK_SET)
-      config.readfp(cfg)
-      self.THIS_SECTION = self.getValue(config, "section", self.GLOBAL_SECTION)
-      cfg.seek(0, os.SEEK_END)
-
-    #Output a section header - sections are merged together.
-    #Append any command line settings - eg. @xbmc.host=192.168.0.8
-    #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
-    cfg.write("[%s]\n" % self.THIS_SECTION)
-    for arg in list(argv):
-      if arg.startswith("@") and arg.find("=") != -1:
-        cfg.write("%s\n" % arg[1:])
-        argv.remove(arg)
-
     cfg.seek(0, os.SEEK_SET)
     config.readfp(cfg)
+
+    # If a specific section is not passed on the command line, check the config
+    # to see if there is a default section property, and if not then default to
+    # the global default section.
+    if not namedSection:
+      self.THIS_SECTION = self.getValue(config, "section", self.GLOBAL_SECTION)
+
+    # Add the named section if not already present
+    if not config.has_section(self.THIS_SECTION):
+      config.add_section(self.THIS_SECTION)
+
+    #Add any command line settings - eg. @xbmc.host=192.168.0.8 - to the named section.
+    for arg in list(argv):
+      if arg.startswith("@") and arg.find("=") != -1:
+        key_value = arg[1:].split("=", 1)
+        config.set(self.THIS_SECTION, key_value[0].strip(), key_value[1].strip())
+        argv.remove(arg)
 
     self.IDFORMAT = self.getValue(config, "format", "%06d")
     self.FSEP = self.getValue(config, "sep", "|")
@@ -2466,11 +2466,9 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
 
     gLogger.progress("Parsing [%s]..." % name, every = 25)
 
-    MATCHED=False
-    DISPLAY=""
+    RESULTS=[]
 
     try:
-      RESULTS=[]
       for field, field_split, condition, inverted, value, logic in tuples:
         temp = item
         for f in field_split:
@@ -2487,7 +2485,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
                 matched_value = t
                 break
           else:
-            if temp.startswith("image://"): temp = urllib2.unquote(temp)
+            if temp is str and temp.startswith("image://"): temp = urllib2.unquote(temp)
             MATCHED = evaluateCondition(temp, condition, value)
             if inverted: MATCHED = not MATCHED
 
@@ -2495,27 +2493,28 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
         else:
           MATCHED=False
 
-        RESULTS.append([MATCHED, logic])
-
-        if MATCHED:
-          try:
-            throw_exception = matched_value + 1
-            DISPLAY = "%s, %s = %s" % (DISPLAY, field, matched_value)
-          except:
-            DISPLAY = "%s, %s = \"%s\"" % (DISPLAY, field, matched_value)
-
-      MATCHED=False
-      for b, l in RESULTS:
-        if l == "and":
-          if b == False: MATCHED = False
-        elif l == "or":
-          if b == True: MATCHED = True
-        elif l == None:
-          MATCHED = b
-        else:
-          MATCHED = False
+        RESULTS.append([MATCHED, logic, field, matched_value])
     except:
       pass
+
+    MATCHED = False
+    DISPLAY = ""
+    for matched, logic, field, value in RESULTS:
+      if logic == "and":
+        if matched == False: MATCHED = False
+      elif logic == "or":
+        if matched == True: MATCHED = True
+      elif logic == None:
+        MATCHED = matched
+      else:
+        MATCHED = False
+
+      if MATCHED:
+        try:
+          throw_exception = value + 1
+          DISPLAY = "%s, %s = %s" % (DISPLAY, field, value)
+        except:
+          DISPLAY = "%s, %s = \"%s\"" % (DISPLAY, field, value)
 
     if MATCHED: mediaitems.append([name, DISPLAY[2:]])
 
