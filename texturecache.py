@@ -2493,7 +2493,10 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
         else:
           MATCHED=False
 
-        RESULTS.append([MATCHED, logic, field, matched_value])
+        if MATCHED:
+          RESULTS.append([MATCHED, logic, field, matched_value])
+        else:
+          RESULTS.append([MATCHED, logic, None, None])
     except:
       pass
 
@@ -2509,7 +2512,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
       else:
         MATCHED = False
 
-      if MATCHED:
+      if MATCHED and field:
         try:
           throw_exception = value + 1
           DISPLAY = "%s, %s = %s" % (DISPLAY, field, value)
