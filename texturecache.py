@@ -2466,7 +2466,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
 
     gLogger.progress("Parsing [%s]..." % name, every = 25)
 
-    RESULTS=[]
+    RESULTS = []
 
     try:
       for field, field_split, condition, inverted, value, logic in tuples:
@@ -2480,27 +2480,23 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
             for t in temp:
               MATCHED = evaluateCondition(t, condition, value)
               if inverted: MATCHED = not MATCHED
-
-              if MATCHED:
-                matched_value = t
-                break
+              if MATCHED: break
+            matched_value = ", ".join(temp)
           else:
             if temp is str and temp.startswith("image://"): temp = urllib2.unquote(temp)
             MATCHED = evaluateCondition(temp, condition, value)
             if inverted: MATCHED = not MATCHED
-
-            if MATCHED: matched_value = temp
+            matched_value = temp
         else:
-          MATCHED=False
+          MATCHED = False
+          matched_value = None
 
-        if MATCHED:
-          RESULTS.append([MATCHED, logic, field, matched_value])
-        else:
-          RESULTS.append([MATCHED, logic, None, None])
+        RESULTS.append([MATCHED, logic, field, matched_value])
     except:
       pass
 
     MATCHED = False
+    FIELDS = []
     DISPLAY = ""
     for matched, logic, field, value in RESULTS:
       if logic == "and":
@@ -2512,7 +2508,9 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
       else:
         MATCHED = False
 
-      if MATCHED and field:
+      # Only output each field value once...
+      if not field in FIELDS:
+        FIELDS.append(field)
         try:
           throw_exception = value + 1
           DISPLAY = "%s, %s = %s" % (DISPLAY, field, value)
