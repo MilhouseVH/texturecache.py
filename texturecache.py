@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.4"
+    self.VERSION="0.7.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1349,6 +1349,9 @@ class MyJSONComms(object):
           if not file in fileList:
             fileList.append(file)
 
+    if fileList == []:
+      self.logger.out("WARNING: No files obtained from filesystem - ensure valid source(s) specified!", newLine=True)
+
     return sorted(fileList)
 
   def getFilesForPath(self, path):
@@ -1898,6 +1901,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       title = tvshow["title"]
       gLogger.progress("Loading TV Show: [%s]..." % title, every = 1)
       (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun=lastRun)
+      if not "result" in data2: return
       limits = data2["result"]["limits"]
       if limits["total"] == 0: continue
       tvshow[s2] = data2["result"][s2]
@@ -1905,6 +1909,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
         seasonid = season["season"]
         gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid), every = 1)
         (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun=lastRun, secondaryFields=secondaryFields)
+        if not "result" in data3: return
         limits = data3["result"]["limits"]
         if limits["total"] == 0: continue
         season[s3] = data3["result"][s3]
@@ -2316,13 +2321,12 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               work=workItems, mitems=mediaitems, pvrGroup=title)
 
     if missing != {}:
-      if len(name) > 50: name = "%s...%s" % (name[0:23], name[-24:])
       if mediatype.startswith("pvr."):
         mtype = mediatype
       else:
         mtype = mediatype[:-1].capitalize()
         if mtype == "Tvshow": mtype = "TVShow"
-      mediaitems.append("%s [%-50s]: %s" % (mtype, name[0:50], ", ".join(missing)))
+      mediaitems.append("%s [%-50s]: %s" % (mtype, addElipses(50, name), ", ".join(missing)))
       if "file" in item and "".join(["Y" if missing[m] else "" for m in missing]) != "":
         dir = "%s;%s" % (mediatype, os.path.dirname(item["file"]))
         libraryids = workItems[dir] if dir in workItems else []
@@ -2534,7 +2538,15 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     for m in mediaitems:
-      gLogger.out("Matched: [%-50s] %s" % (m[0], m[1]), newLine=True)
+      gLogger.out("Matched: [%-50s] %s" % (addElipses(50, m[0]), m[1]), newLine=True)
+
+def addElipses(maxlen, aStr):
+  if len(aStr) <= maxlen: return aStr
+
+  ileft = int(maxlen/2) - 2
+  iright = int(maxlen/2) - 1
+
+  return "%s...%s" % (aStr[0:ileft], aStr[-iright:])
 
 def searchItem(data, field):
   if field in data: return data[field]

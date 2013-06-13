@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.7.5 (13/06/2013)
+* Add invalid source warning when no files are read from filesystem during `missing` operation
+
 ##Version 0.7.4 (13/06/2013)
 * Simplify webserver check
 
