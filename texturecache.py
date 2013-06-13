@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.3"
+    self.VERSION="0.7.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -818,19 +818,19 @@ class MyJSONComms(object):
       if self.config.WEB_SINGLESHOT == False:
         self.logger.log("SWITCHING TO WEBSERVER.SINGLESHOT MODE")
         self.config.WEB_SINGLESHOT = True
-        return self.sendWeb(request_type, url, request, headers)
+        return self.sendWeb(request_type, url, request, headers, readAmount, timeout, rawData)
       raise
 
-  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True):
+  def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True, useWebServer=False):
     BUFFER_SIZE = 32768
 
     request["jsonrpc"] = "2.0"
     request["id"] =  id
 
     # Following methods don't work over sockets - by design.
-    if request["method"] in ["Files.PrepareDownload", "Files.Download"]:
+    if request["method"] in ["Files.PrepareDownload", "Files.Download"] or useWebServer:
       self.logger.log("%s.JSON WEB REQUEST:" % id, jsonrequest=request)
-      data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"})
+      data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"}, timeout=timeout)
       if self.logger.LOGGING:
         self.logger.log("%s.RECEIVED DATA: %s" % (id, data), maxLen=256)
       return json.loads(data) if data != "" else ""
@@ -3169,13 +3169,10 @@ def checkConfig(option):
     try:
       defaultTimeout = socket.getdefaulttimeout()
       socket.setdefaulttimeout(7.5)
-      jcomms = MyJSONComms(gConfig, gLogger)
-      REQUEST = {}
-      REQUEST["jsonrpc"] = "2.0"
-      REQUEST["method"] = "JSONRPC.Ping"
-      REQUEST["id"] =  "libPing"
 
-      data = json.loads(jcomms.sendWeb("POST", "/jsonrpc", json.dumps(REQUEST), timeout=5))
+      jcomms = MyJSONComms(gConfig, gLogger)
+      REQUEST = {"method": "JSONRPC.Ping"}
+      data = jcomms.sendJSON(REQUEST, "libPing", timeout=7.5, checkResult=False, useWebServer=True)
       if "result" in data and data["result"] == "pong":
         gotWeb = True
 

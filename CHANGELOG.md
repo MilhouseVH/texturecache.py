@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.7.4 (13/06/2013)
+* Simplify webserver check
+
 ##Version 0.7.3 (11/06/2013)
 * Fix: Python3 incompatibility when loading configuration with a duplicate section
 * Fix: Exception when `query`ing int datatypes
