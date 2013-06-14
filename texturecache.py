@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.7"
+    self.VERSION="0.7.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -234,6 +234,8 @@ class MyConfiguration(object):
 
     self.NONMEDIA_FILETYPES = self.getSimpleList(config, "nonmedia.filetypes", "")
 
+    self.CACHE_HIDEALLITEMS = self.getBoolean(config, "cache.hideallitems", "no")
+
   def getValue(self, config, aKey, default=None):
     value = default
 
@@ -360,6 +362,7 @@ class MyConfiguration(object):
       print("  %s = %s" % (k, self.NoneIsBlank(self.QA_FIELDS[k])))
 
     print("  cache.castthumb = %s" % self.BooleanIsYesNo(self.CACHE_CAST_THUMB))
+    print("  cache.hideallitems = %s" % self.BooleanIsYesNo(self.CACHE_HIDEALLITEMS))
     print("  cache.ignore.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.CACHE_IGNORE_TYPES)))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
@@ -1132,6 +1135,8 @@ class MyJSONComms(object):
     return self.sendJSON(REQUEST, "libDirectory", checkResult=False)
 
   def getSeasonAll(self, filename):
+    # If "Season All" items are not being cached, return no results
+    if self.config.CACHE_HIDEALLITEMS: return (None, None, None)
 
     # Not able to get a directory for remote files...
     if filename.find("image://http") != -1: return (None, None, None)

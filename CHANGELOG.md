@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.7.8 (14/06/2013)
+* Add: `cache.hideallitems` property (default: no) to mimic hideallitems advancedsettings property. When enabled, "Season All" posters/banners/fanart will not be cached.
+
 ##Version 0.7.7 (14/06/2013)
 * Fix: `version` check in Python3
 
