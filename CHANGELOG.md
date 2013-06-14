@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.7.6 (14/06/2013)
+* Use os.path.split() to determine season-all filename
+* Fix: When parsing season-all artwork, use the correct "Season All" label instead of appending "Season All" to whatever season is currently being parsed
+
 ##Version 0.7.5 (13/06/2013)
 * Add invalid source warning when no files are read from filesystem during `missing` operation
 

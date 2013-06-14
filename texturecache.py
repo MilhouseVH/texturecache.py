@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.5"
+    self.VERSION="0.7.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1155,11 +1155,11 @@ class MyJSONComms(object):
       poster_url = fanart_url = banner_url = None
       for f in data["result"]["files"]:
         if f["filetype"] == "file":
-          fname = f["label"].lower()
-          if fname.find("season-all-poster.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif not poster_url and fname.find("season-all.") != -1: poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif fname.find("season-all-banner.") != -1: banner_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif fname.find("season-all-fanart.") != -1: fanart_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          fname = os.path.split(f["label"])[1].lower()
+          if fname.startswith("season-all-poster."): poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif not poster_url and fname.startswith("season-all."): poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif fname.startswith("season-all-banner."): banner_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          elif fname.startswith("season-all-fanart."): fanart_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
       return (poster_url, fanart_url, banner_url)
 
     return (None, None, None)
@@ -1426,7 +1426,7 @@ class MyJSONComms(object):
     elif mediatype == "songs":
       REQUEST = {"method":"AudioLibrary.GetSongs",
                  "params":{"sort": {"order": "ascending", "method": "title"},
-                           "properties":["title", "artist", "fanart", "thumbnail"]}}
+                           "properties":["title", "artist", "album", "fanart", "thumbnail"]}}
     elif mediatype in ["movies", "tags"]:
       REQUEST = {"method":"VideoLibrary.GetMovies",
                  "params":{"sort": {"order": "ascending", "method": "title"},
@@ -1806,16 +1806,25 @@ class MyMediaItem(object):
 
   def getFullName(self):
     if self.episode:
-      return "%s, %s Episode %s" % (self.name, self.season, self.episode)
+      if self.mtype == "tvshows":
+        return "%s, %s Episode %s" % (self.name, self.season, self.episode)
+      elif self.mtype == "songs":
+        return "%s from: %s by: %s" % (self.name, self.episode, " & ".join(self.season))
+      else:
+        return "%s, %s: %s" % (self.name, self.season, self.episode)
     elif self.season:
       if self.itype == "cast.thumb":
-        return "Cast Member %s in %s" % (self.name, self.season)
+        return "%s in %s" % (self.name, self.season)
       elif self.mtype == "tvshows":
         return "%s, %s" % (self.name, self.season)
+      elif self.mtype.startswith("pvr."):
+        return "%s (%s)" % (self.season, self.name)
+      elif self.mtype in ["albums", "songs"]:
+        return "%s by: %s" % (self.name, " & ".join(self.season))
       else:
-        return "%s by %s" % (self.name, " & ".join(self.season))
+        return "%s, %s" % (self.name, self.season)
     else:
-      return "%s" % (self.name)
+      return "%s" % self.name
 
 def removeNonAscii(s, replaceWith = ""):
   if replaceWith == "":
@@ -2155,22 +2164,23 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
       name = showName
       if season:
         episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
-        name = "%s, %s Episode %s" % (showName, season, episode)
+        longName = "%s, %s Episode %s" % (showName, season, episode)
       else:
+        season = title
         episode = None
-        name = "%s, %s" % (showName, title)
+        longName = "%s, %s" % (showName, title)
     elif pvrGroup:
-        name = "%s, %s" % (pvrGroup, title)
+        name = pvrGroup
+        season = title
+        longName = "%s, %s" % (pvrGroup, title)
         episode = None
     else:
       name = title
-      if title_name != "artist" and "artist" in item:
-        season = item["artist"]
-      else:
-        season = None
-      episode = None
+      longName = name
+      season = item.get("artist", None) if title_name != "artist" else None
+      episode= item.get("album", None) if title_name != "album" else None
 
-    gLogger.progress("Parsing [%s]..." % name, every = 25)
+    gLogger.progress("Parsing [%s]..." % longName, every = 25)
 
     for a in ["fanart", "poster", "thumb", "thumbnail"]:
       if a in item and evaluateURL(a, item[a], imagecache):
@@ -2209,8 +2219,8 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
 # been "seen" before (in which case, discard as no point caching
 # it twice. Or discard if matches an "ignore" rule.
 #
-# Otherwise include it, and add it to the "seen" cache so it can
-# be excluded in future if seen again.
+# Otherwise include it, and add it to the imagecache so it can
+# be excluded in future if "seen" again.
 #
 def evaluateURL(imgtype, url, imagecache):
   if not url or url == "": return False
@@ -2680,8 +2690,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
         # the dds file, otherwise leave the dds file to be reported
         # as an orphaned file.
         if hash[-4:] == ".dds":
-          ddsfile = hash[:-4]
-          if ddsmap.get(ddsfile, None): continue
+          if ddsmap.get(hash[:-4], None): continue
 
         row = dbfiles.get(hash, None)
         if not row:
@@ -3403,15 +3412,18 @@ def main(argv):
     _multi_call = []
     if len(argv) == 1:
       _multi_call = multi_call
-      _multi_call.remove("songs")
+      if "songs" in _multi_call: _multi_call.remove("songs")
     else:
       if argv[1] == "video": _multi_call = multi_call_v
       if argv[1] == "music": _multi_call = multi_call_m
       if argv[1] == "all":   _multi_call = multi_call
 
     if _multi_call != []:
-      for x in _multi_call:
-        jsonQuery(_action, mediatype=x, filter=_filter,
+      if not gConfig.HAS_PVR:
+        for item in ["pvr.tv", "pvr.radio"]:
+          if item in _multi_call: _multi_call.remove(item)
+      for _media in _multi_call:
+        jsonQuery(_action, mediatype=_media, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
                   rescan=_rescan, decode=_decode, extraFields=_extraFields)
       if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
