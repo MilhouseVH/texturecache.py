@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.7.7 (14/06/2013)
+* Fix: `version` check in Python3
+
 ##Version 0.7.6 (14/06/2013)
 * Use os.path.split() to determine season-all filename
 * Fix: When parsing season-all artwork, use the correct "Season All" label instead of appending "Season All" to whatever season is currently being parsed

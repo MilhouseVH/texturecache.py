@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.6"
+    self.VERSION="0.7.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -3291,9 +3291,13 @@ def checkUpdate(forcedCheck = False):
 def getLatestVersion():
   try:
     response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "VERSION"))
-    data = response.read()
+    if sys.version_info >= (3, 0):
+      data = response.read().decode("utf-8")
+    else:
+      data = response.read()
     return data.replace("\n","").split(" ")
   except:
+    raise
     return (None, None)
 
 def downloadLatestVersion(force=False):
