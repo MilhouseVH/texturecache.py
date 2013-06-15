@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.8.0 (15/06/2013)
+* Add: `agenres` and `vgenres` as audio and video genre classes, for use with cache (`c`, `C`, `nc`, `lc`, `lnc`), dump (`j, `J`, `jd`, `Jd`) and QA (`qa`) options
+* Add: "Undefined" category to library stats, representing artwork that is blank (either not specified, or empty string/"")
+
 ##Version 0.7.9 (15/06/2013)
 * Fix: Iterating over None type when there are no channels returned for pvr query
 

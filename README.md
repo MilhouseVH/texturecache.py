@@ -90,6 +90,8 @@ But wait, there's more... another method is to force images to be re-cached, aut
 The utility has several options that operate on media library items grouped into classes:
 
 * addons
+* agenres _(audio genres)_
+* vgenres _(video genres: aggregated list of movie, tvshow and musicvideo genres)_
 * pvr.tv
 * pvr.radio
 * albums
@@ -101,9 +103,9 @@ The utility has several options that operate on media library items grouped into
 * tvshows
 
 The following "meta" media classes can also be used in place of one of the above media classes:
-* video (equivalent to: `movies` + `sets` + `tvshows`)
-* music (equivalent to: `albums` + `artists` + `songs`)
-* all (equivalent to: `addons` + `pvr.tv` + `pvr.radio` + `movies` + `sets` + `tvshows` + `albums` + `artists` + `songs`)
+* music _(equivalent to: `albums` + `artists` + `songs`)_
+* video _(equivalent to: `movies` + `sets` + `tvshows`)_
+* all _(equivalent to: `addons` + `agenres` + `vgenres` + `pvr.tv` + `pvr.radio` + `albums` + `artists` + `songs` + `movies` + `sets` + `tvshows`)_
 
 In most cases, when performing an operation it is possible to specify a filter to further restrict processing/selection of particular items, for example, to extract the default media library details for all movies whose name contains "zombie":
 ####Code:
@@ -286,7 +288,7 @@ webserver.username =
 webserver.password =
 rpc.port = 9090
 download.threads = 2
-singlethread.urls = 
+singlethread.urls = assets\.fanart\.tv
 extrajson.addons =
 extrajson.albums =
 extrajson.artists =
@@ -328,6 +330,7 @@ qa.zero.tvshows.episode =
 qa.zero.tvshows.season =
 qa.zero.tvshows.tvshow =
 cache.castthumb = no
+cache.hideallitems = no
 cache.ignore.types = image://video, image://music
 prune.retain.types =
 logfile =
@@ -350,13 +353,17 @@ Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes
 
 Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `image://video` and `image://music`. Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
 
+Prevent caching of "Season All" posters/fanart/banners by enabling `cache.hideallitems` - default is to cache these items. Corresponds with similar hideallitems value in advancedsettings.xml.
+
 Retain specific URLs when pruning the texture cache, eg. `prune.retain.types = ^http://www.wiziwig.tv/` to keep all artwork relating to wizwig.tv (as used by the SportsDevil addon).
 
 Specify a filename for the `logfile` property, to log detailed processing information. Prefix the filename with + to force flushing. Enable logfile.verbose for increased level of logging.
 
-Use `download.threads` to vary number of threads used when caching data. Class specific values can also be used, eg. `download.threads.movies`.
+Use `download.threads` to vary the number of threads used when downloading and caching data. Class specific values can also be used, eg. `download.threads.movies`. Any class without a specific value will use `download.threads`.
 
-Specify a comma delimited list of pattherns in `singlethread.urls` to force download on a single thread, necessary for sites that limit the number of concurrent requests. Example: `singlethread.urls = assets.fanart.tv`.
+Specify a comma delimited list of pattherns in `singlethread.urls` to force downloads corresponding with those URLs on a single thread, necessary for sites that limit the number of concurrent requests. One such site is fanart.tv, hence the default value includes `assets\.fanart\.tv`.
+
+When identifying `missing` media files (ie. files that are not present in the mediua library), additional non-media file types can be ignored by adding their file extensions as a comma delimited list of values to `nonmedia.filetypes` (eg. `ex1, ex2`)
 
 ##Command Line Properties
 

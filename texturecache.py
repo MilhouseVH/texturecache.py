@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.9"
+    self.VERSION="0.8.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -163,6 +163,10 @@ class MyConfiguration(object):
     self.XTRAJSON = {}
     self.QA_FIELDS = {}
 
+    self.QA_FIELDS["qa.art.addons"] = "thumbnail"
+    self.QA_FIELDS["qa.art.agenres"] = "thumbnail"
+    self.QA_FIELDS["qa.art.vgenres"] = "thumbnail"
+
     self.QA_FIELDS["qa.art.artists"] = "fanart, thumbnail"
     self.QA_FIELDS["qa.art.albums"] = "fanart, thumbnail"
     self.QA_FIELDS["qa.art.songs"] = "fanart, thumbnail"
@@ -185,7 +189,8 @@ class MyConfiguration(object):
               "albums", "artists", "songs",
               "movies", "sets",
               "tvshows.tvshow", "tvshows.season", "tvshows.episode",
-              "pvr.tv", "pvr.radio", "pvr.tv.channel", "pvr.radio.channel"]:
+              "pvr.tv", "pvr.radio", "pvr.tv.channel", "pvr.radio.channel",
+              "agenres", "vgenres"]:
       key = "extrajson.%s" % x
       temp = self.getValue(config, key, "")
       self.XTRAJSON[key] = temp if temp != "" else None
@@ -345,6 +350,8 @@ class MyConfiguration(object):
           print("  %s = %d" % (dt, self.DOWNLOAD_THREADS[dt]))
     print("  singlethread.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.SINGLETHREAD_URLS)))
     print("  extrajson.addons  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.addons"]))
+    print("  extrajson.agenres = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.agenres"]))
+    print("  extrajson.vgenres = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.vgenres"]))
     print("  extrajson.albums  = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.albums"]))
     print("  extrajson.artists = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.artists"]))
     print("  extrajson.songs   = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.songs"]))
@@ -1388,7 +1395,7 @@ class MyJSONComms(object):
 
   def getData(self, action, mediatype,
               filter = None, useExtraFields = False, secondaryFields = None,
-              showid = None, seasonid = None, channelgroupid = None, lastRun = False):
+              showid = None, seasonid = None, channelgroupid = None, lastRun = False, subType = None):
 
     XTRA = mediatype
     SECTION = mediatype
@@ -1464,6 +1471,21 @@ class MyJSONComms(object):
       FILTER = ""
       TITLE = "label"
       XTRA = "tvshows.episode"
+    elif mediatype == "agenres":
+        REQUEST = {"method":"AudioLibrary.GetGenres",
+                   "params":{"properties":["title", "thumbnail"]}}
+        FILTER = "title"
+        TITLE = "title"
+        SECTION = "genres"
+        IDENTIFIER = "genreid"
+    elif mediatype == "vgenres":
+        REQUEST = {"method":"VideoLibrary.GetGenres",
+                   "params":{"type": subType,
+                             "properties":["title", "thumbnail"]}}
+        FILTER = "title"
+        TITLE = "title"
+        SECTION = "genres"
+        IDENTIFIER = "genreid"
     else:
       raise ValueError("Invalid mediatype: [%s]" % mediatype)
 
@@ -1477,7 +1499,9 @@ class MyJSONComms(object):
             word += 1
             if (word%2 == 0) and tag in ["and","or"]: filterBoolean = tag
             else: self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
-    elif filter and filter.strip() != "" and not mediatype in ["addons", "sets", "seasons", "episodes", "pvr.tv", "pvr.radio", "pvr.channels"]:
+    elif filter and filter.strip() != "" and not mediatype in ["addons", "agenres", "vgenres",
+                                                               "sets", "seasons", "episodes",
+                                                               "pvr.tv", "pvr.radio", "pvr.channels"]:
         self.addFilter(REQUEST, {"field": FILTER, "operator": "contains", "value": filter})
 
     if mediatype in ["movies", "tags", "episodes"]:
@@ -1539,6 +1563,7 @@ class MyTotals(object):
     self.TOTALS["Error"] = {}
     self.TOTALS["Cached"] = {}
     self.TOTALS["Ignored"] = {}
+    self.TOTALS["Undefined"] = {}
 
   def addSeasonAll(self):
     if not "Season-all" in self.TOTALS:
@@ -1846,7 +1871,7 @@ def removeNonAscii(s, replaceWith = ""):
 def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, \
                       decode=False, nodownload=False, lastRun=False, labels=None, query=""):
 
-  if not mediatype in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
+  if not mediatype in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
 
@@ -1855,7 +1880,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     gLogger.out("Error: media class [%s] is not currently supported by qax" % mediatype, newLine=True)
     sys.exit(2)
 
-  # Only songa, movies and tvshows (and sub-types) valid for missing...
+  # Only songs, movies and tvshows (and sub-types) valid for missing...
   if action == "missing" and not mediatype in ["songs", "movies", "tvshows", "seasons", "episodes"]:
     gLogger.out("Error: media class [%s] is not currently supported by missing" % mediatype, newLine=True)
     sys.exit(2)
@@ -1878,6 +1903,22 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   if mediatype in ["pvr.tv", "pvr.radio"] and not gConfig.HAS_PVR:
     (section_name, title_name, id_name, data) = ("", "", "", [])
+  elif mediatype == "vgenres":
+    _data = []
+    for subtype in ["movie", "tvshow", "musicvideo"]:
+      (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun=lastRun, secondaryFields=secondaryFields, subType=subtype)
+      if data and "result" in data and section_name in data["result"]:
+        if filter != "":
+          filteredData = []
+          for d in data["result"][section_name]:
+            if re.search(filter, d[title_name], re.IGNORECASE):
+              filteredData.append(d)
+          data["result"][section_name] = filteredData
+        if len(data["result"][section_name]) > 0:
+          _data.append({"type": subtype, section_name: data["result"][section_name]})
+    title_name = "type"
+    section_name = mediatype
+    data["result"] = { section_name: _data}
   else:
     (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun=lastRun, secondaryFields=secondaryFields)
 
@@ -1886,7 +1927,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   else:
     data = []
 
-  if data and filter and mediatype in ["addons", "sets", "pvr.tv", "pvr.radio"]:
+  if data and filter and mediatype in ["addons", "agenres", "sets", "pvr.tv", "pvr.radio"]:
     gLogger.log("Filtering %s on %s = %s" % (mediatype, title_name, filter))
     filteredData = []
     for d in data:
@@ -1986,6 +2027,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 
   mediaitems = []
   imagecache = {}
+  imagecache[""] = 0 # Ensure an empty image is already in the imagecache, with a zero reference count
 
   TOTALS.TimeStart(mediatype, "Parse")
 
@@ -2219,6 +2261,8 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
       season = None
     if "channels" in item:
       parseURLData(jcomms, "%s.channel" % mediatype, mediaitems, imagecache, item["channels"], "channel", "channelid", pvrGroup=title)
+    if "genres" in item:
+      parseURLData(jcomms, "genres", mediaitems, imagecache, item["genres"], "label", "genreid", showName=title)
 
 # Include or exclude url depending on basic properties - has it
 # been "seen" before (in which case, discard as no point caching
@@ -2228,7 +2272,12 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
 # be excluded in future if "seen" again.
 #
 def evaluateURL(imgtype, url, imagecache):
-  if not url or url == "": return False
+#  if not url or url == "": return False
+
+  if not url or url == "":
+    TOTALS.bump("Undefined", imgtype)
+    imagecache[""] += 1
+    return False
 
   if url in imagecache:
     TOTALS.bump("Duplicate", imgtype)
@@ -2268,10 +2317,14 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
   blank_items.extend(gConfig.getQAFields("blank", mediatype, stripModifier=False))
   art_items.extend(gConfig.getQAFields("art", mediatype, stripModifier=False))
 
-  for item in data:
-    libraryid = item[id_name]
+  #Hack to prevent top level genre group items (movie, tvshow, musicvideo) being
+  #reported as having missing artwork (since they don't have any artwork).
+  if mediatype == "vgenres" and not showName:
+    zero_items = blank_items = art_items = []
 
-    if title_name in item: title = item[title_name]
+  for item in data:
+    title = item.get(title_name, "")
+    libraryid = item.get(id_name, 0)
 
     if showName:
       if season:
@@ -2334,9 +2387,12 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     if "channels" in item:
       qaData("%s.channel" % mediatype, jcomms, database, item["channels"], "channel", "channelid", False, \
               work=workItems, mitems=mediaitems, pvrGroup=title)
+    if "genres" in item:
+      qaData(mediatype, jcomms, database, item["genres"], "label", "genreid", False, \
+              work=workItems, mitems=mediaitems, showName=title)
 
     if missing != {}:
-      if mediatype.startswith("pvr."):
+      if mediatype.startswith("pvr.") or mediatype in ["agenres", "vgenres"]:
         mtype = mediatype
       else:
         mtype = mediatype[:-1].capitalize()
@@ -2409,44 +2465,6 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
       gLogger.out("The following media files are not present in the \"%s\" media library:\n\n" % mediatype)
       for file in fileList: gLogger.out("%s\n" % file)
 
-# Extract data, using optional simple search, or complex SQL filter.
-def sqlExtract(ACTION="NONE", search="", filter=""):
-  database = MyDB(gConfig, gLogger)
-
-  with database:
-    SQL = ""
-    if (search != "" or filter != ""):
-      if search != "": SQL = "WHERE t.url LIKE '%" + search + "%' ORDER BY t.id ASC"
-      if filter != "": SQL = filter + " "
-
-    IDS=""
-    FSIZE=0
-    FCOUNT=0
-
-    database.getAllColumns(SQL)
-
-    while True:
-      row = database.fetchone()
-      if row == None: break
-
-      IDS = "%s %s" % (IDS, str(row[0]))
-      FCOUNT += 1
-
-      if ACTION == "NONE":
-        database.dumpRow(row)
-      elif ACTION == "EXISTS":
-        if not os.path.exists(gConfig.getFilePath(row[1])):
-          database.dumpRow(row)
-      elif ACTION == "STATS":
-        if os.path.exists(gConfig.getFilePath(row[1])):
-          FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
-          database.dumpRow(row)
-
-    if ACTION == "STATS":
-      gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
-
-    if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
-
 def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=None, showName=None, season=None, pvrGroup=None):
   gLogger.reset()
 
@@ -2461,7 +2479,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
   fields, tuples = parseQuery(query)
 
   for item in data:
-    libraryid = item[id_name]
+    libraryid = item.get(id_name, 0)
 
     if id_name == "songid":
       if title_name in item and "artist" in item:
@@ -2548,6 +2566,9 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
     if "channels" in item:
       queryLibrary("%s.channel" % mediatype, query, item["channels"], "channel", "channelid", \
               work=workItems, mitems=mediaitems, pvrGroup=title)
+    if "genres" in item:
+      queryLibrary("genres", query, item["genres"], "label", "genreid", \
+              work=workItems, mitems=mediaitems, showName=title)
 
   if mitems == None:
     TOTALS.TimeEnd(mediatype, "Parse")
@@ -2643,6 +2664,44 @@ def parseQuery(query):
       FIELDNAME_NEXT=False
 
   return ",".join(fields), tuples
+
+# Extract data, using optional simple search, or complex SQL filter.
+def sqlExtract(ACTION="NONE", search="", filter=""):
+  database = MyDB(gConfig, gLogger)
+
+  with database:
+    SQL = ""
+    if (search != "" or filter != ""):
+      if search != "": SQL = "WHERE t.url LIKE '%" + search + "%' ORDER BY t.id ASC"
+      if filter != "": SQL = filter + " "
+
+    IDS=""
+    FSIZE=0
+    FCOUNT=0
+
+    database.getAllColumns(SQL)
+
+    while True:
+      row = database.fetchone()
+      if row == None: break
+
+      IDS = "%s %s" % (IDS, str(row[0]))
+      FCOUNT += 1
+
+      if ACTION == "NONE":
+        database.dumpRow(row)
+      elif ACTION == "EXISTS":
+        if not os.path.exists(gConfig.getFilePath(row[1])):
+          database.dumpRow(row)
+      elif ACTION == "STATS":
+        if os.path.exists(gConfig.getFilePath(row[1])):
+          FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
+          database.dumpRow(row)
+
+    if ACTION == "STATS":
+      gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
+
+    if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
 
 # Delete row by id, and corresponding file item
 def sqlDelete( ids=[] ):
@@ -3359,7 +3418,7 @@ def main(argv):
 
   multi_call_m = ["albums", "artists", "songs"]
   multi_call_v = ["movies", "sets", "tvshows"]
-  multi_call   = ["addons", "pvr.tv", "pvr.radio"] + multi_call_m + multi_call_v
+  multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_m + multi_call_v
 
   if gConfig.CHECKUPDATE and not argv[0] in ["version","update"]: checkUpdate()
 
@@ -3431,6 +3490,7 @@ def main(argv):
       if not gConfig.HAS_PVR:
         for item in ["pvr.tv", "pvr.radio"]:
           if item in _multi_call: _multi_call.remove(item)
+
       for _media in _multi_call:
         jsonQuery(_action, mediatype=_media, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
