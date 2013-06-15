@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.7.8"
+    self.VERSION="0.7.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1901,7 +1901,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       (s1, t1, i1, data1) = jcomms.getData(action, "%s.channel" % mediatype, filter, extraFields, channelgroupid=cg["channelgroupid"], lastRun=lastRun, secondaryFields=secondaryFields)
       if "result" in data1:
         channels = []
-        for channel in data1["result"].get(s1, None):
+        for channel in data1["result"].get(s1, []):
           if "label" in channel: del channel["label"]
           channels.append(channel)
         pvrdata.append({"label":          cg["label"],
@@ -2953,7 +2953,7 @@ def getAllFiles(keyFunction):
                                "properties": ["channeltype", "channel", "thumbnail"]}}
           channeldata = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
           if "result" in channeldata:
-            for channel in channeldata["result"].get("channels", None):
+            for channel in channeldata["result"].get("channels", []):
               files[keyFunction(channel["thumbnail"])] = "pvr.thumb"
 
   return files

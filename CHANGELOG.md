@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.7.9 (15/06/2013)
+* Fix: Iterating over None type when there are no channels returned for pvr query
+
 ##Version 0.7.8 (14/06/2013)
 * Add: `cache.hideallitems` property (default: no) to mimic hideallitems advancedsettings property. When enabled, "Season All" posters/banners/fanart will not be cached.
 
