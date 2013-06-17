@@ -9,10 +9,10 @@
 
   Examples:
   <pre>
-  ./texturecache,py watched movies backup ./movies.dat
-  ./texturecache,py watched movies restore ./movies.dat
-  ./texturecache,py watched tvshows backup ./tvshows.dat
-  ./texturecache,py watched tvshows restore ./tvshows.dat
+  ./texturecache.py watched movies backup ./movies.dat
+  ./texturecache.py watched movies restore ./movies.dat
+  ./texturecache.py watched tvshows backup ./tvshows.dat
+  ./texturecache.py watched tvshows restore ./tvshows.dat
   </pre>
 
 ##Version 0.8.0 (15/06/2013)
