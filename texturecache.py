@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.0"
+    self.VERSION="0.8.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -60,6 +60,8 @@ class MyConfiguration(object):
     self.HAS_PVR = False
 
     namedSection = False
+
+    self.JSONVER = "0.00.00"
 
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
@@ -241,6 +243,8 @@ class MyConfiguration(object):
 
     self.CACHE_HIDEALLITEMS = self.getBoolean(config, "cache.hideallitems", "no")
 
+    self.WATCHEDOVERWRITE = self.getBoolean(config, "watched.overwrite", "no")
+
   def getValue(self, config, aKey, default=None):
     value = default
 
@@ -381,6 +385,7 @@ class MyConfiguration(object):
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
     print("  nonmedia.filetypes = %s" % self.NoneIsBlank(",".join(self.NONMEDIA_FILETYPES)))
+    print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -1515,6 +1520,11 @@ class MyJSONComms(object):
       if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
 
+    if action == "watched" and mediatype in ["movies", "episodes"]:
+        if "art" in REQUEST["params"]["properties"]:
+          REQUEST["params"]["properties"].remove("art")
+        self.addProperties(REQUEST, "playcount, lastplayed, resume")
+
     if action == "qa":
       qaSinceDate = self.config.QADATE
       if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
@@ -1856,6 +1866,66 @@ class MyMediaItem(object):
     else:
       return "%s" % self.name
 
+#
+# Simple container for watched items.
+#
+class MyWatchedItem(object):
+  def __init__(self, mediaType, name, episode, playcount, lastplayed, resume):
+    self.mtype = mediaType
+    self.name = name
+    self.episode = episode
+    self.playcount = int(playcount)
+    self.lastplayed = lastplayed
+    self.resume = resume
+    self.libraryid = 0
+
+    # 0 = Valid (write to Media Library)
+    # 1 = Unchanged - same as Media Library (don't update Media Library)
+    # 2 = Out of Date - Media Library has been updated since backup list created
+    self.state = 0
+
+    if self.episode == None: self.episode = ""
+
+  def __str__(self):
+    return "['%s', %d, '%s', '%s', %d, '%s, %s']" % \
+            (self.mtype, self.libraryid, self.name, self.episode, self.playcount, self.lastplayed, resume)
+
+  def getList(self):
+    return [ self.mtype, self.libraryid, self.name, self.episode, self.playcount, self.lastplayed, self.resume ]
+
+  def match(self, mediatype, name, episode):
+    if mediatype != self.mtype: return False
+
+    xepisode = episode
+    if xepisode == None: xepisode = ""
+
+    return (self.name == name and self.episode == xepisode)
+
+  def refresh(self, HASRESUME, playcount, lastplayed, resume):
+    # Update this object to reflect most recent (latest) values
+
+    if playcount > self.playcount:   self.playcount = playcount
+    if lastplayed > self.lastplayed: self.lastplayed = lastplayed
+
+    if HASRESUME:
+      if resume["position"] > self.resume["position"]:
+        self.resume["position"] = resume["position"]
+
+      if resume["total"] > self.resume["total"]:
+        self.resume["total"] = resume["total"]
+
+  def setState(self, HASRESUME, playcount, lastplayed, resume):
+    # Assume no change is required
+    self.state = 1
+
+    if self.playcount == playcount and self.lastplayed == lastplayed:
+      if not HASRESUME: return
+      if self.resume == resume: return
+
+    # Something has changed, apply object values to library
+    self.state = 0
+    return
+
 def removeNonAscii(s, replaceWith = ""):
   if replaceWith == "":
     return  "".join([x if ord(x) < 128 else ("%%%02x" % ord(x)) for x in s])
@@ -1869,7 +1939,8 @@ def removeNonAscii(s, replaceWith = ""):
 # Sets doesn't support filters, so filter this list after retrieval.
 #
 def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, \
-                      decode=False, nodownload=False, lastRun=False, labels=None, query=""):
+                      decode=False, nodownload=False, lastRun=False, labels=None, query="", \
+                      filename=None, wlBackup=True):
 
   if not mediatype in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
@@ -1883,6 +1954,11 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   # Only songs, movies and tvshows (and sub-types) valid for missing...
   if action == "missing" and not mediatype in ["songs", "movies", "tvshows", "seasons", "episodes"]:
     gLogger.out("Error: media class [%s] is not currently supported by missing" % mediatype, newLine=True)
+    sys.exit(2)
+
+  # Only movies and tvshows for "watched"...
+  if action in "watched" and not mediatype in ["movies", "tvshows"]:
+    gLogger.out("Error: media class [%s] is not currently supported by watched" % mediatype, newLine=True)
     sys.exit(2)
 
   TOTALS.TimeStart(mediatype, "Total")
@@ -2008,6 +2084,10 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       missingFiles(mediatype, data, fileList, title_name, id_name)
     elif action == "query":
       queryLibrary(mediatype, query, data, title_name, id_name)
+    elif action == "watched" and wlBackup:
+      watchedBackup(mediatype, filename, data, title_name, id_name)
+    elif action == "watched" and not wlBackup:
+      watchedRestore(mediatype, jcomms, filename, data, title_name, id_name)
 
   gLogger.progress("")
 
@@ -2665,6 +2745,183 @@ def parseQuery(query):
 
   return ",".join(fields), tuples
 
+def watchedWrite(filename, mediaitems):
+  MYLIST = []
+  for m in mediaitems:
+    MYLIST.append([ m.mtype, m.name, m.episode, m.playcount, m.lastplayed, m.resume ])
+
+  try:
+    OUTPUTFILE = codecs.open(filename, "wb", encoding="utf-8")
+    OUTPUTFILE.write(json.dumps(MYLIST, indent=2, ensure_ascii=True))
+    OUTPUTFILE.close()
+  except:
+    gLogger.out("ERROR: Failed to write the watched list to file [%s]" % filename, newLine=True)
+
+def watchedRead(filename, mediaitems):
+  BUFFER = ""
+  try:
+    INPUTFILE = codecs.open(filename, "rb", encoding="utf-8")
+    BUFFER = INPUTFILE.read()
+    INPUTFILE.close()
+
+    MYLIST = json.loads(BUFFER)
+    for m in MYLIST:
+      mediaitems.append(MyWatchedItem(m[0], m[1], m[2], m[3], m[4], m[5]))
+  except:
+    gLogger.out("ERROR: Failed to read the watched list from file [%s]" % filename, newLine=True)
+    return False
+
+  return True
+
+def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mitems=None, showName=None, season=None):
+  gLogger.reset()
+
+  if mitems == None:
+      TOTALS.TimeStart(mediatype, "Parse")
+      workItems= {}
+      mediaitems = []
+  else:
+      workItems = work
+      mediaitems = mitems
+
+  for item in data:
+    libraryid = item.get(id_name, 0)
+    title = item.get(title_name, "")
+
+    if showName:
+      shortName = showName
+      if season:
+        episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        longName = "%s, %s Episode %s" % (showName, season, episode)
+      else:
+        episode = None
+        longName = "%s, %s" % (showName, title)
+    else:
+      season = episode = None
+      longName = shortName = title
+
+    gLogger.progress("Parsing [%s]..." % longName, every = 25)
+
+    playcount = item.get("playcount", 0)
+    lastplayed = item.get("lastplayed", "")
+    resume = item.get("resume", {"position": 0.0, "total": 0.0})
+
+    if playcount != 0 or lastplayed != "" or resume["position"] != 0.0 or resume["total"] != 0.0:
+      mediaitems.append(MyWatchedItem(mediatype, shortName, episode, playcount, lastplayed, resume))
+
+    if "seasons" in item:
+      watchedBackup("seasons", filename, item["seasons"], "label", "season", \
+              work=workItems, mitems=mediaitems, showName=title)
+    if "episodes" in item:
+      watchedBackup("episodes", filename, item["episodes"], "label", "episodeid", \
+              work=workItems, mitems=mediaitems, showName=showName, season=title)
+      season = None
+
+  if mitems == None:
+    TOTALS.TimeEnd(mediatype, "Parse")
+    gLogger.progress("")
+    watchedWrite(filename, mediaitems)
+
+def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=None, mitems=None, showName=None, season=None):
+  gLogger.reset()
+
+  if mitems == None:
+      TOTALS.TimeStart(mediatype, "Parse")
+      workItems= {}
+      mediaitems = []
+      if not watchedRead(filename, mediaitems): return
+  else:
+      workItems = work
+      mediaitems = mitems
+
+  for item in data:
+    libraryid = item.get(id_name, 0)
+    title = item.get(title_name, "")
+
+    if showName:
+      shortName = showName
+      if season:
+        episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        longName = "%s, %s Episode %s" % (showName, season, episode)
+      else:
+        episode = None
+        longName = "%s, %s" % (showName, title)
+    else:
+      season = episode = None
+      longName = shortName = title
+
+    gLogger.progress("Parsing [%s]..." % longName, every = 25)
+
+    playcount = item.get("playcount", 0)
+    lastplayed = item.get("lastplayed", "")
+    resume = item.get("resume", {"position": 0.0, "total": 0.0})
+
+    if mediatype in ["movies", "episodes"]:
+      for m in mediaitems:
+        if m.libraryid == 0 and m.match(mediatype, shortName, episode):
+          m.libraryid = libraryid
+          # Update watched object with latest library values unless overwriting,
+          # in which case keep the values that are being restored.
+          if not gConfig.WATCHEDOVERWRITE:
+            m.refresh(gConfig.JSON_HASRESUME, playcount, lastplayed, resume)
+          # Set update state based on old/new values
+          m.setState(gConfig.JSON_HASRESUME, playcount, lastplayed, resume)
+
+    if "seasons" in item:
+      watchedRestore("seasons", jcomms, filename, item["seasons"], "label", "season", \
+              work=workItems, mitems=mediaitems, showName=title)
+    if "episodes" in item:
+      watchedRestore("episodes", jcomms, filename, item["episodes"], "label", "episodeid", \
+              work=workItems, mitems=mediaitems, showName=showName, season=title)
+      season = None
+
+  if mitems == None:
+    TOTALS.TimeEnd(mediatype, "Parse")
+    gLogger.progress("")
+    RESTORED = UNCHANGED = UNMATCHED = ERROR = 0
+    for m in mediaitems:
+      shortName = "%s, Episode %s" % (m.name, m.episode) if m.episode != "" else m.name
+      if m.libraryid == 0:
+        gLogger.out("NO MATCH %s: %s" % (m.mtype[:-1], shortName), newLine = True)
+        UNMATCHED += 1
+      else:
+        if m.state != 0:
+          UNCHANGED += 1
+        elif watchedItemUpdate(jcomms, m, shortName):
+          gLogger.out("Restored %s: %s" % (m.mtype[:-1], shortName), newLine = True)
+          RESTORED += 1
+        else:
+          gLogger.out("FAILED   %s: %s" % (m.mtype[:-1], shortName), newLine = True)
+          ERROR += 1
+    gLogger.out("", newLine=True)
+    gLogger.out("Watched List Restored items: %d, Unchanged items: %d, Unmatched items: %d, Failed items: %d" %
+        (RESTORED, UNCHANGED, UNMATCHED, ERROR), newLine=True)
+
+def watchedItemUpdate(jcomms, mediaitem, shortName):
+  if mediaitem.mtype == "movies":
+    method = "VideoLibrary.SetMovieDetails"
+    mediaid = "movieid"
+  else:
+    method = "VideoLibrary.SetEpisodeDetails"
+    mediaid = "episodeid"
+
+  REQUEST = { "method": method,
+              "params": {mediaid: mediaitem.libraryid,
+                         "playcount": mediaitem.playcount,
+                         "lastplayed": mediaitem.lastplayed,
+                         }}
+
+
+  if gConfig.JSON_HASRESUME:
+    REQUEST["params"]["resume"] = mediaitem.resume
+
+  gLogger.progress("Restoring %s: %s..." % (mediaitem.mtype[:-1], shortName))
+
+  data = jcomms.sendJSON(REQUEST, "libWatchedList", checkResult=False)
+
+  return ("result" in data and data["result"] == "OK")
+
+
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter=""):
   database = MyDB(gConfig, gLogger)
@@ -3155,7 +3412,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | watched class backup <filename> | watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -3178,6 +3435,7 @@ def usage(EXIT_CODE):
   print("          Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
   print("  p       Display files present in texture cache that don't exist in the media library")
   print("  P       Prune (automatically remove) cached items that don't exist in the media library")
+  print("  watched Backup or restore movies and tvshows watched statuses, to/from the specified text file")
   print("  missing Locate media files missing from the specified media library, matched against one or more source labels, eg. missing movies \"My Movies\"")
   print("  ascan   Scan entire audio library, or specific path")
   print("  vscan   Scan entire video library, or specific path")
@@ -3237,7 +3495,7 @@ def checkConfig(option):
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
                 "vscan", "ascan", "vclean", "aclean", "directory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw", "missing"]:
+                "exec", "execw", "missing", "watched"]:
     needSocket = True
   else:
     needSocket = False
@@ -3288,6 +3546,9 @@ def checkConfig(option):
         if "version" in data["result"]:
           jsonGotVersion = data["result"]["version"]
           if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
+            gConfig.JSONVER = "%d.%02d.%02d" % (jsonGotVersion.get("major",0),
+                                                jsonGotVersion.get("minor",0),
+                                                jsonGotVersion.get("patch",0))
             jsonGotVersion = jsonGotVersion["major"]
 
       REQUEST = {"method": "XBMC.GetInfoBooleans",
@@ -3334,6 +3595,9 @@ def checkConfig(option):
           "       Check settings in properties file %s\n" % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
     gLogger.out(MSG)
     return False
+
+  # Allow restoration of resume points with Gotham+
+  gConfig.JSON_HASRESUME = True if gConfig.JSONVER >= "6.02.00" else False
 
   return True
 
@@ -3570,6 +3834,14 @@ def main(argv):
 
   elif argv[0] == "missing" and len(argv) >= 3:
     jsonQuery(action="missing", mediatype=argv[1], labels=argv[2:])
+
+  elif argv[0] == "watched" and len(argv) == 4:
+    if argv[2] == "backup":
+      jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=True)
+    elif argv[2] == "restore":
+      jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=False)
+    else:
+      usage(1)
 
   else:
     usage(1)

@@ -29,6 +29,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
+**[watched]** Backup and restore movie and tvshow watched lists to a text file. Watched list will be restored keeping more recent playcount, lastplayed and resume points unless  `@watched.overwrite=yes` is specified, in which case the watched list will be restored as-is.
+
 **[missing]** Locate media files missing from the specified media library and source label, eg. `missing movies "My Movies"`
 
 **[ascan, vscan]** Initiate audio/video library scan, either entire library or a specific path (see **sources**). The exit status is the number of items added during each scan, ie. 0 or +n.

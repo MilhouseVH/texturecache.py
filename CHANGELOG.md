@@ -1,5 +1,20 @@
 #Changelog
 
+##Version 0.8.1 (17/06/2013)
+* Add: New option `watched`, allowing backup and restoration of movie and tvshow watched statuses (and in Gotham, resume points).
+
+  When restoring a watched status, more recent playcount, lastplayed and (in Gotham) resume points will be retained unless the property `watched.overwrite=yes` is specified, in which case the watched statuses will be restored exactly as-is.
+
+  Watch statuses will be restored based on the name of the movie or tv show (and season/episode number), so if these properties change between when the backup is taken and when it is restored, some watch statuses may not be able to be restored.
+
+  Examples:
+  <pre>
+  ./texturecache,py watched movies backup ./movies.dat
+  ./texturecache,py watched movies restore ./movies.dat
+  ./texturecache,py watched tvshows backup ./tvshows.dat
+  ./texturecache,py watched tvshows restore ./tvshows.dat
+  </pre>
+
 ##Version 0.8.0 (15/06/2013)
 * Add: `agenres` and `vgenres` as audio and video genre classes, for use with cache (`c`, `C`, `nc`, `lc`, `lnc`), dump (`j, `J`, `jd`, `Jd`) and QA (`qa`) options
 * Add: "Undefined" category to library stats, representing artwork that is blank (either not specified, or empty string/"")
