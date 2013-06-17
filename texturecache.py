@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.2"
+    self.VERSION="0.8.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1890,7 +1890,7 @@ class MyWatchedItem(object):
 
   def __str__(self):
     return "['%s', %d, '%s', '%s', %d, '%s, %s']" % \
-            (self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, resume)
+            (self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, self.resume)
 
   def getList(self):
     return [ self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, self.resume ]
@@ -2750,7 +2750,8 @@ def parseQuery(query):
 def watchedWrite(filename, mediaitems):
   MYLIST = []
   for m in mediaitems:
-    MYLIST.append([ m.mtype, m.name, m.episode_year, m.playcount, m.lastplayed, m.resume ])
+    MYLIST.append({ "type": m.mtype, "name": m.name, "episode_year": m.episode_year,
+                    "playcount": m.playcount, "lastplayed": m.lastplayed, "resume": m.resume })
 
   try:
     OUTPUTFILE = codecs.open(filename, "wb", encoding="utf-8")
@@ -2768,7 +2769,8 @@ def watchedRead(filename, mediaitems):
 
     MYLIST = json.loads(BUFFER)
     for m in MYLIST:
-      mediaitems.append(MyWatchedItem(m[0], m[1], m[2], m[3], m[4], m[5]))
+      mediakey = "%s;%s;%s" % (m["type"], m["name"], m["episode_year"])
+      mediaitems[mediakey] = MyWatchedItem(m["type"], m["name"], m["episode_year"], m["playcount"], m["lastplayed"], m["resume"])
   except:
     gLogger.out("ERROR: Failed to read the watched list from file [%s]" % filename, newLine=True)
     return False
@@ -2831,7 +2833,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
   if mitems == None:
       TOTALS.TimeStart(mediatype, "Parse")
       workItems= {}
-      mediaitems = []
+      mediaitems = {}
       if not watchedRead(filename, mediaitems): return
   else:
       workItems = work
@@ -2861,8 +2863,10 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     resume = item.get("resume", {"position": 0.0, "total": 0.0})
 
     if mediatype in ["movies", "episodes"]:
-      for m in mediaitems:
-        if m.libraryid == 0 and m.match(mediatype, shortName, episode_year):
+      mediakey = "%s;%s;%s" % (mediatype, shortName, episode_year)
+      if mediakey in mediaitems:
+        m = mediaitems[mediakey]
+        if m.libraryid == 0:
           m.libraryid = libraryid
           # Update watched object with latest library values unless overwriting,
           # in which case keep the values that are being restored.
@@ -2883,7 +2887,8 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     RESTORED = UNCHANGED = UNMATCHED = ERROR = 0
-    for m in mediaitems:
+    for mediakey in mediaitems:
+      m = mediaitems[mediakey]
       shortName = "%s, Episode %s" % (m.name, m.episode_year) if m.mtype == "episodes" else m.name
       if m.libraryid == 0:
         gLogger.out("NO MATCH %s: %s" % (m.mtype[:-1], shortName), newLine = True)

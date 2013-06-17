@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.8.3 (17/06/2013)
+* Fix: Improve item matching performance on `watched` option
+
 ##Version 0.8.2 (17/06/2013)
 * Fix: Include year when matching movies for backup/restore of `watched` status.
 
