@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.8.2 (17/06/2013)
+* Fix: Include year when matching movies for backup/restore of `watched` status.
+
 ##Version 0.8.1 (17/06/2013)
 * Add: New option `watched`, allowing backup and restoration of movie and tvshow watched statuses (and in Gotham, resume points).
 

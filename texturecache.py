@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.1"
+    self.VERSION="0.8.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1523,7 +1523,7 @@ class MyJSONComms(object):
     if action == "watched" and mediatype in ["movies", "episodes"]:
         if "art" in REQUEST["params"]["properties"]:
           REQUEST["params"]["properties"].remove("art")
-        self.addProperties(REQUEST, "playcount, lastplayed, resume")
+        self.addProperties(REQUEST, "year, playcount, lastplayed, resume")
 
     if action == "qa":
       qaSinceDate = self.config.QADATE
@@ -1870,10 +1870,10 @@ class MyMediaItem(object):
 # Simple container for watched items.
 #
 class MyWatchedItem(object):
-  def __init__(self, mediaType, name, episode, playcount, lastplayed, resume):
+  def __init__(self, mediaType, name, episode_year, playcount, lastplayed, resume):
     self.mtype = mediaType
     self.name = name
-    self.episode = episode
+    self.episode_year = episode_year
     self.playcount = int(playcount)
     self.lastplayed = lastplayed
     self.resume = resume
@@ -1884,22 +1884,22 @@ class MyWatchedItem(object):
     # 2 = Out of Date - Media Library has been updated since backup list created
     self.state = 0
 
-    if self.episode == None: self.episode = ""
+    if self.episode_year == None: self.episode_year = ""
 
   def __str__(self):
     return "['%s', %d, '%s', '%s', %d, '%s, %s']" % \
-            (self.mtype, self.libraryid, self.name, self.episode, self.playcount, self.lastplayed, resume)
+            (self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, resume)
 
   def getList(self):
-    return [ self.mtype, self.libraryid, self.name, self.episode, self.playcount, self.lastplayed, self.resume ]
+    return [ self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, self.resume ]
 
-  def match(self, mediatype, name, episode):
+  def match(self, mediatype, name, episode_year):
     if mediatype != self.mtype: return False
 
-    xepisode = episode
-    if xepisode == None: xepisode = ""
+    xepisode_year = episode_year
+    if xepisode_year == None: xepisode_year = ""
 
-    return (self.name == name and self.episode == xepisode)
+    return (self.name == name and self.episode_year == xepisode_year)
 
   def refresh(self, HASRESUME, playcount, lastplayed, resume):
     # Update this object to reflect most recent (latest) values
@@ -2748,7 +2748,7 @@ def parseQuery(query):
 def watchedWrite(filename, mediaitems):
   MYLIST = []
   for m in mediaitems:
-    MYLIST.append([ m.mtype, m.name, m.episode, m.playcount, m.lastplayed, m.resume ])
+    MYLIST.append([ m.mtype, m.name, m.episode_year, m.playcount, m.lastplayed, m.resume ])
 
   try:
     OUTPUTFILE = codecs.open(filename, "wb", encoding="utf-8")
@@ -2791,13 +2791,14 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
     if showName:
       shortName = showName
       if season:
-        episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        episode_year = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
         longName = "%s, %s Episode %s" % (showName, season, episode)
       else:
         episode = None
         longName = "%s, %s" % (showName, title)
     else:
-      season = episode = None
+      season = None
+      episode_year = item.get("year", 0)
       longName = shortName = title
 
     gLogger.progress("Parsing [%s]..." % longName, every = 25)
@@ -2807,7 +2808,7 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
     resume = item.get("resume", {"position": 0.0, "total": 0.0})
 
     if playcount != 0 or lastplayed != "" or resume["position"] != 0.0 or resume["total"] != 0.0:
-      mediaitems.append(MyWatchedItem(mediatype, shortName, episode, playcount, lastplayed, resume))
+      mediaitems.append(MyWatchedItem(mediatype, shortName, episode_year, playcount, lastplayed, resume))
 
     if "seasons" in item:
       watchedBackup("seasons", filename, item["seasons"], "label", "season", \
@@ -2841,13 +2842,14 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     if showName:
       shortName = showName
       if season:
-        episode = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
+        episode_year = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
         longName = "%s, %s Episode %s" % (showName, season, episode)
       else:
-        episode = None
+        episode_year = None
         longName = "%s, %s" % (showName, title)
     else:
-      season = episode = None
+      season = None
+      episode_year = item.get("year", 0)
       longName = shortName = title
 
     gLogger.progress("Parsing [%s]..." % longName, every = 25)
@@ -2858,7 +2860,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
 
     if mediatype in ["movies", "episodes"]:
       for m in mediaitems:
-        if m.libraryid == 0 and m.match(mediatype, shortName, episode):
+        if m.libraryid == 0 and m.match(mediatype, shortName, episode_year):
           m.libraryid = libraryid
           # Update watched object with latest library values unless overwriting,
           # in which case keep the values that are being restored.
@@ -2880,7 +2882,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     gLogger.progress("")
     RESTORED = UNCHANGED = UNMATCHED = ERROR = 0
     for m in mediaitems:
-      shortName = "%s, Episode %s" % (m.name, m.episode) if m.episode != "" else m.name
+      shortName = "%s, Episode %s" % (m.name, m.episode_year) if m.mtype == "episodes" else m.name
       if m.libraryid == 0:
         gLogger.out("NO MATCH %s: %s" % (m.mtype[:-1], shortName), newLine = True)
         UNMATCHED += 1
