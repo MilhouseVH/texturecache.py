@@ -1523,7 +1523,9 @@ class MyJSONComms(object):
     if action == "watched" and mediatype in ["movies", "episodes"]:
         if "art" in REQUEST["params"]["properties"]:
           REQUEST["params"]["properties"].remove("art")
-        self.addProperties(REQUEST, "year, playcount, lastplayed, resume")
+        if mediatype == "movies":
+          self.addProperties(REQUEST, "year")
+        self.addProperties(REQUEST, "playcount, lastplayed, resume")
 
     if action == "qa":
       qaSinceDate = self.config.QADATE
