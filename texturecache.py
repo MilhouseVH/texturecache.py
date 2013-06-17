@@ -2845,7 +2845,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
       shortName = showName
       if season:
         episode_year = re.sub("([0-9]*x[0-9]*)\..*", "\\1", title)
-        longName = "%s, %s Episode %s" % (showName, season, episode)
+        longName = "%s, %s Episode %s" % (showName, season, episode_year)
       else:
         episode_year = None
         longName = "%s, %s" % (showName, title)
