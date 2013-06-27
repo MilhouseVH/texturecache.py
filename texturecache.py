@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.3"
+    self.VERSION="0.8.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -245,6 +245,8 @@ class MyConfiguration(object):
 
     self.WATCHEDOVERWRITE = self.getBoolean(config, "watched.overwrite", "no")
 
+    self.MAC_ADDRESS = self.getValue(config, "network.mac", "")
+
   def getValue(self, config, aKey, default=None):
     value = default
 
@@ -386,6 +388,7 @@ class MyConfiguration(object):
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
     print("  nonmedia.filetypes = %s" % self.NoneIsBlank(",".join(self.NONMEDIA_FILETYPES)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
+    print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -2455,7 +2458,6 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
             if qawarntype.search(artwork):
               missing["Warn URL (%s, \"%s\")" % (j, qawarntype.pattern)] = False
               break
-#      elif database.getRowByFilename(artwork) == None: missing["Uncached %s" % j] = False
 
     if check_file and not ("file" in item and jcomms.getFileDetails(item["file"])): missing["file"] = False
 
@@ -3354,6 +3356,38 @@ def execAddon(addon, params, wait=False):
 
   MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libAddon")
 
+def wake_on_lan():
+  macaddress = gConfig.MAC_ADDRESS.upper()
+
+  # Check MAC address format and try to normalise to only 12 hex-digits
+  if len(macaddress) == 12 + 5:
+    macaddress = macaddress.replace(macaddress[2], '')
+
+  # Determine if MAC address consists of only hex digits
+  hex_digits = set("0123456789ABCDEF")
+  validhex = True
+  for char in macaddress:
+    validhex = (char in hex_digits)
+    if not validhex: break
+
+  # If not 12 digits or not all hex, throw an exception
+  if len(macaddress) != 12 or not validhex:
+    raise ValueError('Incorrect MAC address format [%s]' % gConfig.MAC_ADDRESS)
+
+  # Format the hex data as 6 bytes of FF, and 16 repetitions of the target MAC address (102 bytes total)
+  data = ''.join(['FF' * 6, macaddress * 16])
+
+  # Create the broadcast frame by converting each 2-char hex value to a byte
+  frame = bytearray([])
+  for i in range(0, len(data), 2):
+    frame.append(int(data[i: i + 2], 16))
+
+  # Broadcast data to the LAN as a UDP datagram
+  sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+  sock.sendto(frame, ('<broadcast>', 7))
+  sock.close()
+
 def showStatus(idleTime=600):
   jcomms = MyJSONComms(gConfig, gLogger)
 
@@ -3421,7 +3455,7 @@ def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | watched class backup <filename> | watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params]")
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | watched class backup <filename> | watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -3455,6 +3489,7 @@ def usage(EXIT_CODE):
   print("  status  Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor Display client event notifications as they occur")
   print("  power   Control power state of client, where state is one of suspend, hibernate, shutdown and reboot")
+  print("  wake    Wake (over LAN) the client corresponding to the MAC address specified by property network.mac")
   print("  exec    Execute specified addon, with optional parameters")
   print("  execw   Execute specified addon, with optional parameters and wait (although often wait has no effect)")
   print("")
@@ -3509,12 +3544,17 @@ def checkConfig(option):
   else:
     needSocket = False
 
-  if option in ["s","S","x","X","f","c","C","nc","lc","lnc","qa","qax","d","r","R","p","P"]:
+  if option in ["s","S","x","X","f","c","C","nc","lc","lnc","d","r","R","p","P"]:
     needDb = True
   else:
     needDb = False
 
-  gotWeb = gotSocket = gotDb = False
+  if option == "wake":
+    needMAC = True
+  else:
+    needMAC = False
+
+  gotWeb = gotSocket = gotDb = gotMAC = False
   jsonGotVersion = 0
 
   if needWeb:
@@ -3567,6 +3607,9 @@ def checkConfig(option):
     except socket.error:
       pass
 
+  if needMAC:
+    gotMAC = (gConfig.MAC_ADDRESS != "")
+
   if needSocket and not gotSocket:
     MSG = "FATAL: The task you wish to perform requires that the JSON-RPC server is\n" \
           "       enabled and running on the XBMC system you wish to connect.\n\n" \
@@ -3602,6 +3645,13 @@ def checkConfig(option):
           "       The following sqlite3 database could not be opened:\n" \
           "       %s\n\n" \
           "       Check settings in properties file %s\n" % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
+    gLogger.out(MSG)
+    return False
+
+  if needMAC and not gotMAC:
+    MSG = "FATAL: The task you wish to perform requires a valid MAC address\n" \
+          "       specified in the property \"network.mac\".\n\n" \
+          "       Check settings in properties file %s\n" % gConfig.CONFIG_NAME
     gLogger.out(MSG)
     return False
 
@@ -3851,6 +3901,9 @@ def main(argv):
       jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=False)
     else:
       usage(1)
+
+  elif argv[0] == "wake":
+    wake_on_lan()
 
   else:
     usage(1)

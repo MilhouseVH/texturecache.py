@@ -47,6 +47,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[power]** Set power state of client - `suspend`, `hibernate`, `shutdown` or `reboot`
 
+**[wake]** Use Wake Over LAN to wake a suspended/hibernating remote client. Specify the MAC address of the remote client in the `network.mac` property (ie. `network.mac=xx:xx:xx:xx:xx:xx`). When the client is no longer required, suspend or hibernate it with the `power` option.
+
 **[exec, execw]** Execute the specified addon, with optional parameters. eg. `exec script.artwork.downloader silent=true mediatype=tvshow`. Use `execw` to wait, but this rarely has any effect (possibly not implemented by JSON?)
 
 ##Installation instructions
@@ -341,6 +343,9 @@ checkupdate = yes
 lastrunfile =
 orphan.limit.check = yes
 nonmedia.filetypes =
+watched.overwrite = no
+network.mac =
+
 ```
 
 The `dbfile` and `thumbbnails` properties represent folders that are normally relative to the `userdata` property, however full paths can be specified.
