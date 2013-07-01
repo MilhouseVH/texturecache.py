@@ -70,6 +70,19 @@ curl https://raw.github.com/MilhouseVH/texturecache.py/master/texturecache.py -o
 chmod +x ./texturecache.py
 ```
 
+#####ATV2 (iOS) users
+
+Python 2.6+ is required to run this script, and although Python can be installed on iOS using `apt-get install python`, the version installed (typically v2.5.1 - check with `python --version`) is very old and lacks language features required by the script. It is possible to install a more recent [Python 2.7.3 package](http://code.google.com/p/yangapp/downloads/detail?name=python_2.7.3-3_iphoneos-arm.deb&can=2&q=) as follows:
+
+####Code:
+```
+ssh root@YOUR.ATV2.IP.ADDRESS
+rm -f python*.deb
+wget http://yangapp.googlecode.com/files/python_2.7.3-3_iphoneos-arm.deb
+dpkg -i python*.deb
+rm python*.deb
+```
+
 ##Basic Example usage
 Let's say the poster image for the "Dr. No" movie is corrupted, and it needs to be deleted so that XBMC will automatically re-cache it (hopefully correctly) next time it is displayed:
 
