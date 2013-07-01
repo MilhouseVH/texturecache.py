@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.8.5 (01/07/2013)
+* Fix: `watched` items will be restored in ascending movie name or tv show/episode name order, rather than an apparently random order
+* Fix: Use absolute path when determining location of config file
+* Fix: Locked database handling
+
 ##Version 0.8.4 (27/06/2013)
 * Add: Added `wake` option to send a WOL magic packet to a suspended/hibernating remote client. Specify the MAC address of the remote client in the `network.mac` property (ie. `network.mac=xx:xx:xx:xx:xx:xx`). When the client is no longer required, suspend or hibernate it with the `power` option.
 * Fix: Remove incorrect `qa`/`qax` dependency on Textures13.db

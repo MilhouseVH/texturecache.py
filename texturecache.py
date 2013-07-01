@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.4"
+    self.VERSION="0.8.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -93,7 +93,7 @@ class MyConfiguration(object):
     if not os.path.exists(self.FILENAME) and not os.path.isabs(self.FILENAME):
       self.FILENAME = "%s%s%s" % (os.getcwd(), os.sep, self.CONFIG_NAME)
       if not os.path.exists(self.FILENAME):
-        self.FILENAME = "%s%s%s" % (os.path.dirname(__file__), os.sep, self.CONFIG_NAME)
+        self.FILENAME = "%s%s%s" % (os.path.dirname(os.path.abspath(__file__)), os.sep, self.CONFIG_NAME)
 
     cfg = StringIO.StringIO()
     cfg.write("[%s]\n" % self.GLOBAL_SECTION)
@@ -340,7 +340,7 @@ class MyConfiguration(object):
     return "yes" if x else "no"
 
   def showConfig(self):
-    print("Current properties (if exists, read from %s%s%s):" % (os.path.dirname(__file__), os.sep, self.CONFIG_NAME))
+    print("Current properties (if exists, read from %s):" % (self.FILENAME))
     print("")
     print("  sep = %s" % self.FSEP)
     print("  userdata = %s " % self.XBMC_BASE)
@@ -637,7 +637,7 @@ class MyDB(object):
     self.DBVERSION = None
     self.cursor = None
 
-    self.RETRY_MAX = 5
+    self.RETRY_MAX = 10
     self.RETRY = 0
 
   def __enter__(self):
@@ -663,11 +663,16 @@ class MyDB(object):
     try:
       self.cursor.execute(SQL)
     except lite.OperationalError as e:
-      if str(e) == "database is locked" and self.RETRY <= self.RETRY_MAX:
-        time.sleep(0.1)
-        self.RETRY += 1
-        self.logger.log("EXCEPTION SQL: %s - retrying attempt #%d" % (e.value, self.RETRY))
-        self.execute(SQL)
+      if str(e) == "database is locked":
+        if self.RETRY < self.RETRY_MAX:
+          time.sleep(0.5)
+          self.RETRY += 1
+          self.logger.log("EXCEPTION SQL: %s - retrying attempt #%d" % (e, self.RETRY))
+          self.execute(SQL)
+        else:
+          self.logger.out("ERROR: Database %s is locked - try again later." % self.config.getDBPath(), newLine=True, log=True)
+          self.logger.out("", newLine=True)
+          raise
       else:
         raise
 
@@ -2889,7 +2894,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     RESTORED = UNCHANGED = UNMATCHED = ERROR = 0
-    for mediakey in mediaitems:
+    for mediakey in sorted(mediaitems):
       m = mediaitems[mediakey]
       shortName = "%s, Episode %s" % (m.name, m.episode_year) if m.mtype == "episodes" else m.name
       if m.libraryid == 0:
@@ -3720,7 +3725,7 @@ def downloadLatestVersion(force=False):
     sys.exit(2)
 
   try:
-    THISFILE = open(os.path.realpath(__file__), "wb")
+    THISFILE = open(path, "wb")
     THISFILE.write(data)
     THISFILE.close()
   except:
