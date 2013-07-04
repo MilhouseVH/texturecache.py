@@ -1,5 +1,11 @@
 #Changelog
 
+##Version 0.8.6 (04/07/2013)
+* Fix: When looking for `missing` (unscraped) media items, allow for empty remote folders (no files)
+* Add: Include `file` as a default field when dumping (`j`/`jd`/`J`/`Jd`) media library items
+* Add: Stacked/multi-part movie support added to `missing` and `qa`/`qax` options
+* Add: Group similar `prune` items together by sorting results on url
+
 ##Version 0.8.5 (01/07/2013)
 * Fix: `watched` items will be restored in ascending movie name or tv show/episode name order, rather than an apparently random order
 * Fix: Use absolute path when determining location of config file

@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.5"
+    self.VERSION="0.8.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -1211,7 +1211,7 @@ class MyJSONComms(object):
     data = self.sendJSON(REQUEST, "filedetails", checkResult=False)
 
     if "result" in data:
-      return data["result"]["filedetails"]
+      return data["result"].get("filedetails", None)
     else:
       return None
 
@@ -1377,7 +1377,9 @@ class MyJSONComms(object):
     if fileList == []:
       self.logger.out("WARNING: No files obtained from filesystem - ensure valid source(s) specified!", newLine=True)
 
-    return sorted(fileList)
+    fileList.sort()
+
+    return fileList
 
   def getFilesForPath(self, path):
     fileList = []
@@ -1388,7 +1390,7 @@ class MyJSONComms(object):
     data = self.getDirectoryList("files", path)
     if not "result" in data: return
 
-    files = data["result"]["files"]
+    files = data["result"].get("files", None)
     if not files: return
 
     for file in files:
@@ -1546,6 +1548,8 @@ class MyJSONComms(object):
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("zero", XTRA)))
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", XTRA)))
     elif action == "dump":
+      if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
+        self.addProperties(REQUEST, "file")
       xtraFields = self.config.XTRAJSON["extrajson.%s" % XTRA] if XTRA != "" else None
       if useExtraFields and xtraFields:
         self.addProperties(REQUEST, xtraFields)
@@ -2464,7 +2468,11 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               missing["Warn URL (%s, \"%s\")" % (j, qawarntype.pattern)] = False
               break
 
-    if check_file and not ("file" in item and jcomms.getFileDetails(item["file"])): missing["file"] = False
+    if check_file and "file" in item:
+      for file in unstackFiles(item["file"]):
+        if not jcomms.getFileDetails(file):
+          missing["file"] = False
+          break
 
     if "seasons" in item:
       qaData("seasons", jcomms, database, item["seasons"], "label", "season", False, \
@@ -2488,7 +2496,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
         if mtype == "Tvshow": mtype = "TVShow"
       mediaitems.append("%s [%-50s]: %s" % (mtype, addElipses(50, name), ", ".join(missing)))
       if "file" in item and "".join(["Y" if missing[m] else "" for m in missing]) != "":
-        dir = "%s;%s" % (mediatype, os.path.dirname(item["file"]))
+        dir = "%s;%s" % (mediatype, os.path.dirname(unstackFiles(item["file"])[0]))
         libraryids = workItems[dir] if dir in workItems else []
         libraryids.append(libraryid)
         workItems[dir] = libraryids
@@ -2534,12 +2542,12 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
 
     # Remove matched file from fileList - what files remain at the end
     # will be reported to the user
-    if "file" in item and mediatype != "tvshows":
-      file = "%s" % item["file"]
-      try:
-        fileList.remove(file)
-      except ValueError:
-        pass
+    if mediatype != "tvshows" and "file" in item:
+      for file in unstackFiles(item["file"]):
+        try:
+          fileList.remove(file)
+        except ValueError:
+          pass
 
     if "seasons" in item:
       missingFiles("seasons", item["seasons"], fileList, "label", "season", showName=title)
@@ -2672,6 +2680,12 @@ def addElipses(maxlen, aStr):
   iright = int(maxlen/2) - 1
 
   return "%s...%s" % (aStr[0:ileft], aStr[-iright:])
+
+def unstackFiles(files):
+  if files.startswith("stack://"):
+    return files[8:].split(" , ")
+  else:
+    return [files]
 
 def searchItem(data, field):
   if field in data: return data[field]
@@ -3097,6 +3111,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
           gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
         gLogger.out("", newLine=True)
       FSIZE=0
+      localfiles.sort(key=lambda row: row[3])
       for row in localfiles:
         database.dumpRow(row)
         FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
