@@ -33,7 +33,7 @@
 import sqlite3 as lite
 import os, sys, json, re, datetime, time
 import socket, base64, hashlib
-import threading
+import threading, random
 import errno, codecs
 
 if sys.version_info >= (3, 0):
@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.6"
+    self.VERSION="0.8.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -154,6 +154,23 @@ class MyConfiguration(object):
       self.WEB_AUTH_TOKEN = None
 
     self.DOWNLOAD_THREADS_DEFAULT = int(self.getValue(config, "download.threads", "2"))
+    self.DOWNLOAD_RETRY = int(self.getValue(config, "download.retry", "3"))
+
+    # It seems that Files.Preparedownload is sufficient to populate the texture cache
+    # so there is no need to actually download the artwork.
+    self.DOWNLOAD_PAYLOAD = self.getBoolean(config, "download.payload","no")
+
+    # Pre-delete artwork if the filesystem is mounted, as deleting artwork within threads
+    # will result in database locks and inability of the remote client to query its own
+    # database, resulting in invalid responses.
+    if self.getValue(config, "download.predelete", "auto") == "auto":
+      if self.getDBPath().startswith("/mnt") or self.getDBPath().startswith("\\\\"):
+        ISMOUNT = True
+      else:
+        ISMOUNT = False
+      self.DOWNLOAD_PREDELETE = (os.path.ismount(self.getDBPath()) or ISMOUNT)
+    else:
+      self.DOWNLOAD_PREDELETE = self.getBoolean(config, "download.predelete","no")
 
     self.DOWNLOAD_THREADS = {}
     for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
@@ -349,6 +366,9 @@ class MyConfiguration(object):
     print("  xbmc.host = %s" % self.XBMC_HOST)
     print("  webserver.port = %s" % self.WEB_PORT)
     print("  rpc.port = %s" % self.RPC_PORT)
+    print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
+    print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
+    print("  download.retry = %d" % self.DOWNLOAD_RETRY)
     print("  download.threads = %d" % self.DOWNLOAD_THREADS_DEFAULT)
     if self.DOWNLOAD_THREADS != {}:
       for dt in self.DOWNLOAD_THREADS:
@@ -529,7 +549,8 @@ class MyLogger():
 # Image loader thread class.
 #
 class MyImageLoader(threading.Thread):
-  def __init__(self, isSingle, work_queue, other_queue, error_queue, maxItems, config, logger, totals, force=False, retry=10):
+  def __init__(self, isSingle, work_queue, other_queue, error_queue, maxItems,
+                config, logger, totals, force=False, retry=0):
     threading.Thread.__init__(self)
 
     self.isSingle = isSingle
@@ -550,11 +571,31 @@ class MyImageLoader(threading.Thread):
 
     self.LAST_URL = None
 
+    self.totals.init(self.name)
+
+  def showProgress(self, ignoreSelf=False):
+    tac = threading.activeCount() - 1
+    if ignoreSelf: tac = tac - 1
+
+    if self.isSingle:
+      swqs = self.work_queue.qsize()
+      mwqs = self.other_queue.qsize()
+    else:
+      swqs = self.other_queue.qsize()
+      mwqs = self.work_queue.qsize()
+    wqs = swqs + mwqs
+    eqs = self.error_queue.qsize()
+    self.logger.progress("Caching artwork: %d item%s remaining of %d (qs: %d, qm: %d), %d error%s, %d thread%s active%s" % \
+                      (wqs, "s"[wqs==1:],
+                       self.maxItems, swqs, mwqs,
+                       eqs, "s"[eqs==1:],
+                       tac, "s"[tac==1:],
+                       self.totals.getPerformance(wqs)))
+
   def run(self):
-
-    self.totals.init()
-
     while not stopped.is_set():
+      self.showProgress()
+
       item = self.work_queue.get()
 
       if not self.loadImage(item.mtype, item.itype, item.filename, item.dbid, item.cachedurl, self.retry, self.force, item.missingOK):
@@ -563,52 +604,50 @@ class MyImageLoader(threading.Thread):
 
       self.work_queue.task_done()
 
-      if not stopped.is_set():
-        if self.isSingle:
-          swqs = self.work_queue.qsize()
-          mwqs = self.other_queue.qsize()
-        else:
-          swqs = self.other_queue.qsize()
-          mwqs = self.work_queue.qsize()
-        wqs = swqs + mwqs
-        eqs = self.error_queue.qsize()
-        tac = threading.activeCount() - 1
-        self.logger.progress("Caching artwork: %d item%s remaining of %d (s: %d, m: %d), %d error%s, %d thread%s active%s" % \
-                          (wqs, "s"[wqs==1:],
-                           self.maxItems, swqs, mwqs,
-                           eqs, "s"[eqs==1:],
-                           tac, "s"[tac==1:],
-                           self.totals.getPerformance(wqs)))
-
       if self.work_queue.empty(): break
+
+    self.showProgress(ignoreSelf=True)
 
     self.totals.stop()
 
   def loadImage(self, mediatype, imgtype, filename, rowid, cachedurl, retry, force, missingOK = False):
 
+    ATTEMPT = retry + 1
+    PDRETRY = retry
+    PERFORM_DOWNLOAD = False
+
     self.totals.start(mediatype, imgtype)
 
+    # Call Files.PrepareDownload. If failure, retry up to retry times, waiting a short
+    # interval between each attempt.
     self.LAST_URL = self.json.getDownloadURL(filename)
 
+    while PDRETRY > 0 and self.LAST_URL == None:
+      self.logger.log("Retrying getDownloadURL(), %d attempts remaining" % PDRETRY)
+      time.sleep(0.5)
+      PDRETRY -= 1
+      self.LAST_URL = self.json.getDownloadURL(filename)
+
     if self.LAST_URL != None:
-      self.logger.log("Proceeding with download of URL [%s]" % self.LAST_URL)
-      ATTEMPT = retry
-      if rowid != 0 and force:
-        self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]" % (rowid, cachedurl, filename))
-        self.database.deleteItem(rowid, cachedurl)
-        self.totals.bump("Deleted", imgtype)
+      if not self.config.DOWNLOAD_PREDELETE:
+        if rowid != 0 and force:
+          self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]" % (rowid, cachedurl, filename))
+          self.database.deleteItem(rowid, cachedurl)
+          self.totals.bump("Deleted", imgtype)
+          PERFORM_DOWNLOAD = True
+      if self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD:
+        self.logger.log("Proceeding with download of URL [%s]" % self.LAST_URL)
     else:
       self.logger.log("Image not available for download - uncacheable (embedded?), or doesn't exist. Filename [%s]" % filename)
       ATTEMPT = 0
 
-    while ATTEMPT > 0:
+    while ATTEMPT > 0 and (self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD):
       try:
         # Don't need to download the whole image for it to be cached so just grab the first 1KB
-        PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount = 1024, rawData=True)
+        PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount=1024, rawData=True)
         if self.json.WEB_LAST_STATUS == httplib.OK:
           self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
                         % (len(PAYLOAD), (retry - ATTEMPT + 1), filename))
-          self.totals.bump("Cached", imgtype)
           break
       except:
         pass
@@ -620,6 +659,8 @@ class MyImageLoader(threading.Thread):
     if ATTEMPT == 0:
       if not missingOK:
         self.totals.bump("Error", imgtype)
+    else:
+      self.totals.bump("Cached", imgtype)
 
     self.totals.finish(mediatype, imgtype)
 
@@ -647,6 +688,7 @@ class MyDB(object):
   def __exit__(self, atype, avalue, traceback):
     if self.cursor: self.cursor.close()
     if self.mydb: self.mydb.close()
+    self.cursor = self.mydb = None
 
   def getDB(self):
     if not self.mydb:
@@ -665,7 +707,7 @@ class MyDB(object):
     except lite.OperationalError as e:
       if str(e) == "database is locked":
         if self.RETRY < self.RETRY_MAX:
-          time.sleep(0.5)
+          time.sleep(0.5 + (random.randint(10, 50)/100))
           self.RETRY += 1
           self.logger.log("EXCEPTION SQL: %s - retrying attempt #%d" % (e, self.RETRY))
           self.execute(SQL)
@@ -1337,7 +1379,7 @@ class MyJSONComms(object):
 
     # Mostly image, nfo and audio-related playlist file types,
     # but also some random junk...
-    ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".sub", ".idx", \
+    ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".sub", ".idx", ".strm", \
                   ".m3u", ".pls", ".cue", \
                   ".log", ".ini", ".txt", \
                   ".bak", ".info", ".db", ".gz", ".tar", ".rar", ".zip"]
@@ -1620,9 +1662,9 @@ class MyTotals(object):
           return True
     return False
 
-  def init(self):
+  def init(self, name = ""):
     with threading.Lock():
-      tname = threading.current_thread().name
+      tname = threading.current_thread().name if name == "" else name
       self.THREADS[tname] = 0
       self.THREADS_HIST[tname] = (0, 0)
 
@@ -1733,18 +1775,24 @@ class MyTotals(object):
     # Total Download Time is sum of elapsed time for each mediatype
       self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] = 0
       for mtype in self.ETIMES:
-        tmin = tmax = 0.0
+        tmin = tmax = mmin = mmax = 0.0
         for itype in self.ETIMES[mtype]:
-          itmin = itmax = 0.0
+          itmin = itmax = mtmin = mtmax = 0.0
           for tname in self.ETIMES[mtype][itype]:
             tuple = self.ETIMES[mtype][itype][tname]
-            if tuple[0] < itmin or itmin == 0.0: itmin = tuple[0]
-            if tuple[1] > itmax: itmax = tuple[1]
-            if not itype in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
-          self.TOTALS[DOWNLOAD_LABEL][itype] = (itmax - itmin)
+            if tname.startswith("Main"):
+              mtmin = tuple[0]
+              mtmax = tuple[1]
+            else:
+              if tuple[0] < itmin or itmin == 0.0: itmin = tuple[0]
+              if tuple[1] > itmax: itmax = tuple[1]
+              if not itype in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
+          self.TOTALS[DOWNLOAD_LABEL][itype] = (itmax - itmin) + (mtmax - mtmin)
           if itmin < tmin or tmin == 0.0: tmin = itmin
           if itmax > tmax: tmax = itmax
-        self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] += (tmax - tmin)
+          if mtmin < mmin or mmin == 0.0: mmin = mtmin
+          if mtmax > mmax: mmax = mtmax
+        self.TOTALS[DOWNLOAD_LABEL]["TOTAL"] += (tmax - tmin) + (mmax - mmin)
 
     line0 = "Cache pre-load activity summary for \"%s\"" % item
     if filter != "": line0 = "%s, filtered by \"%s\"" % (line0, filter)
@@ -1799,7 +1847,11 @@ class MyTotals(object):
     if not self.gotTimeDuration("Load"): return
 
     if len(self.THREADS_HIST) != 0:
-      print("  Threads Used: %d" % len(self.THREADS_HIST))
+      tcount = 0
+      for tname in self.THREADS_HIST:
+        if not tname.startswith("Main"):
+          tcount += 1
+      print("  Threads Used: %d" % tcount)
       print("   Min/Avg/Max: %3.2f / %3.2f / %3.2f" % (self.PMIN, self.PAVG/self.PCOUNT, self.PMAX))
       print("")
 
@@ -1809,6 +1861,9 @@ class MyTotals(object):
       print("     Comparing: %s" % self.secondsToTime(self.TimeDuration("Compare")))
     if self.gotTimeDuration("Rescan"):
       print("    Rescanning: %s" % self.secondsToTime(self.TimeDuration("Rescan")))
+
+    if self.gotTimeDuration("PreDelete"):
+      print("  Pre-Deleting: %s" % self.secondsToTime(self.TimeDuration("PreDelete")))
 
     if len(self.THREADS_HIST) != 0:
       print("   Downloading: %s" % self.secondsToTime(self.TimeDuration("Download")))
@@ -2211,6 +2266,24 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       if not item.itype in unique_items:
         unique_items[item.itype] = True
 
+    if gConfig.DOWNLOAD_PREDELETE:
+      TOTALS.TimeStart(mediatype, "PreDelete")
+      TOTALS.init()
+      with database:
+        for ui in sorted(unique_items):
+          for item in mediaitems:
+            if item.dbid != 0 and item.itype == ui:
+              gLogger.progress("Pre-deleting cached items... rowid %d, cachedurl %s" % (item.dbid, item.cachedurl))
+              TOTALS.start(item.mtype, item.itype)
+              database.deleteItem(item.dbid, item.cachedurl)
+              TOTALS.bump("Deleted", item.itype)
+              TOTALS.finish(item.mtype, item.itype)
+              item.dbid = 0
+              item.cachedurl = ""
+      TOTALS.stop()
+      TOTALS.TimeEnd(mediatype, "PreDelete")
+      gLogger.progress("")
+
     c = sc = mc = 0
     for ui in sorted(unique_items):
       for item in mediaitems:
@@ -2245,20 +2318,23 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 
     if not single_work_queue.empty():
       gLogger.log("Creating 1 thread for single access sites")
-      t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount, gConfig, gLogger, TOTALS, force, 10)
+      t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount,
+                        gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
       THREADS.append(t)
       t.setDaemon(True)
-      t.start()
 
     if not multiple_work_queue.empty():
       tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
       THREADCOUNT = tCount if tCount <= mc else mc
       gLogger.log("Creating %d image download threads" % THREADCOUNT)
       for i in range(THREADCOUNT):
-        t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount, gConfig, gLogger, TOTALS, force, 10)
+        t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount,
+                          gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
         THREADS.append(t)
         t.setDaemon(True)
-        t.start()
+
+    # Start the threads...
+    for t in THREADS: t.start()
 
     try:
       ALIVE = True
@@ -3016,8 +3092,10 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
     gLogger.progress("Loading texture cache...")
 
     rows = database.getAllColumns().fetchall()
-    for r in rows: dbfiles[r[1]] = r
-    for r in rows: ddsmap[r[1][:-4]] = r[1]
+    for r in rows:
+      dbfiles[r[1]] = r
+      ddsmap[r[1][:-4]] = r[1]
+
     gLogger.log("Loaded %d rows from texture cache" % len(rows))
 
     gLogger.progress("Scanning Thumbnails directory...")
@@ -3035,13 +3113,13 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 
         gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
 
-        # If its a dds file, it should be associated with another
+        # If it's a dds file, it should be associated with another
         # file with the same hash, but different extension. Find
-        # this other file in the ddsmap - if its there, ignore
+        # this other file in the ddsmap - if it's there, ignore
         # the dds file, otherwise leave the dds file to be reported
         # as an orphaned file.
-        if hash[-4:] == ".dds":
-          if ddsmap.get(hash[:-4], None): continue
+        if hash[-4:] == ".dds" and ddsmap.get(hash[:-4], None):
+          continue
 
         row = dbfiles.get(hash, None)
         if not row:

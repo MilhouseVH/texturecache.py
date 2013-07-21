@@ -1,5 +1,12 @@
 #Changelog
 
+##Version 0.8.7 (XX/XX/2013)
+(UNRELEASEED)
+* Add: `.strm` to default non-media files for `missing` option
+* Add: Pre-delete artwork before starting download threads. Cache deletion functionality can now occur in the main thread to prevent database locking when accessing Textures13.db via a mounted filesystem. Pre-deletion will be the default if a mounted filesystem is detected. Disable/Enable with `download.predelete=yesno`. When disabled, deletions will take place in each download thread, but this may cause SQLite locks depending on the locking protocol used by the network filesystem (SMB/CIFS seems particularly prone to this problem, NFS less so). Should be required for local file systems.
+* Add: Artwork (payload) download is now optional when caching, as `Files.PrepareDownload` appears to be sufficient to populate the cache, rendering the actual download superfluous. Re-enable with `download.payload=yes`.
+* Chg: Modify retry behaviour of failed artwork downloads - previously retried download 10 times, which is a little excessive. Specify number of retries (both Files.PrepareDownload and/or payload download) with `download.retry=n`. Default is now 3.
+
 ##Version 0.8.6 (04/07/2013)
 * Fix: When looking for `missing` (unscraped) media items, allow for empty remote folders (no files)
 * Add: Include `file` as a default field when dumping (`j`/`jd`/`J`/`Jd`) media library items
