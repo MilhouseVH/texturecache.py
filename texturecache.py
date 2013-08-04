@@ -127,7 +127,7 @@ class MyConfiguration(object):
 
     #Windows
     if sys.platform == "win32":
-      _USER_DEFAULT="~/appdata/roaming/xbmc/userdata"
+      _USER_DEFAULT = "%s\\XBMC\\userdata" % os.environ["appdata"]
     else:
       _USER_DEFAULT="~/.xbmc/userdata"
 
