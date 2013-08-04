@@ -1,8 +1,16 @@
 #Changelog
 
+##Version 0.8.8 (04/08/2013)
+* Fix: Better handle integer lists in `query`
+* Fix: Revert payload download behaviour, as it's not consistent on all platforms - make `download.payload=yes` the default setting.
+* Chg: Rename `music` meta class to `audio`, for consistency
+* Chg: No longer fabricate a url for local content when Files.PrepareDownload fails
+* Add: Extra information in JSON service message mentioning the options in Settings -> Remote Control which should be enabled
+* Add: Use a workable default `userdata` property for win32
+
 ##Version 0.8.7 (21/07/2013)
 * Add: `.strm` to default non-media files for `missing` option
-* Add: Pre-delete artwork before starting download threads. Cache deletion functionality can now occur in the main thread to prevent database locking when accessing Textures13.db via a mounted filesystem. Pre-deletion will be the default if a mounted filesystem is detected. Disable/Enable with `download.predelete=yesno`. When disabled, deletions will take place in each download thread, but this may cause SQLite locks depending on the locking protocol used by the network filesystem (SMB/CIFS seems particularly prone to this problem, NFS less so). Should be required for local file systems.
+* Add: Pre-delete artwork before starting download threads. Cache deletion functionality can now occur in the main thread to prevent database locking when accessing Textures13.db via a mounted filesystem. Pre-deletion will be the default if a mounted filesystem is detected. Disable/Enable with `download.predelete=yesno`. When disabled, deletions will take place in each download thread, but this may cause SQLite locks depending on the locking protocol used by the network filesystem (SMB/CIFS seems particularly prone to this problem, NFS less so). Pre-deletion should not be required for local file systems.
 * Add: Artwork (payload) download is now optional when caching, as `Files.PrepareDownload` appears to be sufficient to populate the cache, rendering the actual download superfluous. Re-enable with `download.payload=yes`.
 * Chg: Modify retry behaviour of failed artwork downloads - previously retried download 10 times, which is a little excessive. Specify number of retries (both Files.PrepareDownload and/or payload download) with `download.retry=n`. Default is now 3.
 

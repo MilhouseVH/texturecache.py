@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.7"
+    self.VERSION="0.8.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -125,12 +125,18 @@ class MyConfiguration(object):
     self.IDFORMAT = self.getValue(config, "format", "%06d")
     self.FSEP = self.getValue(config, "sep", "|")
 
-    self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", "~/.xbmc/userdata"))
+    #Windows
+    if sys.platform == "win32":
+      _USER_DEFAULT="~/appdata/roaming/xbmc/userdata"
+    else:
+      _USER_DEFAULT="~/.xbmc/userdata"
+
+    self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", _USER_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
-    if self.XBMC_BASE[-1:] != "/": self.XBMC_BASE += "/"
-    if self.THUMBNAILS[-1:] != "/": self.THUMBNAILS += "/"
+    if self.XBMC_BASE[-1:] not in ["/", "\\"]: self.XBMC_BASE += "/"
+    if self.THUMBNAILS[-1:] not in ["/", "\\"]: self.THUMBNAILS += "/"
 
     self.XBMC_BASE = self.XBMC_BASE.replace("/", os.sep)
     self.TEXTUREDB = self.TEXTUREDB.replace("/", os.sep)
@@ -158,7 +164,8 @@ class MyConfiguration(object):
 
     # It seems that Files.Preparedownload is sufficient to populate the texture cache
     # so there is no need to actually download the artwork.
-    self.DOWNLOAD_PAYLOAD = self.getBoolean(config, "download.payload","no")
+    # v0.8.8: Leave enabled for now, may only be sufficient in recent builds.
+    self.DOWNLOAD_PAYLOAD = self.getBoolean(config, "download.payload","yes")
 
     # Pre-delete artwork if the filesystem is mounted, as deleting artwork within threads
     # will result in database locks and inability of the remote client to query its own
@@ -612,7 +619,7 @@ class MyImageLoader(threading.Thread):
 
   def loadImage(self, mediatype, imgtype, filename, rowid, cachedurl, retry, force, missingOK = False):
 
-    ATTEMPT = retry + 1
+    ATTEMPT = 1 if retry < 1 else retry
     PDRETRY = retry
     PERFORM_DOWNLOAD = False
 
@@ -646,7 +653,7 @@ class MyImageLoader(threading.Thread):
         # Don't need to download the whole image for it to be cached so just grab the first 1KB
         PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount=1024, rawData=True)
         if self.json.WEB_LAST_STATUS == httplib.OK:
-          self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d]. Filename [%s]" \
+          self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d], filename [%s]" \
                         % (len(PAYLOAD), (retry - ATTEMPT + 1), filename))
           break
       except:
@@ -1240,9 +1247,9 @@ class MyJSONComms(object):
     if "result" in data:
       return "/%s" % data["result"]["details"]["path"]
     else:
-      if filename[8:12].lower() != "http":
-        self.logger.log("Files.PrepareDownload failed. It's a local file, what the heck... trying anyway.")
-        return "/image/%s" % urllib2.quote(filename, "()")
+#      if filename[8:12].lower() != "http":
+#        self.logger.log("Files.PrepareDownload failed. It's a local file, what the heck... trying anyway.")
+#        return "/image/%s" % urllib2.quote(filename, "()")
       return None
 
   def getFileDetails(self, filename):
@@ -1582,7 +1589,7 @@ class MyJSONComms(object):
     if action == "qa":
       qaSinceDate = self.config.QADATE
       if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
-          self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate })
+          self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate})
 
       if mediatype in ["songs", "movies", "tags", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
@@ -2269,11 +2276,17 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     if gConfig.DOWNLOAD_PREDELETE:
       TOTALS.TimeStart(mediatype, "PreDelete")
       TOTALS.init()
+      dbitems = 0
+      for item in mediaitems:
+        if item.dbid != 0:
+          dbitems += 1
+      dbitem = 0
       with database:
         for ui in sorted(unique_items):
           for item in mediaitems:
             if item.dbid != 0 and item.itype == ui:
-              gLogger.progress("Pre-deleting cached items... rowid %d, cachedurl %s" % (item.dbid, item.cachedurl))
+              dbitem += 1
+              gLogger.progress("Pre-deleting cached items %d of %d... rowid %d, cachedurl %s" % (dbitem, dbitems, item.dbid, item.cachedurl))
               TOTALS.start(item.mtype, item.itype)
               database.deleteItem(item.dbid, item.cachedurl)
               TOTALS.bump("Deleted", item.itype)
@@ -2691,7 +2704,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
               MATCHED = evaluateCondition(t, condition, value)
               if inverted: MATCHED = not MATCHED
               if MATCHED: break
-            matched_value = ", ".join(temp)
+            matched_value = ", ".join(str(x) for x in temp)
           else:
             if temp is str and temp.startswith("image://"): temp = urllib2.unquote(temp)
             MATCHED = evaluateCondition(temp, condition, value)
@@ -3711,6 +3724,10 @@ def checkConfig(option):
   if needSocket and not gotSocket:
     MSG = "FATAL: The task you wish to perform requires that the JSON-RPC server is\n" \
           "       enabled and running on the XBMC system you wish to connect.\n\n" \
+          "       In addtion, ensure that the following options are ENABLED on the\n" \
+          "       XBMC client in Settings -> Services -> Remote control:\n\n" \
+          "            Allow programs on this system to control XBMC\n" \
+          "            Allow programs on other systems to control XBMC\n\n" \
           "       A connection cannot be established to the following JSON-RPC server:\n" \
           "       %s:%s\n\n" \
           "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
@@ -3837,9 +3854,9 @@ def main(argv):
 
   EXIT_CODE = 0
 
-  multi_call_m = ["albums", "artists", "songs"]
+  multi_call_a = ["albums", "artists", "songs"]
   multi_call_v = ["movies", "sets", "tvshows"]
-  multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_m + multi_call_v
+  multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_a + multi_call_v
 
   if gConfig.CHECKUPDATE and not argv[0] in ["version","update"]: checkUpdate()
 
@@ -3890,7 +3907,7 @@ def main(argv):
     else:
       if len(argv) == 3:
         _query      = argv[2] if len(argv) > 2 else ""
-      else:
+      elif len(argv) > 2:
         _filter     = argv[2]
         _query      = argv[3]
 
@@ -3903,8 +3920,8 @@ def main(argv):
       _multi_call = multi_call
       if "songs" in _multi_call: _multi_call.remove("songs")
     else:
+      if argv[1] == "audio": _multi_call = multi_call_a
       if argv[1] == "video": _multi_call = multi_call_v
-      if argv[1] == "music": _multi_call = multi_call_m
       if argv[1] == "all":   _multi_call = multi_call
 
     if _multi_call != []:
