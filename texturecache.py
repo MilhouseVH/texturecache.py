@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.8"
+    self.VERSION="0.8.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -129,7 +129,7 @@ class MyConfiguration(object):
     if sys.platform == "win32":
       _USER_DEFAULT = "%s\\XBMC\\userdata" % os.environ["appdata"]
     else:
-      _USER_DEFAULT="~/.xbmc/userdata"
+      _USER_DEFAULT = "~/.xbmc/userdata"
 
     self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", _USER_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
@@ -2219,9 +2219,15 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 
     dbrow = dbfiles.get(filename, None)
 
+    # Lookup the path without unquoting it - some paths end up in the cache
+    # while still quoted
     if not dbrow:
-      filename = item.filename[:-1]
-      dbrow = dbfiles.get(filename, None)
+      dbrow = dbfiles.get(item.filename[:-1], None)
+
+      # If the path has swapped a "/" for a "\" (or vice versa) then we won't
+      # match against the cache - unmangle, and try again.
+      if not dbrow:
+        dbrow = dbfiles.get(fixSlashes(filename), None)
 
     # Don't need to cache file if it's already in the cache, unless forced...
     # Assign the texture cache database id and cachedurl so that removal will be quicker.
@@ -2330,7 +2336,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     THREADS = []
 
     if not single_work_queue.empty():
-      gLogger.log("Creating 1 thread for single access sites")
+      gLogger.log("Creating 1 download thread for single access sites")
       t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount,
                         gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
       THREADS.append(t)
@@ -2339,7 +2345,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     if not multiple_work_queue.empty():
       tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
       THREADCOUNT = tCount if tCount <= mc else mc
-      gLogger.log("Creating %d image download threads" % THREADCOUNT)
+      gLogger.log("Creating %d download thread(s) for multi-access sites" % THREADCOUNT)
       for i in range(THREADCOUNT):
         t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount,
                           gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
@@ -3209,6 +3215,37 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
         if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1])
       gLogger.out("\nSummary: %s files; Total size: %s Kbytes\n\n" % (format(len(localfiles),",d"), format(int(FSIZE/1024), ",d")))
 
+#
+# Some JSON paths may have incorrect path seperators.
+# Use this function to attempt to correct those path seperators.
+#
+# Shares ("smb://", "nfs://" etc.) will always use forward slashes.
+#
+# Non-shares will use a slash appropriate to the OS to which the path
+# corresponds so attempt to find the FIST slash (forward or back) and
+# then use that as the path seperator, replacing any of the opposite
+# kind.
+#
+# If no slash is found, do nothing.
+#
+# See: http://forum.xbmc.org/showthread.php?tid=153502&pid=1477147#pid1477147
+#
+def fixSlashes(filename):
+  # Share (eg. "smb://", "nfs://" etc.)
+  if re.search("^.*://.*", filename):
+    return filename.replace("\\", "/")
+  else:
+    bslash = filename.find("\\")
+    fslash = filename.find("/")
+    if bslash == -1: bslash = len(filename)
+    if fslash == -1: fslash = len(filename)
+    if bslash < fslash:
+      return filename.replace("/", "\\")
+    elif fslash < bslash:
+      return filename.replace("\\", "/")
+    else:
+      return filename
+
 def getHash(string):
   string = string.lower()
   bytes = bytearray(string)
@@ -3238,7 +3275,7 @@ def getKeyFromFilename(filename):
   if sys.version_info >= (3, 0):
     f = bytes(f, "utf-8").decode("iso-8859-1")
 
-  return removeNonAscii(f)
+  return fixSlashes(removeNonAscii(f))
 
 def getAllFiles(keyFunction):
 

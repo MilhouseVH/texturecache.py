@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.8.9 (05/08/2013)
+* Fix: Swap back/forward slashes on JSON artwork paths whenever a slash is used incorrectly (see [here](http://forum.xbmc.org/showthread.php?tid=153502&pid=1477147#pid1477147) for details)
+
 ##Version 0.8.8 (04/08/2013)
 * Fix: Better handle integer lists in `query`
 * Fix: Revert payload download behaviour, as it's not consistent on all platforms - make `download.payload=yes` the default setting.
