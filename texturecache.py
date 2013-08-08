@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.8.9"
+    self.VERSION="0.9.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
 
@@ -746,7 +746,7 @@ class MyDB(object):
     return self.execute(SQL)
 
   def deleteItem(self, id, cachedURL = None):
-    if not cachedURL:
+    if not cachedURL and id > 0:
       SQL = "SELECT id, cachedurl, lasthashcheck, url FROM texture WHERE id=%d" % id
       row = self.execute(SQL).fetchone()
 
@@ -758,13 +758,14 @@ class MyDB(object):
     else:
       localFile = cachedURL
 
-    if os.path.exists(self.config.getFilePath(localFile)):
+    if localFile and os.path.exists(self.config.getFilePath(localFile)):
       os.remove(self.config.getFilePath(localFile))
     else:
       self.logger.out("WARNING: id %s, cached thumbnail file %s not found" % ((self.config.IDFORMAT % id), localFile), newLine=True)
 
-    self.execute("DELETE FROM texture WHERE id=%d" % id)
-    self.commit()
+    if id > 0:
+      self.execute("DELETE FROM texture WHERE id=%d" % id)
+      self.commit()
 
   def getRowByFilename(self, filename):
   # Strip image:// prefix, trailing / suffix, and unquote...
@@ -801,7 +802,7 @@ class MyDB(object):
       return  "".join([x if ord(x) < 128 else replaceWith for x in s])
 
   def dumpRow(self, row):
-    line= ("%s%s%14s%s%04d%s%04d%s%04d%s%19s%s%19s%s%s\n" % \
+    line= ("%s%s%-14s%s%04d%s%04d%s%04d%s%19s%s%19s%s%s\n" % \
            ((self.config.IDFORMAT % row[0]), self.config.FSEP, row[1], self.config.FSEP, row[4],
              self.config.FSEP,      row[5],  self.config.FSEP, row[6], self.config.FSEP, row[7],
              self.config.FSEP,      row[2],  self.config.FSEP, row[3]))
@@ -898,6 +899,9 @@ class MyJSONComms(object):
 
     request["jsonrpc"] = "2.0"
     request["id"] =  id
+
+    # Suppress complaints about Sets having no results (due to Sets not having been defined)
+    if request["method"] == "VideoLibrary.GetMovieSets": checkResult=False
 
     # Following methods don't work over sockets - by design.
     if request["method"] in ["Files.PrepareDownload", "Files.Download"] or useWebServer:
@@ -3019,7 +3023,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
           gLogger.out("FAILED   %s: %s" % (m.mtype[:-1], shortName), newLine = True)
           ERROR += 1
     gLogger.out("", newLine=True)
-    gLogger.out("Watched List Restored items: %d, Unchanged items: %d, Unmatched items: %d, Failed items: %d" %
+    gLogger.out("Watched List item summary: Restored %d, Unchanged %d, Unmatched %d, Failed %d\n" %
         (RESTORED, UNCHANGED, UNMATCHED, ERROR), newLine=True)
 
 def watchedItemUpdate(jcomms, mediaitem, shortName):
@@ -3081,7 +3085,7 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
           database.dumpRow(row)
 
     if ACTION == "STATS":
-      gLogger.out("\nFile Summary: %s files; Total size: %s Kbytes\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
+      gLogger.out("\nFile Summary: %s files; Total size: %s KB\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
 
     if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
 
@@ -3112,8 +3116,9 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 
     rows = database.getAllColumns().fetchall()
     for r in rows:
-      dbfiles[r[1]] = r
-      ddsmap[r[1][:-4]] = r[1]
+      hash = r[1]
+      dbfiles[hash] = r
+      ddsmap[os.path.splitext(hash)[0]] = hash
 
     gLogger.log("Loaded %d rows from texture cache" % len(rows))
 
@@ -3132,19 +3137,23 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 
         gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
 
+        hash_parts = os.path.splitext(hash)
+
         # If it's a dds file, it should be associated with another
         # file with the same hash, but different extension. Find
         # this other file in the ddsmap - if it's there, ignore
         # the dds file, otherwise leave the dds file to be reported
         # as an orphaned file.
-        if hash[-4:] == ".dds" and ddsmap.get(hash[:-4], None):
-          continue
+        if hash_parts[1] == ".dds" and ddsmap.get(hash_parts[0], None):
+            continue
 
         row = dbfiles.get(hash, None)
+
         if not row:
           filename = os.path.join(newroot, file)
           gLogger.log("Orphan file detected: [%s] with likely hash [%s]" % (filename, hash))
           orphanedfiles.append(filename)
+
         elif libraryFiles:
           URL = removeNonAscii(row[3])
 
@@ -3161,9 +3170,14 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
              not re_search_mirror.search(URL) and \
              not isRetained:
 
-            key = hash[:-4] if keyIsHash else URL
+            key = hash_parts[0] if keyIsHash else URL
 
             if not key in libraryFiles:
+              # If current file type isn't a dds, determine if a matching dds file exists
+              # in case it is necessary to delete the dds file along with the artwork row.
+              dds_file = "%s.dds" % hash_parts[0]
+              clobberdds = hash_parts[1] != ".dds" and os.path.exists(gConfig.getFilePath(dds_file))
+
               # Last ditch attempt to find a matching key, database might be
               # slightly mangled
               if not keyIsHash:
@@ -3172,8 +3186,10 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
                   del libraryFiles[key]
                 else:
                   localfiles.append(row)
+                  if clobberdds: localfiles.append([0, dds_file, row[2], "%s (DDS)" % row[3], row[4], row[5], row[6], row[7]])
               else:
                 localfiles.append(row)
+                if clobberdds: localfiles.append([0, dds_file, row[2], "%s (DDS)" % row[3], row[4], row[5], row[6], row[7]])
             else:
                del libraryFiles[key]
 
@@ -3184,20 +3200,27 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
       gLogger.log("Identified %d orphaned files" % len(orphanedfiles))
       if removeOrphans and gConfig.ORPHAN_LIMIT_CHECK and len(orphanedfiles) > (len(dbfiles)/20):
         gLogger.log("Something is wrong here, that's far too many orphaned files - 5% limit exceeded!")
-        gLogger.out("Found %d orphaned files for %d database files.\n"  % (len(orphanedfiles), len(dbfiles)))
-        gLogger.out("This is far too many orphaned files for this number of database files, something may be wrong.\n")
+        gLogger.out("Found %s orphaned files for %s database files.\n\n" % (format(len(orphanedfiles), ",d"), format(len(dbfiles), ",d")))
+        gLogger.out("This is far too many orphaned files for this number of\n")
+        gLogger.out("database files - more than 5% - and something may be wrong.\n\n")
         gLogger.out("Check your configuration, database, and Thumbnails folder.\n\n")
-        gLogger.out("Add \"orphan.limit.check = no\" to the properties file if you want to disable this check.\n")
+        gLogger.out("Add \"orphan.limit.check = no\" to the properties file\n")
+        gLogger.out("if you wish to disable this check.\n")
         return
+      FSIZE=0
       for ofile in orphanedfiles:
-        gLogger.out("Orphaned file found: Name [%s], Created [%s], Size [%d]%s\n" % \
+        fsize = os.path.getsize(gConfig.getFilePath(ofile))
+        FSIZE += fsize
+        gLogger.out("Orphaned file found: Name [%s], Created [%s], Size [%s]%s\n" % \
           (ofile,
            time.ctime(os.path.getctime(gConfig.getFilePath(ofile))),
-           os.path.getsize(gConfig.getFilePath(ofile)),
+           format(fsize, ",d"),
            ", REMOVING..." if removeOrphans else ""))
         if removeOrphans:
           gLogger.log("Removing orphan file: %s" % gConfig.getFilePath(ofile))
           os.remove(gConfig.getFilePath(ofile))
+      gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
+                    % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
 
     # Prune, with optional remove...
     if libraryFiles != None:
@@ -3207,13 +3230,21 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
         else:
           gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
         gLogger.out("", newLine=True)
-      FSIZE=0
+      FSIZE = 0
       localfiles.sort(key=lambda row: row[3])
       for row in localfiles:
         database.dumpRow(row)
         FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
         if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1])
-      gLogger.out("\nSummary: %s files; Total size: %s Kbytes\n\n" % (format(len(localfiles),",d"), format(int(FSIZE/1024), ",d")))
+      gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
+                    % (format(len(localfiles), ",d"),
+                       format(int(FSIZE/1024), ",d")))
+      if len(orphanedfiles) != 0:
+        FSIZE=0
+        for ofile in orphanedfiles:
+          FSIZE += os.path.getsize(gConfig.getFilePath(ofile))
+        gLogger.out("WARNING: %s \"orphaned\" files (total size: %s KB) were also detected!\n\n" \
+                      % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
 
 #
 # Some JSON paths may have incorrect path seperators.
@@ -3816,7 +3847,7 @@ def checkUpdate(forcedCheck = False):
   (remoteVersion, remoteHash) = getLatestVersion()
 
   if forcedCheck:
-    print("Latest  Version: %s" % "v" + remoteVersion if remoteVersion else "Unknown")
+    print("Latest  Version: %s" % ("v" + remoteVersion if remoteVersion else "Unknown"))
     print("")
 
   if remoteVersion and remoteVersion > gConfig.VERSION:
@@ -3835,15 +3866,15 @@ def getLatestVersion():
     else:
       data = response.read()
     return data.replace("\n","").split(" ")
-  except:
-    raise
+  except Exception as e:
+    gLogger.log("Exception in getLatestVersion(): %s" % e)
     return (None, None)
 
 def downloadLatestVersion(force=False):
   (remoteVersion, remoteHash) = getLatestVersion()
 
   if not remoteVersion:
-    print("FATAL: Unable to determine version of the latest file, check internet is available.")
+    print("FATAL: Unable to determine version of the latest file, check internet and github.com are available.")
     sys.exit(2)
 
   if not force and remoteVersion <= gConfig.VERSION:
@@ -3853,15 +3884,16 @@ def downloadLatestVersion(force=False):
   try:
     response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "texturecache.py"))
     data = response.read()
-  except:
-    print("FATAL: Unable to download latest file, check internet is available.")
+  except Exception as e:
+    gLogger.log("Exception in downloadLatestVersion(): %s" % e)
+    print("FATAL: Unable to download latest file, check internet and github.com are available.")
     sys.exit(2)
 
   digest = hashlib.md5()
   digest.update(data)
 
   if (digest.hexdigest() != remoteHash):
-    print("FATAL: Hash of new download is not correct, possibly corrupt, abandoning update.")
+    print("FATAL: Checksum of new version is incorrect, possibly corrupt download - abandoning update.")
     sys.exit(2)
 
   path = os.path.realpath(__file__)
@@ -3879,7 +3911,7 @@ def downloadLatestVersion(force=False):
     print("FATAL: Unable to update current file, check you have write access")
     sys.exit(2)
 
-  print("Successfully updated to version v%s" % remoteVersion)
+  print("Successfully updated from v%s to v%s" % (gConfig.VERSION, remoteVersion))
 
 def main(argv):
 
@@ -3895,7 +3927,7 @@ def main(argv):
   multi_call_v = ["movies", "sets", "tvshows"]
   multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_a + multi_call_v
 
-  if gConfig.CHECKUPDATE and not argv[0] in ["version","update"]: checkUpdate()
+  if gConfig.CHECKUPDATE and not argv[0] in ["version", "update", "fupdate"]: checkUpdate()
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")

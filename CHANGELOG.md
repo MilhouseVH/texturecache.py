@@ -1,5 +1,13 @@
 #Changelog
 
+##Version 0.9.0 (08/08/2013)
+* Add: Summarise orphan results (`r`, `R`)
+* Add: Notify when orphan files detected during prune (`p`, `P`)
+* Add: Delete DDS files (when present) while pruning corresponding artwork
+* Add: Show current version in `update` message
+* Fix: Suppress "no result" error when processing `sets` if Movie Sets haven't been defined in the media library
+* Fix: Handle github.com errors more gracefully
+
 ##Version 0.8.9 (05/08/2013)
 * Fix: Swap back/forward slashes on JSON artwork paths whenever a slash is used incorrectly (see [here](http://forum.xbmc.org/showthread.php?tid=153502&pid=1477147#pid1477147) for details)
 
