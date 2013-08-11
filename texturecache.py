@@ -51,9 +51,10 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.0"
+    self.VERSION="0.9.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
+    self.ANALYTICS = "http://goo.gl/jZfH6S"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
@@ -3859,15 +3860,26 @@ def checkUpdate(forcedCheck = False):
     print("Full changelog: %s/CHANGELOG.md" % url)
 
 def getLatestVersion():
+    # Try checking version via Google Analytics URL
+    (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS)
+
+    # If that fails, go direct to github
+    if remoteVersion == None or remoteHash == None:
+      (remoteVersion, remoteHash) = getLatestVersion_ex("%s/%s" % (gConfig.GITHUB, "VERSION"))
+
+    return (remoteVersion, remoteHash)
+
+def getLatestVersion_ex(url):
   try:
-    response = urllib2.urlopen("%s/%s" % (gConfig.GITHUB, "VERSION"))
+    response = urllib2.urlopen(url)
+
     if sys.version_info >= (3, 0):
       data = response.read().decode("utf-8")
     else:
       data = response.read()
     return data.replace("\n","").split(" ")
   except Exception as e:
-    gLogger.log("Exception in getLatestVersion(): %s" % e)
+    gLogger.log("Exception in getLatestVersion_ex(): url [%s], text [%s]" % (url, e))
     return (None, None)
 
 def downloadLatestVersion(force=False):

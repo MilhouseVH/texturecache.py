@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.9.1 (12/08/2013)
+* Add: Google Analytics support for github.com usage.
+
 ##Version 0.9.0 (08/08/2013)
 * Add: Summarise orphan results (`r`, `R`)
 * Add: Notify when orphan files detected during prune (`p`, `P`)
