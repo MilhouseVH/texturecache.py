@@ -3877,10 +3877,18 @@ def getLatestVersion_ex(url):
       data = response.read().decode("utf-8")
     else:
       data = response.read()
-    return data.replace("\n","").split(" ")
+
+    items = data.replace("\n","").split(" ")
+
+    if len(items) == 2:
+      return items
+    else:
+      gLogger.log("Bogus data in getLatestVersion_ex(): url [%s], data [%s]" % (url, data), maxLen=512)
+
   except Exception as e:
     gLogger.log("Exception in getLatestVersion_ex(): url [%s], text [%s]" % (url, e))
-    return (None, None)
+
+  return (None, None)
 
 def downloadLatestVersion(force=False):
   (remoteVersion, remoteHash) = getLatestVersion()
