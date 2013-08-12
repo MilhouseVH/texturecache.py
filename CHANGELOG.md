@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.9.2 (12/08/2013)
+* Fix: User agent on Analytics
+
 ##Version 0.9.1 (12/08/2013)
 * Add: Analytics support for github.com usage.
 
