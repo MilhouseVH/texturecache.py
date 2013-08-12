@@ -54,7 +54,7 @@ class MyConfiguration(object):
     self.VERSION="0.9.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
-    self.ANALYTICS = "http://goo.gl/jZfH6S"
+    self.ANALYTICS = "http://is.gd/Ap7ii3"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
