@@ -51,10 +51,10 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.2"
+    self.VERSION="0.9.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
-    self.ANALYTICS = "http://goo.gl/2UoxRE"
+    self.ANALYTICS = "http://goo.gl/c4WLnO"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
@@ -3010,18 +3010,18 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     RESTORED = UNCHANGED = UNMATCHED = ERROR = 0
     for mediakey in sorted(mediaitems):
       m = mediaitems[mediakey]
-      shortName = "%s, Episode %s" % (m.name, m.episode_year) if m.mtype == "episodes" else m.name
+      shortName = "%s, Episode %s" % (m.name, m.episode_year) if m.mtype == "episodes" else "%s (%s)" % (m.name, m.episode_year)
       if m.libraryid == 0:
-        gLogger.out("NO MATCH %s: %s" % (m.mtype[:-1], shortName), newLine = True)
+        gLogger.out("NO MATCH %s: %s" % (m.mtype[:-1], shortName), newLine = True, log = True)
         UNMATCHED += 1
       else:
         if m.state != 0:
           UNCHANGED += 1
         elif watchedItemUpdate(jcomms, m, shortName):
-          gLogger.out("Restored %s: %s" % (m.mtype[:-1], shortName), newLine = True)
+          gLogger.out("Restored %s: %s" % (m.mtype[:-1], shortName), newLine = True, log = True)
           RESTORED += 1
         else:
-          gLogger.out("FAILED   %s: %s" % (m.mtype[:-1], shortName), newLine = True)
+          gLogger.out("FAILED   %s: %s" % (m.mtype[:-1], shortName), newLine = True, log = True)
           ERROR += 1
     gLogger.out("", newLine=True)
     gLogger.out("Watched List item summary: Restored %d, Unchanged %d, Unmatched %d, Failed %d\n" %
@@ -3880,8 +3880,9 @@ def getLatestVersion_ex(url, set_ua=False):
       else:
         PLATFORM="Linux"
 
-      user_agent = "Mozilla/5.0 (%s; Something; rv:%s) Gecko/20100101 Python/%d.%d" % \
-          (PLATFORM, gConfig.VERSION, sys.version_info[0], sys.version_info[1])
+      user_agent = "Mozilla/5.0 (%s; Something; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
+          (PLATFORM, gConfig.VERSION,
+           sys.version_info[0], sys.version_info[1], sys.version_info[2], sys.version_info[4])
 
       opener = urllib2.build_opener()
       opener.addheaders = [('User-agent', user_agent)]
