@@ -1,7 +1,7 @@
 #Changelog
 
 ##Version 0.9.1 (12/08/2013)
-* Add: Google Analytics support for github.com usage.
+* Add: Analytics support for github.com usage.
 
 ##Version 0.9.0 (08/08/2013)
 * Add: Summarise orphan results (`r`, `R`)
