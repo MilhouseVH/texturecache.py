@@ -3860,7 +3860,7 @@ def checkUpdate(forcedCheck = False):
     print("Full changelog: %s/CHANGELOG.md" % url)
 
 def getLatestVersion():
-    # Try checking version via Google Analytics URL
+    # Try checking version via Analytics URL
     (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS)
 
     # If that fails, go direct to github
