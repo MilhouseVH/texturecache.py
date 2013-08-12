@@ -54,7 +54,7 @@ class MyConfiguration(object):
     self.VERSION="0.9.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
-    self.ANALYTICS = "http://is.gd/Ap7ii3"
+    self.ANALYTICS = "http://goo.gl/2UoxRE"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
@@ -3861,17 +3861,33 @@ def checkUpdate(forcedCheck = False):
 
 def getLatestVersion():
     # Try checking version via Analytics URL
-    (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS)
+    (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS, set_ua = True)
 
     # If that fails, go direct to github
     if remoteVersion == None or remoteHash == None:
-      (remoteVersion, remoteHash) = getLatestVersion_ex("%s/%s" % (gConfig.GITHUB, "VERSION"))
+      (remoteVersion, remoteHash) = getLatestVersion_ex("%s/%s" % (gConfig.GITHUB, "VERSION"), set_ua = False)
 
     return (remoteVersion, remoteHash)
 
-def getLatestVersion_ex(url):
+def getLatestVersion_ex(url, set_ua=False):
   try:
-    response = urllib2.urlopen(url)
+    # Need user agent for analytics
+    if set_ua:
+      if sys.platform == "win32":
+        PLATFORM="Windows"
+      elif sys.platform == "darwin":
+        PLATFORM="Mac OSX"
+      else:
+        PLATFORM="Linux"
+
+      user_agent = "Mozilla/5.0 (%s; Something; rv:%s) Gecko/20100101 Python/%d.%d" % \
+          (PLATFORM, gConfig.VERSION, sys.version_info[0], sys.version_info[1])
+
+      opener = urllib2.build_opener()
+      opener.addheaders = [('User-agent', user_agent)]
+      response = opener.open(url)
+    else:
+      response = urllib2.urlopen(url)
 
     if sys.version_info >= (3, 0):
       data = response.read().decode("utf-8")
@@ -3884,11 +3900,10 @@ def getLatestVersion_ex(url):
       return items
     else:
       gLogger.log("Bogus data in getLatestVersion_ex(): url [%s], data [%s]" % (url, data), maxLen=512)
-
+      return (None, None)
   except Exception as e:
     gLogger.log("Exception in getLatestVersion_ex(): url [%s], text [%s]" % (url, e))
-
-  return (None, None)
+    return (None, None)
 
 def downloadLatestVersion(force=False):
   (remoteVersion, remoteHash) = getLatestVersion()
