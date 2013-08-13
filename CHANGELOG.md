@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.9.4 (13/08/2013)
+* Add: Option `Xd` to remove texture cache rows with no corresponding thumbnail file
+* Add: Include referer on analytics
+
 ##Version 0.9.3 (12/08/2013)
 * Add: Extra logging when restoring `watched` status
 

@@ -31,7 +31,7 @@
 ################################################################################
 
 import sqlite3 as lite
-import os, sys, json, re, datetime, time
+import os, sys, platform, json, re, datetime, time
 import socket, base64, hashlib
 import threading, random
 import errno, codecs
@@ -51,10 +51,10 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.3"
+    self.VERSION="0.9.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
-    self.ANALYTICS = "http://goo.gl/c4WLnO"
+    self.ANALYTICS = "http://goo.gl/BjH6Lj"
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
@@ -746,7 +746,7 @@ class MyDB(object):
 
     return self.execute(SQL)
 
-  def deleteItem(self, id, cachedURL = None):
+  def deleteItem(self, id, cachedURL = None, warnmissing=True):
     if not cachedURL and id > 0:
       SQL = "SELECT id, cachedurl, lasthashcheck, url FROM texture WHERE id=%d" % id
       row = self.execute(SQL).fetchone()
@@ -762,7 +762,8 @@ class MyDB(object):
     if localFile and os.path.exists(self.config.getFilePath(localFile)):
       os.remove(self.config.getFilePath(localFile))
     else:
-      self.logger.out("WARNING: id %s, cached thumbnail file %s not found" % ((self.config.IDFORMAT % id), localFile), newLine=True)
+      if warnmissing:
+        self.logger.out("WARNING: id %s, cached thumbnail file %s not found" % ((self.config.IDFORMAT % id), localFile), newLine=True)
 
     if id > 0:
       self.execute("DELETE FROM texture WHERE id=%d" % id)
@@ -3038,7 +3039,7 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
   REQUEST = { "method": method,
               "params": {mediaid: mediaitem.libraryid,
                          "playcount": mediaitem.playcount,
-                         "lastplayed": mediaitem.lastplayed,
+                         "lastplayed": mediaitem.lastplayed
                          }}
 
 
@@ -3053,7 +3054,7 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
 
 
 # Extract data, using optional simple search, or complex SQL filter.
-def sqlExtract(ACTION="NONE", search="", filter=""):
+def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
   database = MyDB(gConfig, gLogger)
 
   with database:
@@ -3062,9 +3063,9 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
       if search != "": SQL = "WHERE t.url LIKE '%" + search + "%' ORDER BY t.id ASC"
       if filter != "": SQL = filter + " "
 
-    IDS=""
-    FSIZE=0
-    FCOUNT=0
+    FSIZE = 0
+    FCOUNT = 0
+    ROWS = []
 
     database.getAllColumns(SQL)
 
@@ -3072,23 +3073,33 @@ def sqlExtract(ACTION="NONE", search="", filter=""):
       row = database.fetchone()
       if row == None: break
 
-      IDS = "%s %s" % (IDS, str(row[0]))
-      FCOUNT += 1
-
       if ACTION == "NONE":
-        database.dumpRow(row)
+        ROWS.append(row)
       elif ACTION == "EXISTS":
         if not os.path.exists(gConfig.getFilePath(row[1])):
-          database.dumpRow(row)
+          ROWS.append(row)
       elif ACTION == "STATS":
         if os.path.exists(gConfig.getFilePath(row[1])):
           FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
-          database.dumpRow(row)
+          ROWS.append(row)
+
+    FCOUNT=len(ROWS)
+
+    if delete:
+      i = 0
+      for row in ROWS:
+        i += 1
+        gLogger.progress("Deleting row %d (%d of %d)..." % (row[0], i, FCOUNT))
+        database.deleteItem(row[0], row[1], warnmissing=False)
+        gLogger.progress("")
+    else:
+      for row in ROWS: database.dumpRow(row)
 
     if ACTION == "STATS":
       gLogger.out("\nFile Summary: %s files; Total size: %s KB\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
 
-    if (search != "" or filter != ""): gLogger.progress("Matching row ids:%s\n" % IDS)
+    if (search != "" or filter != "") and not delete:
+      gLogger.progress("Matching row ids: %s\n" % " ".join("%d" % r[0] for r in ROWS))
 
 # Delete row by id, and corresponding file item
 def sqlDelete( ids=[] ):
@@ -3634,13 +3645,14 @@ def showNotifications():
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
-  print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | dD <id[id id]>] |" \
+  print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] |" \
         "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | watched class backup <filename> | watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake")
   print("")
   print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
   print("  x       Extract details, using optional SQL filter")
   print("  X       Same as \"x\" (extract) but will validate cachedurl file exists, displaying only those that fail validation")
+  print("  Xd      Same as \"x\" (extract) but will DELETE those rows for which no cachedurl file exists")
   print("  f       Same as x, but include file summary (file count, accumulated file size)")
   print("  d       Delete rows with matching ids, along with associated cached images")
   print("  r       Reverse search to identify \"orphaned\" Thumbnail files not present in texture cache")
@@ -3724,7 +3736,7 @@ def checkConfig(option):
   else:
     needSocket = False
 
-  if option in ["s","S","x","X","f","c","C","nc","lc","lnc","d","r","R","p","P"]:
+  if option in ["s","S","x","X","Xd","f","c","C","nc","lc","lnc","d","r","R","p","P"]:
     needDb = True
   else:
     needDb = False
@@ -3844,10 +3856,11 @@ def checkConfig(option):
 
   return True
 
-def checkUpdate(forcedCheck = False):
-  (remoteVersion, remoteHash) = getLatestVersion()
+def checkUpdate(argv, forcedCheck = False):
+  (remoteVersion, remoteHash) = getLatestVersion(argv)
 
   if forcedCheck:
+    print("Current Version: v%s" % gConfig.VERSION)
     print("Latest  Version: %s" % ("v" + remoteVersion if remoteVersion else "Unknown"))
     print("")
 
@@ -3859,33 +3872,62 @@ def checkUpdate(forcedCheck = False):
     url = gConfig.GITHUB.replace("//raw.","//").replace("/master","/blob/master")
     print("Full changelog: %s/CHANGELOG.md" % url)
 
-def getLatestVersion():
-    # Try checking version via Analytics URL
-    (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS, set_ua = True)
+def getLatestVersion(argv):
+  # Need user agent etc. for analytics
+  BITS = "64" if platform.architecture()[0] == "64bit" else "32"
+  ARCH = "ARM" if platform.machine().lower().startswith("arm") else "x86"
+  PLATFORM = platform.system()
+  if PLATFORM.lower() == "darwin": PLATFORM = "Mac OSX"
+  if PLATFORM.lower() == "linux": PLATFORM = "%s %s" % (PLATFORM, ARCH)
 
-    # If that fails, go direct to github
-    if remoteVersion == None or remoteHash == None:
-      (remoteVersion, remoteHash) = getLatestVersion_ex("%s/%s" % (gConfig.GITHUB, "VERSION"), set_ua = False)
+  user_agent = "Mozilla/5.0 (%s; %s_%s; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
+      (PLATFORM, ARCH, BITS, gConfig.VERSION,
+       sys.version_info[0], sys.version_info[1], sys.version_info[2], sys.version_info[4])
 
-    return (remoteVersion, remoteHash)
+  # Construct "referer" to indicate usage:
+  USAGE = "unknown"
+  if argv[0] in ["c", "C", "nc", "lc", "lnc"]:
+    USAGE = "cache"
+  elif argv[0] in ["j", "J", "jd", "Jd"]:
+    USAGE  = "dump"
+  elif argv[0] in ["p", "P"]:
+    USAGE  = "prune"
+  elif argv[0] in ["r", "R"]:
+    USAGE  = "orphan"
+  elif argv[0] in ["s", "S", "d", "f", "x", "X", "Xd"]:
+    USAGE  = "db"
+  elif argv[0] in ["exec", "execw"]:
+    USAGE  = "exec"
+  elif argv[0] in ["qa", "qax", "query", "missing", "watched",
+                   "power", "wake", "status", "monitor",
+                   "directory", "sources",
+                   "vscan", "ascan", "vclean", "aclean",
+                   "version", "update", "fupdate", "config"]:
+    USAGE  = argv[0]
 
-def getLatestVersion_ex(url, set_ua=False):
+  HEADERS = []
+  HEADERS.append(('User-agent', user_agent))
+  HEADERS.append(('Referer', "http://www.%s" % USAGE))
+
+  # Try checking version via Analytics URL
+  (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS, headers = HEADERS)
+
+  # If the Analytics call fails, go direct to github
+  if remoteVersion == None or remoteHash == None:
+    (remoteVersion, remoteHash) = getLatestVersion_ex("%s/%s" % (gConfig.GITHUB, "VERSION"))
+
+  return (remoteVersion, remoteHash)
+
+def getLatestVersion_ex(url, headers=None):
+  GLOBAL_TIMEOUT = socket.getdefaulttimeout()
+  ITEMS = (None, None)
+
   try:
-    # Need user agent for analytics
-    if set_ua:
-      if sys.platform == "win32":
-        PLATFORM="Windows"
-      elif sys.platform == "darwin":
-        PLATFORM="Mac OSX"
-      else:
-        PLATFORM="Linux"
+    socket.setdefaulttimeout(5.0)
 
-      user_agent = "Mozilla/5.0 (%s; Something; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
-          (PLATFORM, gConfig.VERSION,
-           sys.version_info[0], sys.version_info[1], sys.version_info[2], sys.version_info[4])
-
+    if headers:
       opener = urllib2.build_opener()
-      opener.addheaders = [('User-agent', user_agent)]
+      opener.addheaders = headers
       response = opener.open(url)
     else:
       response = urllib2.urlopen(url)
@@ -3898,16 +3940,17 @@ def getLatestVersion_ex(url, set_ua=False):
     items = data.replace("\n","").split(" ")
 
     if len(items) == 2:
-      return items
+      ITEMS = items
     else:
       gLogger.log("Bogus data in getLatestVersion_ex(): url [%s], data [%s]" % (url, data), maxLen=512)
-      return (None, None)
   except Exception as e:
     gLogger.log("Exception in getLatestVersion_ex(): url [%s], text [%s]" % (url, e))
-    return (None, None)
 
-def downloadLatestVersion(force=False):
-  (remoteVersion, remoteHash) = getLatestVersion()
+  socket.setdefaulttimeout(GLOBAL_TIMEOUT)
+  return ITEMS
+
+def downloadLatestVersion(argv, force=False):
+  (remoteVersion, remoteHash) = getLatestVersion(argv)
 
   if not remoteVersion:
     print("FATAL: Unable to determine version of the latest file, check internet and github.com are available.")
@@ -3963,7 +4006,7 @@ def main(argv):
   multi_call_v = ["movies", "sets", "tvshows"]
   multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_a + multi_call_v
 
-  if gConfig.CHECKUPDATE and not argv[0] in ["version", "update", "fupdate"]: checkUpdate()
+  if gConfig.CHECKUPDATE and not argv[0] in ["version", "update", "fupdate"]: checkUpdate(argv)
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")
@@ -3976,6 +4019,12 @@ def main(argv):
     sqlExtract("NONE", "", argv[1])
   elif argv[0] == "X" and len(argv) == 1:
     sqlExtract("EXISTS")
+  elif argv[0] == "X" and len(argv) == 2:
+    sqlExtract("EXISTS", "", argv[1])
+  elif argv[0] == "Xd" and len(argv) == 1:
+    sqlExtract("EXISTS", delete=True)
+  elif argv[0] == "Xd" and len(argv) == 2:
+    sqlExtract("EXISTS", "", argv[1], delete=True)
 
   elif argv[0] == "f" and len(argv) == 1:
     sqlExtract("STATS")
@@ -4092,16 +4141,15 @@ def main(argv):
     showNotifications()
 
   elif argv[0] == "version":
-    print("Current Version: v%s" % gConfig.VERSION)
-    checkUpdate(forcedCheck = True)
+    checkUpdate(argv, forcedCheck=True)
 
   elif argv[0] == "config":
     gConfig.showConfig()
 
   elif argv[0] == "update":
-    downloadLatestVersion()
+    downloadLatestVersion(argv, force=False)
   elif argv[0] == "fupdate":
-    downloadLatestVersion(force=True)
+    downloadLatestVersion(argv, force=True)
 
   elif argv[0] == "power" and len(argv) == 2:
     setPower(argv[1])

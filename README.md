@@ -17,7 +17,9 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[s, S]** Search texture cache for specific files and view database content, can help explain reason for incorrect artwork. **S** will only return database results for items that no longer exist in the filesystem.
 
-**[x, X]** Extract rows from texture cache database, with optional SQL filter.  **X** will only return database results for items that no longer exist in the filesystem.
+**[x, X, f]** Extract rows from texture cache database, with optional SQL filter.  **X** will only return database results for items that no longer exist in the filesystem. **f** will display basic stats (file count, total size).
+
+**[Xd]** Delete rows from texture cache database, with optional SQL filter, when item associated with row no longer exists in the filesystem.
 
 **[d]** Delete specific database rows and corresponding files from the texture cache using database row identifier (see **s/S**)
 
