@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.4"
+    self.VERSION="0.9.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -1287,6 +1287,8 @@ class MyJSONComms(object):
         title = self.getLookupObject().getTVShowName(libraryId)
       elif iType == "episode":
         title = self.getLookupObject().getEpisodeName(libraryId)
+      elif iType == "musicvideo":
+        title = self.getLookupObject().getMusicVideoName(libraryId)
 
     return title
 
@@ -1332,6 +1334,32 @@ class MyJSONComms(object):
       return "%s" % m["title"]
     else:
       return None
+
+  def getMusicVideoName(self, videoid):
+    REQUEST = {"method":"VideoLibrary.GetMusicVideoDetails",
+               "params":{"movieid": videoid, "properties":["title"]}}
+    data = self.sendJSON(REQUEST, "libMusicVideo", checkResult=False)
+    if "result" in data and "musicvideodetails" in data["result"]:
+      m = data["result"]["musicvideodetails"]
+      return "%s" % m["title"]
+    else:
+      return None
+
+  def removeLibraryItem(self, iType, libraryId):
+    if iType and libraryId:
+      # Use the secondary socket object to avoid consuming
+      # notifications that are meant for the caller.
+      if iType == "movie":
+        (method, arg) = ("VideoLibrary.RemoveMovie", "movieid")
+      elif iType == "tvshow":
+        (method, arg) = ("VideoLibrary.RemoveTVShow", "tvshowid")
+      elif iType == "episode":
+        (method, arg) = ("VideoLibrary.RemoveEpisode", "episodeid")
+      elif iType == "musicvideo":
+        (method, arg) = ("VideoLibrary.RemoveMusicVideo", "musicvideoid")
+
+    REQUEST = {"method": method, "params":{arg: libraryId}}
+    data = self.sendJSON(REQUEST, "libRemove", checkResult=True)
 
   def dumpJSON(self, data, decode=False):
     if decode:
@@ -3042,7 +3070,6 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
                          "lastplayed": mediaitem.lastplayed
                          }}
 
-
   if gConfig.JSON_HASRESUME:
     REQUEST["params"]["resume"] = mediaitem.resume
 
@@ -3051,7 +3078,6 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
   data = jcomms.sendJSON(REQUEST, "libWatchedList", checkResult=False)
 
   return ("result" in data and data["result"] == "OK")
-
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
@@ -3476,11 +3502,36 @@ def getAllFiles(keyFunction):
 
   return files
 
-def pruneCache( purge_nonlibrary_artwork=False ):
+def pruneCache(purge_nonlibrary_artwork=False):
 
   files = getAllFiles(keyFunction=getKeyFromFilename)
 
   dirScan("N", purge_nonlibrary_artwork, libraryFiles=files, keyIsHash=False)
+
+def removeMedia(mtype, libraryid):
+  MTYPE = {}
+  MTYPE["movie"] = "Movie"
+  MTYPE["musicvideo"] = "MusicVideo"
+  MTYPE["tvshow"] = "TVShow"
+  MTYPE["episode"] = "Episode"
+
+  if mtype not in MTYPE:
+    print("ERROR: %s is not a valid media type for removal - valid types: %s" % (mtype, ", ".join(MTYPE)))
+    return
+
+  if libraryid < 1:
+    print("ERROR: %d is not a valid libraryid for removal" % libraryid)
+    return
+
+  jcomms = MyJSONComms(gConfig, gLogger)
+  title = jcomms.getTitleForLibraryItem(mtype, libraryid)
+
+  if title:
+    gLogger.out("Removing %s %d [%s]... " % (mtype, libraryid, title))
+    jcomms.removeLibraryItem(mtype, libraryid)
+    gLogger.out("Done", newLine=True)
+  else:
+    gLogger.out("Does not exist: media [%s] libraryid [%d]" % (mtype, libraryid), newLine=True)
 
 def doLibraryScan(media, path):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -3625,11 +3676,23 @@ def showStatus(idleTime=600):
             title = jcomms.getMovieName(libraryId)
           elif iType == "episode":
             title = jcomms.getEpisodeName(libraryId)
+          elif iType == "musicvideo":
+            title = jcomms.getMusicVideoName(libraryId)
           else:
             title = None
 
           STATUS.append("Activity: %s" % iType.capitalize())
           STATUS.append("Title: %s" % title)
+
+          REQUEST = {"method": "Player.GetProperties", "params": {"playerid": pId, "properties": ["percentage", "time", "totaltime"]}}
+          data = jcomms.sendJSON(REQUEST, "libGetProps")
+          if "result" in data:
+            eTime = getSeconds(data["result"].get("time",0))
+            tTime = getSeconds(data["result"].get("totaltime",0))
+            elapsed = getHMS(eTime)
+            pcnt = data["result"].get("percentage", 0)
+            remaining = getHMS(tTime - eTime)
+            STATUS.append("Progress: %s (%4.2f%%, %s remaining)" % (elapsed, pcnt, remaining))
 
     if data["result"] == []:
       STATUS.append("Player: None")
@@ -3639,55 +3702,66 @@ def showStatus(idleTime=600):
       pos = x.find(":")
       gLogger.out("%-20s: %s" % (x[:pos], x[pos+2:]), newLine=True)
 
+def getSeconds(aTime):
+  return (aTime["hours"] * 3600) + (aTime["minutes"] * 60) + aTime["seconds"] + (aTime["milliseconds"] / 1000)
+
+def getHMS(seconds):
+  return "%02d:%02d:%02d" % (int(seconds/3600) % 24, int(seconds/60) % 60, seconds % 60)
+
 def showNotifications():
   MyJSONComms(gConfig, gLogger).listen()
 
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
-  print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] |" \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | qa class [filter] | qax class [filter] | pP | watched class backup <filename> | watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake")
+  print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] | " \
+        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | " \
+        "qa class [filter] | qax class [filter] | pP | remove mediatype libraryid | watched class backup <filename> | " \
+        "watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | " \
+        "vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | " \
+        "monitor | power <state> | exec [params] | execw [params] | wake")
   print("")
-  print("  s       Search url column for partial movie or tvshow title. Case-insensitive.")
-  print("  S       Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
-  print("  x       Extract details, using optional SQL filter")
-  print("  X       Same as \"x\" (extract) but will validate cachedurl file exists, displaying only those that fail validation")
-  print("  Xd      Same as \"x\" (extract) but will DELETE those rows for which no cachedurl file exists")
-  print("  f       Same as x, but include file summary (file count, accumulated file size)")
-  print("  d       Delete rows with matching ids, along with associated cached images")
-  print("  r       Reverse search to identify \"orphaned\" Thumbnail files not present in texture cache")
-  print("  R       Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
-  print("  c       Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
-  print("  C       Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
-  print("  nc      Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
-  print("  lc      Like c, but only for content added since the modification date of the file specficied in property lastrunfile")
-  print("  lnc     Like nc, but only for content added since the modification date of the file specficied in property lastrunfile")
-  print("  j       Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results.")
-  print("  J       Same as \"j\", but includes extra JSON audio/video fields as defined in properties file.")
-  print("  jd, Jd  Functionality equivalent to j/J, but all urls are decoded")
-  print("  qa      Run QA check on movies, tags and tvshows, identifying media with missing artwork or plots")
-  print("  qax     Same as qa, but remove and rescan those media items with missing details.")
-  print("          Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
-  print("  p       Display files present in texture cache that don't exist in the media library")
-  print("  P       Prune (automatically remove) cached items that don't exist in the media library")
-  print("  watched Backup or restore movies and tvshows watched statuses, to/from the specified text file")
-  print("  missing Locate media files missing from the specified media library, matched against one or more source labels, eg. missing movies \"My Movies\"")
-  print("  ascan   Scan entire audio library, or specific path")
-  print("  vscan   Scan entire video library, or specific path")
-  print("  aclean  Clean audio library")
-  print("  vclean  Clean video library")
-  print("  sources List all sources, or sources for specfic media type (video, music, pictures, files, programs) or label (eg. \"My Movies\")")
-  print("directory Retrieve list of files in a specific directory (see sources)")
-  print("  status  Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
-  print("  monitor Display client event notifications as they occur")
-  print("  power   Control power state of client, where state is one of suspend, hibernate, shutdown and reboot")
-  print("  wake    Wake (over LAN) the client corresponding to the MAC address specified by property network.mac")
-  print("  exec    Execute specified addon, with optional parameters")
-  print("  execw   Execute specified addon, with optional parameters and wait (although often wait has no effect)")
+  print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
+  print("  S          Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
+  print("  x          Extract details, using optional SQL filter")
+  print("  X          Same as \"x\" (extract) but will validate cachedurl file exists, displaying only those that fail validation")
+  print("  Xd         Same as \"x\" (extract) but will DELETE those rows for which no cachedurl file exists")
+  print("  f          Same as x, but include file summary (file count, accumulated file size)")
+  print("  d          Delete rows with matching ids, along with associated cached images")
+  print("  r          Reverse search to identify \"orphaned\" Thumbnail files not present in texture cache")
+  print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
+  print("  c          Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
+  print("  C          Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
+  print("  nc         Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
+  print("  lc         Like c, but only for content added since the modification date of the file specficied in property lastrunfile")
+  print("  lnc        Like nc, but only for content added since the modification date of the file specficied in property lastrunfile")
+  print("  j          Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results.")
+  print("  J          Same as \"j\", but includes extra JSON audio/video fields as defined in properties file.")
+  print("  jd, Jd     Functionality equivalent to j/J, but all urls are decoded")
+  print("  qa         Run QA check on movies, tags and tvshows, identifying media with missing artwork or plots")
+  print("  qax        Same as qa, but remove and rescan those media items with missing details.")
+  print("             Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
+  print("  p          Display files present in texture cache that don't exist in the media library")
+  print("  P          Prune (automatically remove) cached items that don't exist in the media library")
+  print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
+  print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
+  print("  missing    Locate media files missing from the specified media library, matched against one or more source labels, eg. missing movies \"My Movies\"")
+  print("  ascan      Scan entire audio library, or specific path")
+  print("  vscan      Scan entire video library, or specific path")
+  print("  aclean     Clean audio library")
+  print("  vclean     Clean video library")
+  print("  sources    List all sources, or sources for specfic media type (video, music, pictures, files, programs) or label (eg. \"My Movies\")")
+  print("  directory  Retrieve list of files in a specific directory (see sources)")
+  print("  status     Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
+  print("  monitor    Display client event notifications as they occur")
+  print("  power      Control power state of client, where state is one of suspend, hibernate, shutdown and reboot")
+  print("  wake       Wake (over LAN) the client corresponding to the MAC address specified by property network.mac")
+  print("  exec       Execute specified addon, with optional parameters")
+  print("  execw      Execute specified addon, with optional parameters and wait (although often wait has no effect)")
   print("")
-  print("  config  Show current configuration")
-  print("  version Show current version and check for new version")
-  print("  update  Update to new version (if available)")
+  print("  config     Show current configuration")
+  print("  version    Show current version and check for new version")
+  print("  update     Update to new version (if available)")
   print("")
   print("Valid media classes: addons, pvr.tv, pvr.radio, artists, albums, songs, movies, sets, tags, tvshows")
   print("Valid meta classes:  music (artists + albums + songs) and video (movies + sets + tvshows) and all (music + video + addons + pvr.tv + pvr.radio)")
@@ -3729,7 +3803,7 @@ def checkConfig(option):
     needWeb = False
 
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
-                "vscan", "ascan", "vclean", "aclean", "directory", "sources",
+                "remove", "vscan", "ascan", "vclean", "aclean", "directory", "sources",
                 "status", "monitor", "power",
                 "exec", "execw", "missing", "watched"]:
     needSocket = True
@@ -3900,7 +3974,7 @@ def getLatestVersion(argv):
     USAGE  = "exec"
   elif argv[0] in ["qa", "qax", "query", "missing", "watched",
                    "power", "wake", "status", "monitor",
-                   "directory", "sources",
+                   "directory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
@@ -4032,16 +4106,14 @@ def main(argv):
     sqlExtract("STATS", "", argv[1])
 
   elif argv[0] in ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "qa", "qax", "query"]:
+    _stats  = False
 
     if argv[0] in ["j", "J", "jd", "Jd"]:
       _action = "dump"
-      _stats  = False
     elif argv[0] in ["qa", "qax"]:
       _action = "qa"
-      _stats  = False
     elif argv[0] in ["query"]:
       _action = "query"
-      _stats  = False
     else:
       _action = "cache"
       _stats  = True
@@ -4078,21 +4150,19 @@ def main(argv):
       if argv[1] == "video": _multi_call = multi_call_v
       if argv[1] == "all":   _multi_call = multi_call
 
-    if _multi_call != []:
-      if not gConfig.HAS_PVR:
-        for item in ["pvr.tv", "pvr.radio"]:
-          if item in _multi_call: _multi_call.remove(item)
+    if _multi_call != [] and not gConfig.HAS_PVR:
+      for item in ["pvr.tv", "pvr.radio"]:
+        if item in _multi_call: _multi_call.remove(item)
 
+    if _multi_call == [] and len(argv) >= 2:
+      _multi_call.append(argv[1])
+
+    if _multi_call != []:
       for _media in _multi_call:
         jsonQuery(_action, mediatype=_media, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
                   rescan=_rescan, decode=_decode, extraFields=_extraFields)
       if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
-    elif len(argv) >= 2:
-      jsonQuery(_action, mediatype=argv[1], filter=_filter,
-                force=_force, lastRun=_lastRun, nodownload=_nodownload,
-                rescan=_rescan, decode=_decode, extraFields=_extraFields, query=_query)
-      if _stats: TOTALS.libraryStats(item=argv[1], filter=_filter, lastRun=_lastRun, query=_query)
     else:
       usage(1)
 
@@ -4110,6 +4180,9 @@ def main(argv):
 
   elif argv[0] == "P" and len(argv) == 1:
     pruneCache(purge_nonlibrary_artwork=True)
+
+  elif argv[0] == "remove" and len(argv) == 3:
+    removeMedia(mtype=argv[1], libraryid=int(argv[2]))
 
   elif argv[0] == "vscan":
     EXIT_CODE = doLibraryScan("video", path = argv[1] if len(argv) == 2 else None)

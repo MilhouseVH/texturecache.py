@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.9.5 (03/09/2013)
+* Add: Option `remove` to remove from media library `musicvideo`, `movie`, `tvshow` or `episode` for a specific libraryid, eg. `remove movie 619`
+* Add: Show player progress in `status`
+
 ##Version 0.9.4 (13/08/2013)
 * Add: Option `Xd` to remove texture cache rows with no corresponding thumbnail file
 * Add: Include referer on analytics
