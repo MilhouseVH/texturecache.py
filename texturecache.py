@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.5"
+    self.VERSION="0.9.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -4132,8 +4132,8 @@ def main(argv):
       _filter     = argv[2] if len(argv) > 2 else ""
     else:
       if len(argv) == 3:
-        _query      = argv[2] if len(argv) > 2 else ""
-      elif len(argv) > 2:
+        _query      = argv[2]
+      elif len(argv) > 3:
         _filter     = argv[2]
         _query      = argv[3]
 
@@ -4161,7 +4161,7 @@ def main(argv):
       for _media in _multi_call:
         jsonQuery(_action, mediatype=_media, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
-                  rescan=_rescan, decode=_decode, extraFields=_extraFields)
+                  rescan=_rescan, decode=_decode, extraFields=_extraFields, query=_query)
       if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
     else:
       usage(1)

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.9.6 (05/09/2013)
+* Fix: Doh, fix `query` which was broken by previous uppdate
+
 ##Version 0.9.5 (03/09/2013)
 * Add: Option `remove` to remove from media library `musicvideo`, `movie`, `tvshow` or `episode` for a specific libraryid, eg. `remove movie 619`
 * Add: Show player progress in `status`
