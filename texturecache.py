@@ -3299,7 +3299,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 # Shares ("smb://", "nfs://" etc.) will always use forward slashes.
 #
 # Non-shares will use a slash appropriate to the OS to which the path
-# corresponds so attempt to find the FIST slash (forward or back) and
+# corresponds so attempt to find the FIRST slash (forward or back) and
 # then use that as the path seperator, replacing any of the opposite
 # kind.
 #
