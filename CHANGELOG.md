@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.9.7 (15/09/2013)
+* Add: When removing artwork files, remove any matching dds file also
+
 ##Version 0.9.6 (05/09/2013)
 * Fix: Doh, fix `query` which was broken by previous uppdate
 

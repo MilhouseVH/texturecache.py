@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.6"
+    self.VERSION="0.9.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -761,9 +761,17 @@ class MyDB(object):
 
     if localFile and os.path.exists(self.config.getFilePath(localFile)):
       os.remove(self.config.getFilePath(localFile))
+      self.logger.log("FILE DELETE: Removed cached thumbnail file %s for id %s" % (localFile, (self.config.IDFORMAT % id)))
     else:
       if warnmissing:
         self.logger.out("WARNING: id %s, cached thumbnail file %s not found" % ((self.config.IDFORMAT % id), localFile), newLine=True)
+
+    # Check for any matching .dds file and remove that too
+    if localFile:
+      localFile_dds = "%s.dds" % os.path.splitext(localFile)[0]
+      if localFile_dds and os.path.exists(self.config.getFilePath(localFile_dds)):
+        os.remove(self.config.getFilePath(localFile_dds))
+        self.logger.log("FILE DELETE: Removed cached thumbnail file %s for id %s" % (localFile_dds, (self.config.IDFORMAT % id)))
 
     if id > 0:
       self.execute("DELETE FROM texture WHERE id=%d" % id)
