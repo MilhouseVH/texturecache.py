@@ -3772,7 +3772,7 @@ def usage(EXIT_CODE):
   print("  update     Update to new version (if available)")
   print("")
   print("Valid media classes: addons, pvr.tv, pvr.radio, artists, albums, songs, movies, sets, tags, tvshows")
-  print("Valid meta classes:  music (artists + albums + songs) and video (movies + sets + tvshows) and all (music + video + addons + pvr.tv + pvr.radio)")
+  print("Valid meta classes:  audio (artists + albums + songs) and video (movies + sets + tvshows) and all (music + video + addons + pvr.tv + pvr.radio)")
   print("Meta classes can be used in place of media classes for: c/C/nc/lc/lnc/j/J/jd/Jd/qa/qax options.")
   print("")
   print("SQL Filter fields:")
