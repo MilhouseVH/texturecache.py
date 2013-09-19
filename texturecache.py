@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.7"
+    self.VERSION="0.9.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -69,7 +69,7 @@ class MyConfiguration(object):
     self.CONFIG_NAME = "texturecache.cfg"
 
     serial_urls = "assets\.fanart\.tv"
-    embedded_urls = "image://video, image://music"
+    embedded_urls = "^image://video, ^image://music"
 
     config = ConfigParser.SafeConfigParser()
 
@@ -1951,6 +1951,7 @@ class MyMediaItem(object):
     self.season = season
     self.episode = episode
     self.filename = filename
+    self.decoded_filename = urllib2.unquote(self.filename) if self.filename else self.filename
     self.dbid = dbid
     self.cachedurl = cachedurl
     self.libraryid = libraryid
@@ -1959,7 +1960,7 @@ class MyMediaItem(object):
   def __str__(self):
     return "{%d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s}" % \
             (self.status, self.mtype, self.itype, self.name, self.season, \
-             self.episode, self.filename,  self.dbid, self.cachedurl, \
+             self.episode, self.decoded_filename, self.dbid, self.cachedurl, \
              self.libraryid, self.missingOK)
 
   def getFullName(self):
@@ -2255,7 +2256,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   for item in mediaitems:
     if item.mtype == "tvshows" and item.season == "Season All": TOTALS.bump("Season-all", item.itype)
 
-    filename = urllib2.unquote(re.sub("^image://(.*)/","\\1",item.filename))
+    filename = re.sub("^image://(.*)/","\\1", item.decoded_filename)
     if sys.version_info >= (3, 0):
       filename = bytes(filename, "utf-8").decode("iso-8859-1")
 
@@ -2272,7 +2273,8 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
         dbrow = dbfiles.get(fixSlashes(filename), None)
 
     # Don't need to cache file if it's already in the cache, unless forced...
-    # Assign the texture cache database id and cachedurl so that removal will be quicker.
+    # Assign the texture cache database id and cachedurl so that removal will avoid having
+    # to retrieve these items from the database.
     if dbrow:
       if force:
         itemCount += 1
@@ -2321,7 +2323,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       if not item.itype in unique_items:
         unique_items[item.itype] = True
 
-    if gConfig.DOWNLOAD_PREDELETE:
+    if force and gConfig.DOWNLOAD_PREDELETE:
       TOTALS.TimeStart(mediatype, "PreDelete")
       TOTALS.init()
       dbitems = 0
@@ -2354,7 +2356,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
           isSingle = False
           if gConfig.SINGLETHREAD_URLS:
             for site in gConfig.SINGLETHREAD_URLS:
-              if site.search(item.filename):
+              if site.search(item.decoded_filename):
                 sc += 1
                 if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
                 single_work_queue.put(item)
@@ -2421,7 +2423,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       while not error_queue.empty():
         item = error_queue.get()
         name = item.getFullName()[:40]
-        gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, urllib2.unquote(item.filename)))
+        gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
         gLogger.log("ERROR ITEM: %s" % item)
         error_queue.task_done()
 
@@ -2503,8 +2505,6 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
 # be excluded in future if "seen" again.
 #
 def evaluateURL(imgtype, url, imagecache):
-#  if not url or url == "": return False
-
   if not url or url == "":
     TOTALS.bump("Undefined", imgtype)
     imagecache[""] += 1
@@ -2516,9 +2516,10 @@ def evaluateURL(imgtype, url, imagecache):
     return False
 
   if gConfig.CACHE_IGNORE_TYPES:
+    decoded_url = urllib2.unquote(url)
     for ignore in gConfig.CACHE_IGNORE_TYPES:
-      if ignore.search(url):
-        gLogger.log("Ignored image due to rule [%s]: %s" % (ignore.pattern, url))
+      if ignore.search(decoded_url):
+        gLogger.log("Ignored image due to rule [%s]: %s" % (ignore.pattern, decoded_url))
         TOTALS.bump("Ignored", imgtype)
         imagecache[url] = 1
         return False
@@ -2592,16 +2593,17 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       if artwork == "":
         missing["Missing %s" % j] = not i.startswith("?")
       else:
+        decoded_url = urllib2.unquote(artwork)
         FAILED = False
         if gConfig.QA_FAIL_TYPES:
           for qafailtype in gConfig.QA_FAIL_TYPES:
-            if qafailtype.search(artwork):
+            if qafailtype.search(decoded_url):
               missing["Fail URL (%s, \"%s\")" % (j, qafailtype.pattern)] = True
               FAILED = True
               break
         if not FAILED and gConfig.QA_WARN_TYPES:
           for qawarntype in gConfig.QA_WARN_TYPES:
-            if qawarntype.search(artwork):
+            if qawarntype.search(decoded_url):
               missing["Warn URL (%s, \"%s\")" % (j, qawarntype.pattern)] = False
               break
 

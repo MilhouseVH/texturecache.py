@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.9.8 (19/09/2013)
+* Chg: Use decoded urls when applying url matching rules
+
 ##Version 0.9.7 (15/09/2013)
 * Add: When removing artwork files, remove any matching dds file also
 
