@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.8"
+    self.VERSION="0.9.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -1202,7 +1202,7 @@ class MyJSONComms(object):
       REQUEST = {"method": scanMethod, "params":{"directory": path}}
     else:
       self.logger.out("Rescanning library...", newLine=True, log=True)
-      REQUEST = {"method": scanMethod, "params":{"directory": ""}}
+      REQUEST = {"method": scanMethod}
 
     self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
 
@@ -4195,10 +4195,10 @@ def main(argv):
     removeMedia(mtype=argv[1], libraryid=int(argv[2]))
 
   elif argv[0] == "vscan":
-    EXIT_CODE = doLibraryScan("video", path = argv[1] if len(argv) == 2 else None)
+    EXIT_CODE = doLibraryScan("video", path=argv[1] if len(argv) == 2 else None)
 
   elif argv[0] == "ascan":
-    EXIT_CODE = doLibraryScan("audio", path = argv[1] if len(argv) == 2 else None)
+    EXIT_CODE = doLibraryScan("audio", path=argv[1] if len(argv) == 2 else None)
 
   elif argv[0] == "vclean":
     doLibraryClean("video")
@@ -4210,13 +4210,13 @@ def main(argv):
     getDirectoryList(argv[1])
 
   elif argv[0] == "sources" and len(argv) < 3:
-    showSources(media = argv[1] if len(argv) == 2 else None)
+    showSources(media=argv[1] if len(argv) == 2 else None)
   elif argv[0] == "sources" and len(argv) == 3:
-    showSources(media = argv[1], withLabel = argv[2])
+    showSources(media=argv[1], withLabel=argv[2])
 
   elif argv[0] == "status":
     if len(argv) == 2:
-      showStatus(idleTime = argv[1])
+      showStatus(idleTime=argv[1])
     else:
       showStatus()
 

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.9.9 (27/09/2013)
+* Chg: Don't include directory parameter on *Library.Scan call when path is not specified
+
 ##Version 0.9.8 (19/09/2013)
 * Chg: Use decoded urls when applying url matching rules
 
