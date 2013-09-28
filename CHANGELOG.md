@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.0.0 (28/09/2013)
+* Fix: Handle "internal error" during prune operation when no movie sets are defined
+
 ##Version 0.9.9 (27/09/2013)
 * Chg: Don't include directory parameter on *Library.Scan call when path is not specified
 

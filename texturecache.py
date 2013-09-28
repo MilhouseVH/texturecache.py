@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="0.9.9"
+    self.VERSION="1.0.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -3416,7 +3416,7 @@ def getAllFiles(keyFunction):
     gLogger.progress("Loading: %s..." % mediatype)
     data = jcomms.sendJSON(r, "libFiles")
 
-    for items in data["result"]:
+    for items in data.get("result", []):
       if items != "limits":
         if mediatype in ["MovieSets","Addons","Genres"]:
           interval = 0
@@ -3501,7 +3501,7 @@ def getAllFiles(keyFunction):
                  "params":{"channeltype": channelType}}
       pvrdata = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
       if "result" in pvrdata:
-        for channelgroup in pvrdata["result"].get("channelgroups", None):
+        for channelgroup in pvrdata["result"].get("channelgroups", []):
           REQUEST = {"method":"PVR.GetChannels",
                      "params":{"channelgroupid": channelgroup["channelgroupid"],
                                "properties": ["channeltype", "channel", "thumbnail"]}}
