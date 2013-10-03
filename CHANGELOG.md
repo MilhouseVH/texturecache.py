@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.0.1 (03/10/2013)
+* Add: New option, `duplicates`, to list movies present more than once in the media library with the same imdb number
+
 ##Version 1.0.0 (28/09/2013)
 * Fix: Handle "internal error" during prune operation when no movie sets are defined
 

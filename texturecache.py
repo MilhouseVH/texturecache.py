@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.0"
+    self.VERSION="1.0.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -1614,6 +1614,15 @@ class MyJSONComms(object):
       if lastRun and self.config.LASTRUNFILE_DATETIME:
         self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATETIME })
 
+    if action == "duplicates":
+      if "art" in REQUEST["params"]["properties"]:
+        REQUEST["params"]["properties"].remove("art")
+      self.addProperties(REQUEST, "file")
+      self.addProperties(REQUEST, "imdbnumber")
+      self.addProperties(REQUEST, "playcount")
+      self.addProperties(REQUEST, "lastplayed")
+      self.addProperties(REQUEST, "dateadded")
+
     if action == "missing":
       for unwanted in ["artist", "art", "fanart", "thumbnail"]:
         if unwanted in REQUEST["params"]["properties"]:
@@ -2207,6 +2216,8 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       watchedBackup(mediatype, filename, data, title_name, id_name)
     elif action == "watched" and not wlBackup:
       watchedRestore(mediatype, jcomms, filename, data, title_name, id_name)
+    elif action == "duplicates":
+      duplicatesList(mediatype, jcomms, data)
 
   gLogger.progress("")
 
@@ -3066,6 +3077,54 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     gLogger.out("Watched List item summary: Restored %d, Unchanged %d, Unmatched %d, Failed %d\n" %
         (RESTORED, UNCHANGED, UNMATCHED, ERROR), newLine=True)
 
+
+def duplicatesList(mediatype, jcomms, data):
+  imdblist = []
+  dupelist = []
+
+  # Iterate over movies, building up list of imdb numbers
+  # for movies that appear more than once...
+  for movie in data:
+    imdb = movie["imdbnumber"]
+    if imdb:
+      if imdb in imdblist:
+        if not imdb in dupelist:
+          dupelist.append(imdb)
+      else:
+        imdblist.append(imdb)
+
+  # Iterate over the list of duplicate imdb numbers,
+  # and build up a list of matching movie details.
+  #
+  # dupelist will be in ascending alphabetical order based
+  # on the title name of the first movie to be matched
+  # above (the JSON data is in title order).
+  #
+  # Sort the list of movie details into dateadded (asc)
+  # order before outputting the details.
+  #
+  # Since it's possible for movies to be added with the
+  # same time, add an extra component to ensure the key
+  # is unique.
+  unique = 0
+  for imdb in dupelist:
+    dupes = {}
+    for movie in data:
+      if imdb == movie["imdbnumber"]:
+        unique += 1
+        dupes["%s.%d" % (movie["dateadded"], unique)] = movie
+
+    gLogger.out("IMDb Number: %s" % imdb, newLine=True)
+    for dupekey in sorted(dupes):
+      movie = dupes[dupekey]
+      gLogger.out("        Title: %s" % movie["title"], newLine=True)
+      gLogger.out("     Movie ID: %d" % movie["movieid"], newLine=True)
+      gLogger.out("    Playcount: %d" % movie["playcount"], newLine=True)
+      gLogger.out("  Last Played: %s" % movie["lastplayed"], newLine=True)
+      gLogger.out("   Date Added: %s" % movie["dateadded"], newLine=True)
+      gLogger.out("         File: %s" % movie["file"], newLine=True)
+      gLogger.out("", newLine=True)
+
 def watchedItemUpdate(jcomms, mediaitem, shortName):
   if mediaitem.mtype == "movies":
     method = "VideoLibrary.SetMovieDetails"
@@ -3727,7 +3786,7 @@ def usage(EXIT_CODE):
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] | " \
         "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | " \
         "qa class [filter] | qax class [filter] | pP | remove mediatype libraryid | watched class backup <filename> | " \
-        "watched class restore <filename> | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | " \
+        "watched class restore <filename> | duplicates | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | " \
         "vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | " \
         "monitor | power <state> | exec [params] | execw [params] | wake")
   print("")
@@ -3755,6 +3814,7 @@ def usage(EXIT_CODE):
   print("  P          Prune (automatically remove) cached items that don't exist in the media library")
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
   print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
+  print("  duplicates List movies with multiple versions as determined by imdb number")
   print("  missing    Locate media files missing from the specified media library, matched against one or more source labels, eg. missing movies \"My Movies\"")
   print("  ascan      Scan entire audio library, or specific path")
   print("  vscan      Scan entire video library, or specific path")
@@ -3815,7 +3875,7 @@ def checkConfig(option):
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean", "directory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw", "missing", "watched"]:
+                "exec", "execw", "missing", "watched", "duplicates"]:
     needSocket = True
   else:
     needSocket = False
@@ -3986,7 +4046,7 @@ def getLatestVersion(argv):
                    "power", "wake", "status", "monitor",
                    "directory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
-                   "version", "update", "fupdate", "config"]:
+                   "version", "update", "fupdate", "config", "duplicates"]:
     USAGE  = argv[0]
 
   HEADERS = []
@@ -4175,6 +4235,9 @@ def main(argv):
       if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
     else:
       usage(1)
+
+  elif argv[0] == "duplicates":
+    jsonQuery("duplicates", "movies")
 
   elif argv[0] == "d" and len(argv) >= 2:
     sqlDelete(argv[1:])
