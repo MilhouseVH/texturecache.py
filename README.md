@@ -31,6 +31,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
+**[set, testset]** Set values on `movie`, `tvshow`, `episode`, `musicvideo`, `artist`, `album` and `song`. Pass parameters on the command line, or as a batch of data read from stdin. `testset` will perform a dry-run. See [setting fields](#setting-fields-in-the-media-library) for more details.
+
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
 **[watched]** Backup and restore movie and tvshow watched lists to a text file. Watched list will be restored keeping more recent playcount, lastplayed and resume points unless  `@watched.overwrite=yes` is specified, in which case the watched list will be restored exactly as per the backup.
@@ -293,6 +295,60 @@ With `extrajson.movies = trailer, streamdetails, file` in the properties file, h
   }
 ]
 ```
+
+##Setting fields in the media library
+
+Specify values on the command line to set fields for a single media library item. For example:
+```
+./texturecache.py set movie 312 art.clearlogo "nfs://myserver/movies/thismovie-logo.png" \
+                                art.clearart "nfs://myserver/movies/thismovie-clearart.png" \
+                                playcount 12 \
+                                trailer "http://www.totaleclips.com/Player/Bounce.aspx?eclipid=e121648&bitrateid=449&vendorid=102&type=.mp" \
+                                tag "['horror', 'zombies']"
+```
+
+Specify a value of null or None for a field value to remove that field from the database.
+
+Updates may also be batched. Create an input file using JSON notation, for example:
+```
+[
+  {
+    "libraryid": 1,
+    "items": {
+      "art.clearart": "nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/9 (2009)[DVDRip]-clearart.png",
+      "art.clearlogo": "nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/9 (2009)[DVDRip]-logo.png"
+    },
+    "type": "movie",
+    "title": "9"
+  },
+  {
+    "libraryid": 358,
+    "items": {
+      "art.clearart": "nfs://192.168.0.3/mnt/share/media/Video/MoviesHD/Classics/12 Angry Men (1957)[BDRip]-clearart.png",
+      "art.clearlogo": "nfs://192.168.0.3/mnt/share/media/Video/MoviesHD/Classics/12 Angry Men (1957)[BDRip]-logo.png"
+    },
+    "type": "movie",
+    "title": "12 Angry Men"
+  },
+  {
+    "libraryid": 115,
+    "items": {
+      "art.clearart": "nfs://192.168.0.3/mnt/share/media/Video-Private/TVShows/Arrested Development/clearart.png",
+      "art.clearlogo": "nfs://192.168.0.3/mnt/share/media/Video-Private/TVShows/Arrested Development/logo.png"
+    },
+    "type": "tvshow",
+    "title": "Arrested Development"
+  }
+]
+```
+
+then pipe the file as input to texturecache.py with the set or testset option (no other parameters required - all additional information will be read from stdin).
+
+```
+cat /tmp/movies.dat | ./texturecache.py set
+```
+
+Required fields are `libraryid`, `type` and `items`. `title` is optional. Fields within `items` will be updated in the media library as per the command line equivalent.
 
 ##Optional Properties File
 

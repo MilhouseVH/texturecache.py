@@ -1,5 +1,58 @@
 #Changelog
 
+##Version 1.0.2 (03/10/2013)
+* Add: New options, `set` and `testset`, to allow limited modification of `movie`, `tvshow`, `episode`, `musicvideo`, `artist`, `album` and `song` library items. Use `testset` to verify the request is valid before performing any update.
+
+Example:
+
+```
+./texturecache.py set movie 312 art.clearlogo "nfs://myserver/movies/thismovie-logo.png" \
+                                art.clearart "nfs://myserver/movies/thismovie-clearart.png" \
+                                playcount 12 \
+                                trailer "http://www.totaleclips.com/Player/Bounce.aspx?eclipid=e121648&bitrateid=449&vendorid=102&type=.mp" \
+                                tag "['horror', 'zombies']"
+```
+
+to set clearlogo, clearart, playcount and tag fields for the movie with the movieid 312.
+
+Most basic fields can be specified (eg. `plot`, `trailer`, `playcount`, `art` etc. - see JSON API v6 for details of which fields can be specified on the Set*Details calls). However modification of more complex fields - such as `cast`, `streamdetails` etc. - is not supported by JSON. Also, the `file` field cannot be modified.
+
+In addition, for the sake of efficiency, batches of data can also be read from stdin as follows:
+```
+/tmp/movies.dat:
+[
+  {
+    "libraryid": 1,
+    "items": {
+      "art.clearart": "nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/9 (2009)[DVDRip]-clearart.png",
+      "art.clearlogo": "nfs://192.168.0.3/mnt/share/media/Video/MoviesSD/9 (2009)[DVDRip]-logo.png"
+    },
+    "type": "movie",
+    "title": "9"
+  },
+  {
+    "libraryid": 358,
+    "items": {
+      "art.clearart": "nfs://192.168.0.3/mnt/share/media/Video/MoviesHD/Classics/12 Angry Men (1957)[BDRip]-clearart.png",
+      "art.clearlogo": "nfs://192.168.0.3/mnt/share/media/Video/MoviesHD/Classics/12 Angry Men (1957)[BDRip]-logo.png"
+    },
+    "type": "movie",
+    "title": "12 Angry Men"
+  },
+  {
+    "libraryid": 115,
+    "items": {
+      "art.clearart": "nfs://192.168.0.3/mnt/share/media/Video-Private/TVShows/Arrested Development/clearart.png",
+      "art.clearlogo": "nfs://192.168.0.3/mnt/share/media/Video-Private/TVShows/Arrested Development/logo.png"
+    },
+    "type": "tvshow",
+    "title": "Arrested Development"
+  }
+]
+
+cat /tmp/movies.dat | ./texturecache.py set
+```
+
 ##Version 1.0.1 (03/10/2013)
 * Add: New option, `duplicates`, to list movies present more than once in the media library with the same imdb number
 

@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.1"
+    self.VERSION="1.0.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -62,7 +62,7 @@ class MyConfiguration(object):
 
     namedSection = False
 
-    self.JSONVER = "0.00.00"
+    self.JSONVER = (0, 0, 0)
 
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
@@ -2644,7 +2644,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       else:
         mtype = mediatype[:-1].capitalize()
         if mtype == "Tvshow": mtype = "TVShow"
-      mediaitems.append("%s [%-50s]: %s" % (mtype, addElipses(50, name), ", ".join(missing)))
+      mediaitems.append("%s [%-50s]: %s" % (mtype, addEllipsis(50, name), ", ".join(missing)))
       if "file" in item and "".join(["Y" if missing[m] else "" for m in missing]) != "":
         dir = "%s;%s" % (mediatype, os.path.dirname(unstackFiles(item["file"])[0]))
         libraryids = workItems[dir] if dir in workItems else []
@@ -2821,9 +2821,9 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     for m in mediaitems:
-      gLogger.out("Matched: [%-50s] %s" % (addElipses(50, m[0]), m[1]), newLine=True)
+      gLogger.out("Matched: [%-50s] %s" % (addEllipsis(50, m[0]), m[1]), newLine=True)
 
-def addElipses(maxlen, aStr):
+def addEllipsss(maxlen, aStr):
   if len(aStr) <= maxlen: return aStr
 
   ileft = int(maxlen/2) - 2
@@ -3077,6 +3077,28 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
     gLogger.out("Watched List item summary: Restored %d, Unchanged %d, Unmatched %d, Failed %d\n" %
         (RESTORED, UNCHANGED, UNMATCHED, ERROR), newLine=True)
 
+def watchedItemUpdate(jcomms, mediaitem, shortName):
+  if mediaitem.mtype == "movies":
+    method = "VideoLibrary.SetMovieDetails"
+    mediaid = "movieid"
+  else:
+    method = "VideoLibrary.SetEpisodeDetails"
+    mediaid = "episodeid"
+
+  REQUEST = { "method": method,
+              "params": {mediaid: mediaitem.libraryid,
+                         "playcount": mediaitem.playcount,
+                         "lastplayed": mediaitem.lastplayed
+                         }}
+
+  if gConfig.JSON_HASRESUME:
+    REQUEST["params"]["resume"] = mediaitem.resume
+
+  gLogger.progress("Restoring %s: %s..." % (mediaitem.mtype[:-1], shortName))
+
+  data = jcomms.sendJSON(REQUEST, "libWatchedList", checkResult=False)
+
+  return ("result" in data and data["result"] == "OK")
 
 def duplicatesList(mediatype, jcomms, data):
   imdblist = []
@@ -3125,28 +3147,150 @@ def duplicatesList(mediatype, jcomms, data):
       gLogger.out("         File: %s" % movie["file"], newLine=True)
       gLogger.out("", newLine=True)
 
-def watchedItemUpdate(jcomms, mediaitem, shortName):
-  if mediaitem.mtype == "movies":
+def getIntFloatStr(aValue):
+  if aValue.startswith('"') and aValue.endswith('"'):
+    return aValue[1:-1]
+  if aValue.startswith("'") and aValue.endswith("'"):
+    return aValue[1:-1]
+  if aValue == "null":
+    return None
+
+  try:
+    if int(aValue) == float(aValue):
+      return int(aValue)
+  except:
+    try:
+      return float(aValue)
+    except:
+      return aValue
+
+def setDetails_batch(dryRun=True):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  data=[]
+  for line in sys.stdin: data.append(line)
+  gLogger.log("Read %d lines of data from stdin" % len(data))
+
+  jdata = json.loads("".join(data))
+  gLogger.log("Parsed %d items" % len(jdata))
+
+  for item in jdata:
+    kvpairs = []
+    for key in item["items"]:
+      kvpairs.append(key)
+      kvpairs.append(item["items"][key])
+    setDetails_worker(jcomms, item["type"], item["libraryid"], kvpairs, item.get("title", None), dryRun)
+
+  gLogger.progress("")
+
+def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
+  # Fix unicode bacsklash mangling from the command line...
+  ukvpairs = []
+  for kv in kvpairs:
+    ukvpairs.append(kv.encode("utf_8").decode("unicode_escape"))
+
+  jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
+  setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun)
+  gLogger.progress("")
+
+def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
+  if mtype == "movie":
     method = "VideoLibrary.SetMovieDetails"
-    mediaid = "movieid"
-  else:
+    idname = "movieid"
+  elif mtype == "tvshow":
+    method = "VideoLibrary.SetTVShowDetails"
+    idname = "tvshowid"
+  elif mtype == "episode":
     method = "VideoLibrary.SetEpisodeDetails"
-    mediaid = "episodeid"
+    idname = "episodeid"
+  elif mtype == "musicvideo":
+    method = "VideoLibrary.SetMusicVideoDetails"
+    idname = "musicvideoid"
+  elif mtype == "artist":
+    method = "AudioLibrary.SetArtistDetails"
+    idname = "artistid"
+  elif mtype == "album":
+    method = "AudioLibrary.SetAlbumDetails"
+    idname = "albumid"
+  elif mtype == "song":
+    method = "AudioLibrary.SetSongDetails"
+    idname = "songid"
+  else:
+    gLogger.out("ERROR: %s is not a valid media type for this operation (id: %d)" % (mtype, libraryid), newLine=True)
+    return
 
-  REQUEST = { "method": method,
-              "params": {mediaid: mediaitem.libraryid,
-                         "playcount": mediaitem.playcount,
-                         "lastplayed": mediaitem.lastplayed
-                         }}
+  if libraryid < 1:
+    gLogger.out("ERROR: %d is not a valid libraryid" % libraryid, newLine=True)
+    return
 
-  if gConfig.JSON_HASRESUME:
-    REQUEST["params"]["resume"] = mediaitem.resume
+  mytitle = title if title else "%s %d" % (idname, libraryid)
+  gLogger.progress("Updating: %s..." % mytitle)
 
-  gLogger.progress("Restoring %s: %s..." % (mediaitem.mtype[:-1], shortName))
+  REQUEST = {"method": method, "params": {idname: libraryid}}
 
-  data = jcomms.sendJSON(REQUEST, "libWatchedList", checkResult=False)
+  # Iterate over list of name/value pairs
+  # Build up dictionary of pairs, and with correct data types
+  pairs = {}
+  KEY = ""
+  bKEY = True
+  for pair in kvpairs:
+    if bKEY:
+      KEY = pair
+    else:
+      if pair == None:
+        pairs[KEY] = None
+      elif type(pair) is list:
+        pairs[KEY] = []
+        for item in pair:
+          if item: pairs[KEY].append(getIntFloatStr(item))
+      elif pair.startswith("[") and pair.endswith("]"):
+        pairs[KEY] = []
+        for item in [x.strip() for x in pair[1:-1].split(",")]:
+          if item: pairs[KEY].append(getIntFloatStr(item))
+      else:
+        pairs[KEY] = getIntFloatStr(pair)
 
-  return ("result" in data and data["result"] == "OK")
+      if (pairs[KEY] == None or pairs[KEY] == "") and \
+         (KEY.startswith("art.") or KEY in ["fanart", "thumbnail", "thumb"]) and \
+         gConfig.JSONVER < (6, 6, 3):
+        value = "null" if pairs[KEY] == None else '"%s"' % pairs[KEY]
+        gLogger.out("WARNING: Cannot set null/empty string value on field with " \
+                    "JSON API prior to v6.6.3 - ignoring %s %-6d (%s = %s)" % (idname, libraryid, KEY, value), newLine=True, log=True)
+        return
+
+    bKEY = not bKEY
+
+  # Iterate over name/value pairs, adding to params property of the request.
+  # Correctly nest parameters using to dot notation.
+  for pair in pairs:
+    R = REQUEST["params"]
+    fc = len(pair.split("."))
+    i = 0
+    for field in pair.split("."):
+      i += 1
+      if not field in R: R[field] = {}
+      if i == fc: R[field] = u"%s" % pairs[pair]
+
+      R = R[field]
+    R = pairs[pair]
+
+# REMOVE ME
+#  REQUEST["params"]["streamdetails"] = {}
+#  REQUEST["params"]["streamdetails"]["video"] = []
+#  REQUEST["params"]["streamdetails"]["audio"] = []
+#  REQUEST["params"]["streamdetails"]["subtitle"] = []
+#  REQUEST["params"]["streamdetails"]["video"].append({"duration": 5262, "width": 1280, "codec": "h264", "aspect": 2.388000011444092, "height": 536})
+#  REQUEST["params"]["streamdetails"]["audio"].append({"channels": 6, "codec": "dca", "language": "eng"})
+#  REQUEST["params"]["art"] = {"clearlogo":""}
+
+  if dryRun:
+    gLogger.out("### DRY RUN ###", newLine=True)
+    gLogger.out(json.dumps(REQUEST, indent=2, ensure_ascii=True, sort_keys=False), newLine=True)
+    gLogger.out("### DRY RUN ###", newLine=True)
+  else:
+# REMOVE ME
+    data = jcomms.sendJSON(REQUEST, "libSetDetails")
+#    time.sleep(0.05)
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
@@ -3585,11 +3729,11 @@ def removeMedia(mtype, libraryid):
   MTYPE["episode"] = "Episode"
 
   if mtype not in MTYPE:
-    print("ERROR: %s is not a valid media type for removal - valid types: %s" % (mtype, ", ".join(MTYPE)))
+    gLogger.out("ERROR: %s is not a valid media type for removal - valid types: %s" % (mtype, ", ".join(MTYPE)), newLine=True)
     return
 
   if libraryid < 1:
-    print("ERROR: %d is not a valid libraryid for removal" % libraryid)
+    gLogger.out("ERROR: %d is not a valid libraryid for removal" % libraryid, newLine=True)
     return
 
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -3600,7 +3744,7 @@ def removeMedia(mtype, libraryid):
     jcomms.removeLibraryItem(mtype, libraryid)
     gLogger.out("Done", newLine=True)
   else:
-    gLogger.out("Does not exist: media [%s] libraryid [%d]" % (mtype, libraryid), newLine=True)
+    gLogger.out("ERROR: Does not exist - media type [%s] libraryid [%d]" % (mtype, libraryid), newLine=True)
 
 def doLibraryScan(media, path):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -3627,7 +3771,7 @@ def getDirectoryList(path, mediatype = "files"):
   data = jcomms.getDirectoryList(mediatype, path)
 
   if not "result" in data:
-    print("No directory listing available.")
+    gLogger.out("No directory listing available.", newLine=True)
     return
 
   files = data["result"]["files"]
@@ -3642,7 +3786,7 @@ def getDirectoryList(path, mediatype = "files"):
       FTYPE = "FILE"
       FNAME = fname
 
-    print("%s: %s") % (FTYPE, FNAME)
+    gLogger.out("%s: %s" % (FTYPE, FNAME), newLine=True)
 
 def showSources(media=None, withLabel=None):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -3786,7 +3930,8 @@ def usage(EXIT_CODE):
   print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] | " \
         "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | " \
         "qa class [filter] | qax class [filter] | pP | remove mediatype libraryid | watched class backup <filename> | " \
-        "watched class restore <filename> | duplicates | missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | " \
+        "watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | " \
+        "missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | " \
         "vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | " \
         "monitor | power <state> | exec [params] | execw [params] | wake")
   print("")
@@ -3815,6 +3960,8 @@ def usage(EXIT_CODE):
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
   print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
   print("  duplicates List movies with multiple versions as determined by imdb number")
+  print("  set        Set values on objects (movie, tvshow, episode, musicvideo, album, artist, song) eg. \"set movie 312 art.fanart 'http://assets.fanart.tv/fanart/movies/19908/hdmovielogo/zombieland-5145e97ed73a4.png'\"")
+  print("  testset    Dry run version of set")
   print("  missing    Locate media files missing from the specified media library, matched against one or more source labels, eg. missing movies \"My Movies\"")
   print("  ascan      Scan entire audio library, or specific path")
   print("  vscan      Scan entire video library, or specific path")
@@ -3875,7 +4022,7 @@ def checkConfig(option):
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean", "directory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw", "missing", "watched", "duplicates"]:
+                "exec", "execw", "missing", "watched", "duplicates", "set", "testset"]:
     needSocket = True
   else:
     needSocket = False
@@ -3931,9 +4078,9 @@ def checkConfig(option):
         if "version" in data["result"]:
           jsonGotVersion = data["result"]["version"]
           if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
-            gConfig.JSONVER = "%d.%02d.%02d" % (jsonGotVersion.get("major",0),
-                                                jsonGotVersion.get("minor",0),
-                                                jsonGotVersion.get("patch",0))
+            gConfig.JSONVER = (jsonGotVersion.get("major",0),
+                               jsonGotVersion.get("minor",0),
+                               jsonGotVersion.get("patch",0))
             jsonGotVersion = jsonGotVersion["major"]
 
       REQUEST = {"method": "XBMC.GetInfoBooleans",
@@ -3996,7 +4143,7 @@ def checkConfig(option):
     return False
 
   # Allow restoration of resume points with Gotham+
-  gConfig.JSON_HASRESUME = True if gConfig.JSONVER >= "6.02.00" else False
+  gConfig.JSON_HASRESUME = True if gConfig.JSONVER >= (6, 2, 0) else False
 
   return True
 
@@ -4046,7 +4193,8 @@ def getLatestVersion(argv):
                    "power", "wake", "status", "monitor",
                    "directory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
-                   "version", "update", "fupdate", "config", "duplicates"]:
+                   "version", "update", "fupdate", "config",
+                   "duplicates", "set", "testset"]:
     USAGE  = argv[0]
 
   HEADERS = []
@@ -4318,6 +4466,17 @@ def main(argv):
 
   elif argv[0] == "wake":
     wake_on_lan()
+
+  elif argv[0] in ["set", "testset"] and len(argv) == 1:
+    dryRun = (argv[0] != "set")
+    setDetails_batch(dryRun=dryRun)
+
+  elif argv[0] in ["set", "testset"] and len(argv) >= 4:
+    dryRun = (argv[0] != "set")
+    mtype = argv[1]
+    libraryid = int(argv[2]) + 0 if len(argv) >= 3 else 0
+    kvpairs = argv[3:] if len(argv) >= 4 else []
+    setDetails_single(mtype, libraryid, kvpairs, dryRun=dryRun)
 
   else:
     usage(1)
