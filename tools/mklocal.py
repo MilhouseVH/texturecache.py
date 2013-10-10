@@ -175,7 +175,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
       if aitem in art:
         aname = art[aitem][8:-1]
         if aname.startswith("http"):
-          warning("**REMOTE FILE**", aitem, mediatitle, "Convert remote URL to local", aname, args.dryrun)
+          warning("**REMOTE FILE**", aitem, mediatitle, "Remote URL found", aname, args.dryrun)
 
   return workitem
 
@@ -311,9 +311,11 @@ def getJSONdata(args):
   TOTAL = len(jdata)
   for t in jdata:
     if "tvshowid" in t:
-      TOTAL += len(t["seasons"]) if args.season else 0
-      for s in t["seasons"]:
-        TOTAL += len(s["episodes"]) if args.episode else 0
+      if args.season and "seasons" in t:
+        TOTAL += len(t["seasons"])
+      if args.episode and "seasons" in t:
+        for s in t["seasons"]:
+          TOTAL += len(s["episodes"])
 
   return jdata
 
@@ -497,13 +499,13 @@ def main(args):
       workitem = processItem(args, "tvshow", media, download_items)
       if args.output and workitem["items"]: workitems.append(workitem)
 
-      for season in media["seasons"]:
+      for season in media.get("seasons",[]):
         if args.season:
           workitem = processItem(args, "season", season, season_items, showTitle=mediatitle, showPath=mediafile)
           if args.output and workitem["items"]: workitems.append(workitem)
 
         if args.episode:
-          for episode in season["episodes"]:
+          for episode in season.get("episodes", []):
             workitem = processItem(args, "episode", episode, episode_items, showTitle=mediatitle)
             if args.output and workitem["items"]: workitems.append(workitem)
     else:
