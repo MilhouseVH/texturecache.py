@@ -54,11 +54,11 @@ def printerr(msg, newline=True):
 def warning(msg, atype, title, reason = None, url = None, dryrun=False, target=None):
   line = "DRYRUN " if dryrun else ""
   if reason or url:
-    line = "%s%-15s - %-10s - %-45s" % (line, msg, atype.center(10), addEllipsss(45, title))
+    line = "%s%-15s - %-10s - %-45s" % (line, msg, atype.center(10), addEllipsis(45, title))
     if reason: line = "%s [%s]" % (line, reason)
     if url:    line = "%s %s" % (line, url)
   elif target:
-    line = "%s%-15s - %-10s - %-45s -> %s" % (line, msg, atype.center(10), addEllipsss(45, title), target)
+    line = "%s%-15s - %-10s - %-45s -> %s" % (line, msg, atype.center(10), addEllipsis(45, title), target)
   else:
     line = "%s%-15s - %-10s - %s" % (line, msg, atype.center(10), title)
   printerr(line)
@@ -67,7 +67,7 @@ def debug(indent, msg):
   global VERBOSE
   if VERBOSE: printerr("##DEBUG## %s%s" % (" "*(indent*2), msg))
 
-def addEllipsss(maxlen, aStr):
+def addEllipsis(maxlen, aStr):
   if len(aStr) <= maxlen: return aStr
 
   ileft = int(maxlen/2) - 2

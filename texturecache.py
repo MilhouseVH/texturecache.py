@@ -2823,7 +2823,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
     for m in mediaitems:
       gLogger.out("Matched: [%-50s] %s" % (addEllipsis(50, m[0]), m[1]), newLine=True)
 
-def addEllipsss(maxlen, aStr):
+def addEllipsis(maxlen, aStr):
   if len(aStr) <= maxlen: return aStr
 
   ileft = int(maxlen/2) - 2
