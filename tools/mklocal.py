@@ -170,7 +170,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
           debug(2, "[%s] No library change required, keeping: [%s]" % (aitem, oldname))
 
   if args.check:
-    clist = args.check if args.check != ["all"] else [x for x in art]
+    clist = args.check if args.check != ["all"] else [x for x in art if not x.startswith("tvshow.") ]
     for aitem in clist:
       if aitem in art:
         aname = art[aitem][8:-1]
@@ -460,17 +460,20 @@ def main(args):
   download_items = itemListToDict(["clearlogo:logo", "clearart"])
   download_items.update(itemListToDict(args.add))
 
-  # Remove any artwork types that should not be downloaded
-  if args.remove:
-    for aname in args.remove:
-      if aname in download_items: del download_items[aname]
-
+  # If running just a simple --check, remove all download items
   if not (args.local and args.prefix) and args.nodownload:
     download_items = {}
+    season_items = {}
+    episode_items = {}
+  else:
+    # Remove any artwork types that should not be downloaded
+    if args.remove:
+      for aname in args.remove:
+        if aname in download_items: del download_items[aname]
 
-  # Load season and episode artwork download items
-  season_items = itemListToDict(args.season)
-  episode_items = itemListToDict(args.episode)
+    # Load season and episode artwork download items
+    season_items = itemListToDict(args.season)
+    episode_items = itemListToDict(args.episode)
 
   if args.verbose: showConfig(args, download_items)
 
