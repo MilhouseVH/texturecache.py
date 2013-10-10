@@ -170,7 +170,8 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
           debug(2, "[%s] No library change required, keeping: [%s]" % (aitem, oldname))
 
   if args.check:
-    for aitem in args.check:
+    clist = args.check if args.check != ["all"] else [x for x in art]
+    for aitem in clist:
       if aitem in art:
         aname = art[aitem][8:-1]
         if aname.startswith("http"):
@@ -398,11 +399,12 @@ def init():
                       help="Don't display a warning for media files with a path that does not match \
                             that set by --prefix")
   parser.add_argument("-a", "--add", nargs="+", metavar="TYPE", \
-                      help="Add additional named artwork TYPE(s) for download, eg. --add discart banner landscape")
+                      help="Add additional named artwork TYPE(s) for download, eg. --add discart banner landscape. \
+                            Specify TYPE:NAME if NAME differs from TYPE, eg. \"clearlogo:logo\"")
   parser.add_argument("-d", "--del", nargs="+", metavar="TYPE", dest="remove", \
                       help="Remove named artwork TYPE(s) from list of artwork types to be downloaded, eg. --del clearlogo")
   parser.add_argument("-c", "--check", nargs="+", metavar="TYPE", \
-                      help="Check the named artwork TYPE(s) and warn if any internet \
+                      help="Check the named artwork TYPE(s) - or all - and warn if any internet \
                             (http) URLs are detected")
 
   parser.add_argument("-s", "--season", nargs="*", metavar="TYPE", \
@@ -454,6 +456,7 @@ def init():
   return args
 
 def main(args):
+
   download_items = itemListToDict(["clearlogo:logo", "clearart"])
   download_items.update(itemListToDict(args.add))
 
@@ -461,6 +464,9 @@ def main(args):
   if args.remove:
     for aname in args.remove:
       if aname in download_items: del download_items[aname]
+
+  if not (args.local and args.prefix) and args.nodownload:
+    download_items = {}
 
   # Load season and episode artwork download items
   season_items = itemListToDict(args.season)
