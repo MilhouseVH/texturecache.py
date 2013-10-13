@@ -367,13 +367,13 @@ def init():
 
   NOT_AVAILABLE_CACHE = {}
 
-  parser = argparse.ArgumentParser(description='Downloads specific artwork types (default: clearart, clearlogo) \
+  parser = argparse.ArgumentParser(description="Downloads specific artwork types (default: clearart, clearlogo) \
                                                 based on urls in media library (ie. original source) creating local \
                                                 versions. Avoids retrieving artwork from XBMC Texture Cache as this is \
                                                 often resized, resampled and of lower quality. Optionally output data \
                                                 that can be used to update the media library to use new local versions of \
                                                 artwork, replacing any current remote versions. The same data will \
-                                                also remove invalid remote artwork from the library.', \
+                                                also remove invalid remote artwork from the library.", \
                     formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=25,width=90))
 
   parser.add_argument("-l", "--local", metavar="DIRECTORY", \
@@ -439,21 +439,17 @@ def init():
   if not LOCAL_DIR: args.nodownload = True
   if not XBMC_PATH: args.nodownload = True
 
-  if not args.nodownload and not os.path.exists(LOCAL_DIR):
-    printerr("ERROR: Local path %s does not exist!" % LOCAL_DIR)
-    sys.exit(1)
-
   if not args.nodownload:
     if not os.path.exists(LOCAL_DIR):
-      printerr("ERROR: Local path %s does not exist!" % LOCAL_DIR)
-      sys.exit(1)
+      parser.error("local DIRECTORY %s does not exist!" % LOCAL_DIR)
+      parser.exit(1)
     if LOCAL_ALT and not os.path.exists(LOCAL_ALT):
-      printerr("ERROR: Alternate Local path %s does not exist!" % LOCAL_ALT)
-      sys.exit(1)
+      parser.error("alternate local PATH %s does not exist!" % LOCAL_ALT)
+      parser.exit(1)
 
   if args.input != "-" and not os.path.exists(args.input):
-    printerr("ERROR: Input file %s does not exist!" % args.input)
-    sys.exit(1)
+    parser.error("input FILENAME %s does not exist!" % args.input)
+    parser.exit(1)
 
   return args
 
@@ -528,4 +524,4 @@ def main(args):
 try:
   main(init())
 except (KeyboardInterrupt, SystemExit) as e:
-  pass
+  if type(e) == SystemExit: sys.exit(int(str(e)))
