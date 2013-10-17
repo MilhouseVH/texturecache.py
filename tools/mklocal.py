@@ -51,8 +51,8 @@ def printerr(msg, newline=True):
   print(msg, file=sys.stderr, end=endchar)
   sys.stderr.flush()
 
-def warning(msg, atype, title, reason = None, url = None, dryrun=False, target=None):
-  line = "DRYRUN " if dryrun else ""
+def info(args, msg, atype, title, reason = None, url = None, target = None):
+  line = "DRYRUN " if args.dryrun else ""
   if reason or url:
     line = "%s%-15s - %-10s - %-45s" % (line, msg, atype.center(10), addEllipsis(45, title))
     if reason: line = "%s [%s]" % (line, reason)
@@ -62,6 +62,10 @@ def warning(msg, atype, title, reason = None, url = None, dryrun=False, target=N
   else:
     line = "%s%-15s - %-10s - %s" % (line, msg, atype.center(10), title)
   printerr(line)
+
+def warning(args, msg, atype, title, reason = None, url = None, target = None):
+  if not args.quiet:
+    info(args, msg, atype, title, reason, url, target)
 
 def debug(indent, msg):
   global VERBOSE
@@ -125,7 +129,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   if XBMC_PATH and not mediafile.startswith(XBMC_PATH):
     if not args.ignorebadprefix:
-      warning("** SKIPPING **", "Bad Prefix", mediatitle, "XBMC path does not match prefix", mediafile, args.dryrun)
+      warning(args, "** SKIPPING **", "Bad Prefix", mediatitle, "XBMC path does not match prefix", mediafile)
     return workitem
 
   filename = os.path.splitext(pathToLocal(mediafile))[0]
@@ -154,7 +158,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
     else:
       artpath = "%s%s" % (filename, download_items[aitem])
 
-    newname = processArtwork(mediatype, mediatitle, aitem, mediafile, oldname, artpath, nodownload=args.nodownload, dryrun=args.dryrun)
+    newname = processArtwork(args, mediatype, mediatitle, aitem, mediafile, oldname, artpath)
 
     if mediatype == "season":
       debug(2, "[%s] Can't assign values to library for season artwork, ignoring [%s]" % (aitem, newname))
@@ -175,11 +179,11 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
       if aitem in art:
         aname = art[aitem][8:-1]
         if aname.startswith("http"):
-          warning("**REMOTE FILE**", aitem, mediatitle, "Remote URL found", aname, args.dryrun)
+          info(args, "**REMOTE FILE**", aitem, mediatitle, "Remote URL found", aname)
 
   return workitem
 
-def processArtwork(mediatype, title, atype, filename, currentname, pathname, nodownload=False, dryrun=False):
+def processArtwork(args, mediatype, title, atype, filename, currentname, pathname):
   debug(1, "artwork type [%s] known by XBMC as [%s]" % (atype, currentname))
 
   # See if we already have a file of the desired artwork type, either in
@@ -195,25 +199,23 @@ def processArtwork(mediatype, title, atype, filename, currentname, pathname, nod
   # If we don't currently have a remote source, return nothing
   if not currentname: return None
 
+  # If we're not downloading, just return the current file name
+  if args.nodownload:
+    warning(args, "**  NEEDED  **", atype, title, "Downloading is disabled", currentname)
+    return currentname
+
   # We're going to create a new file.
   # We have a remote source (currentname) and a partial
   # name for the target - need to append the file format type.
   target = "%s%s" % (pathname, os.path.splitext(currentname)[1].lower())
 
-  # If we're not downloading, just return the current file name
-  if nodownload:
-    warning("**  NEEDED  **", atype, title, "Downloading is disabled", currentname, dryrun)
-    target = pathToXBMC(target)
-    debug(2, "[%s] Not downloading, using: [%s]" % (atype, target))
-    return target
-
   # Download the new artwork and convert the name of the new file
   # back into a valid XBMC path.
-  fname = pathToXBMC(getImage(title, atype, filename, currentname, target, dryrun))
+  fname = pathToXBMC(getImage(args, title, atype, filename, currentname, target))
   debug(2, "[%s] Converting filename to XBMC path: [%s]" % (atype, fname))
   return fname
 
-def getImage(title, atype, filename, source, target, dryrun):
+def getImage(args, title, atype, filename, source, target):
   global NOT_AVAILABLE_CACHE, LOCAL_ALT
 
   # If it's not a remote file, maybe we just need to copy it from
@@ -224,7 +226,7 @@ def getImage(title, atype, filename, source, target, dryrun):
   # We've already failed to download this url before, so fail quickly
   if source in NOT_AVAILABLE_CACHE:
     NOT_AVAILABLE_CACHE[source] += 1
-    warning("**UNAVAILABLE**", atype, title, "Prior download failed: %4d" % NOT_AVAILABLE_CACHE[source], source, dryrun)
+    warning(args, "**UNAVAILABLE**", atype, title, "Prior download failed: %4d" % NOT_AVAILABLE_CACHE[source], source)
     return None
 
   # Try the filesystem copy if not http...
@@ -241,7 +243,7 @@ def getImage(title, atype, filename, source, target, dryrun):
       debug(2, "[%s] Lookup non-HTTP file [%s] [%s] (based on media filename)" % (atype, newsource, "SUCCESS" if found_file else "FAIL"))
 
     if found_file:
-      if not dryrun:
+      if not args.dryrun:
         debug(2, "[%s] Copying to local: [%s]" % (atype, target))
         dtarget= os.path.dirname(target)
         if not os.path.exists(dtarget): os.makedirs(dtarget)
@@ -250,7 +252,7 @@ def getImage(title, atype, filename, source, target, dryrun):
       else:
         debug(2, "[%s] (DRYRUN) Skipping copy to local: [%s]" % (atype, target))
 
-      warning("%9d bytes" % os.path.getsize(newsource), atype, title, None, None, dryrun, target=target)
+      info(args, "%9d bytes" % os.path.getsize(newsource), atype, title, None, None, target=target)
       return target
 
     # Couldn't copy anything and don't have an alternative source, so stay with current local file
@@ -258,7 +260,7 @@ def getImage(title, atype, filename, source, target, dryrun):
       debug(2, "[%s] No alternate source for non-HTTP files, using: [%s]" % (atype, target))
       return target
 
-    warning("**UNAVAILABLE**", atype, title, "Source not readable", source, dryrun)
+    warning(args, "**UNAVAILABLE**", atype, title, "Source not readable", source)
     NOT_AVAILABLE_CACHE[source] = 0
     return None
 
@@ -271,11 +273,11 @@ def getImage(title, atype, filename, source, target, dryrun):
     debug(2, "[%s] Successfully downloaded %d bytes of data" % (atype, len(idata)))
   except Exception as e:
     debug(2, "[%s] Failure to download [%s]" % (atype, str(e)))
-    warning("**UNAVAILABLE**", atype, title, str(e), source, dryrun)
+    warning(args, "**UNAVAILABLE**", atype, title, str(e), source)
     NOT_AVAILABLE_CACHE[source] = 0
     return None
 
-  if not dryrun:
+  if not args.dryrun:
     try:
       dtarget= os.path.dirname(target)
       if not os.path.exists(dtarget): os.makedirs(dtarget)
@@ -291,7 +293,7 @@ def getImage(title, atype, filename, source, target, dryrun):
   else:
       debug(2, "[%s] (DRYRUN) Skipping file creation: [%s]" % (atype, target))
 
-  warning("%9d bytes" % len(idata), atype, title, None, None, dryrun, target=target)
+  info(args, "%9d bytes" % len(idata), atype, title, None, None, target=target)
   return target
 
 def getJSONdata(args):
@@ -378,33 +380,43 @@ def init():
 
   parser.add_argument("-l", "--local", metavar="DIRECTORY", \
                       help="Local DIRECTORY into which artwork will be WRITTEN, eg. /freenas/media/Images/")
+
   parser.add_argument("-p", "--prefix", metavar="PATH", \
                       help="XBMC PATH prefix (eg. nfs://192.168.0.3/mnt/share/media/) that \
                             will be substituted by --local DIRECTORY when traversing media files. \
                             This is typically the root of the media source as defined in sources.xml")
+
   parser.add_argument("-A", "--altlocal", metavar="PATH", \
                       help="Alternate local directory which may contain artwork that can be READ \
                             and copied to --local, could be the original source folder.")
+
   parser.add_argument("-i", "--input", default="-", const="-", nargs="?", metavar="FILENAME", \
                       help="Optional FILENAME containing JSON movie/tvshow data for processing. \
                             Read from stdin if FILENAME is - or not specified.")
+
   parser.add_argument("-o", "--output", const="-", nargs="?", metavar="FILENAME", \
                       help="Output a data structure suitable for consumption by texturecache.py [test]set, \
                             used to update an XBMC media library converting remote urls into \
                             local urls. Written to stdout if FILENAME is - or not specified.")
+
   parser.add_argument("--dryrun", action="store_true", \
                       help="Don't create anything (although downloads will be attempted)")
+
   parser.add_argument("-n", "--nodownload", action="store_true", \
                       help="Don't download (or, if specified, copy from --altlocal) new artwork, \
                             only use existing --local artwork")
+
   parser.add_argument("--ignorebadprefix", action="store_true", \
                       help="Don't display a warning for media files with a path that does not match \
                             that set by --prefix")
+
   parser.add_argument("-a", "--add", nargs="+", metavar="TYPE", \
                       help="Add additional named artwork TYPE(s) for download, eg. --add discart banner landscape. \
                             Specify TYPE:NAME if NAME differs from TYPE, eg. \"clearlogo:logo\"")
+
   parser.add_argument("-d", "--del", nargs="+", metavar="TYPE", dest="remove", \
                       help="Remove named artwork TYPE(s) from list of artwork types to be downloaded, eg. --del clearlogo")
+
   parser.add_argument("-c", "--check", nargs="+", metavar="TYPE", \
                       help="Check the named artwork TYPE(s) - or all - and warn if any internet \
                             (http) URLs are detected")
@@ -412,10 +424,14 @@ def init():
   parser.add_argument("-s", "--season", nargs="*", metavar="TYPE", \
                       help="For TV Shows, process season items (default: poster banner landscape). \
                             Not possible to modify media library due to non-existent \"VideoLibrary.SetSeasonDetails\" method.")
+
   parser.add_argument("-e", "--episode", nargs="*", metavar="TYPE", \
                       help="For TV Shows, process episode items (default: thumb)")
 
-  parser.add_argument("-v", "--verbose", action="store_true", \
+  group = parser.add_mutually_exclusive_group()
+  group.add_argument("-q", "--quiet", action="store_true", \
+                      help="Silence warnings about missing artwork (NEEDED etc.)")
+  group.add_argument("-v", "--verbose", action="store_true", \
                       help="Display diagnostic output")
 
   args = parser.parse_args()
