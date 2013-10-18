@@ -17,9 +17,12 @@ to set clearlogo, clearart, playcount and tag fields for the movie with the movi
 
 Most basic fields can be specified (eg. `plot`, `trailer`, `playcount`, `art` etc. - see JSON API v6 for details of which fields can be specified on the Set*Details calls). However modification of more complex fields - such as `cast`, `streamdetails` etc. - is not supported by JSON. Also, the `file` field cannot be modified.
 
-In addition, for the sake of efficiency, batches of data can also be read from stdin as follows:
+In addition, for the sake of efficiency, batches of data can also be read from stdin. In the following example, the two movies and one tv show are to be updated. The fields being updated are specified by the `items` list within each movie or tv show (in the following example, setting new clearart and clearlogo artwork urls).
+
+The file update.dat contains the following information:
+
+
 ```
-/tmp/movies.dat:
 [
   {
     "libraryid": 1,
@@ -49,9 +52,13 @@ In addition, for the sake of efficiency, batches of data can also be read from s
     "title": "Arrested Development"
   }
 ]
-
-cat /tmp/movies.dat | ./texturecache.py set
 ```
+and to apply the update:
+```
+cat update.dat | ./texturecache.py set
+```
+* Added of tools/mktools.py which can read in the output from `texturecache.py jd movies` or `texturecache.py jd tvshows` and convert remote artwork to local. It will retrieve the original remote artwork from the web site and write it into your media directory. Output from mklocal.py can be fed into `texturecache,py set` to re-point your media library so that it now uses the local artwork. Run mklocal.py in different ways to download remote artwork, or just assign existing local artwork to your media library. See --help for more details. 
+
 
 ##Version 1.0.1 (03/10/2013)
 * Add: New option, `duplicates`, to list movies present more than once in the media library with the same imdb number
