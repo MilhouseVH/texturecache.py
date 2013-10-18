@@ -1,6 +1,6 @@
 #Changelog
 
-##Version 1.0.2 (03/10/2013)
+##Version 1.0.2 (18/10/2013)
 * Add: New options, `set` and `testset`, to allow limited modification of `movie`, `tvshow`, `episode`, `musicvideo`, `artist`, `album` and `song` library items. Use `testset` to verify the request is valid before performing any update.
 
 Example:
