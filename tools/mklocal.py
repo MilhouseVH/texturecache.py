@@ -458,14 +458,11 @@ def init():
   if not args.nodownload:
     if not os.path.exists(LOCAL_DIR):
       parser.error("local DIRECTORY %s does not exist!" % LOCAL_DIR)
-      parser.exit(1)
     if LOCAL_ALT and not os.path.exists(LOCAL_ALT):
       parser.error("alternate local PATH %s does not exist!" % LOCAL_ALT)
-      parser.exit(1)
 
   if args.input != "-" and not os.path.exists(args.input):
     parser.error("input FILENAME %s does not exist!" % args.input)
-    parser.exit(1)
 
   return args
 
