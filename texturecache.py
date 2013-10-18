@@ -3274,23 +3274,12 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
       R = R[field]
     R = pairs[pair]
 
-# REMOVE ME
-#  REQUEST["params"]["streamdetails"] = {}
-#  REQUEST["params"]["streamdetails"]["video"] = []
-#  REQUEST["params"]["streamdetails"]["audio"] = []
-#  REQUEST["params"]["streamdetails"]["subtitle"] = []
-#  REQUEST["params"]["streamdetails"]["video"].append({"duration": 5262, "width": 1280, "codec": "h264", "aspect": 2.388000011444092, "height": 536})
-#  REQUEST["params"]["streamdetails"]["audio"].append({"channels": 6, "codec": "dca", "language": "eng"})
-#  REQUEST["params"]["art"] = {"clearlogo":""}
-
   if dryRun:
     gLogger.out("### DRY RUN ###", newLine=True)
     gLogger.out(json.dumps(REQUEST, indent=2, ensure_ascii=True, sort_keys=False), newLine=True)
     gLogger.out("### DRY RUN ###", newLine=True)
   else:
-# REMOVE ME
     data = jcomms.sendJSON(REQUEST, "libSetDetails")
-#    time.sleep(0.05)
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
