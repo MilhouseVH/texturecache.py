@@ -411,14 +411,11 @@ def init():
                             that set by --prefix")
 
   parser.add_argument("-a", "--add", nargs="+", metavar="TYPE", \
-                      help="Add additional named artwork TYPE(s) for download, eg. --add discart banner landscape. \
+                      help="Add named artwork TYPE(s) for download, eg. --add discart banner landscape. \
                             Specify TYPE:NAME if NAME differs from TYPE, eg. \"clearlogo:logo\"")
 
-  parser.add_argument("-d", "--del", nargs="+", metavar="TYPE", dest="remove", \
-                      help="Remove named artwork TYPE(s) from list of artwork types to be downloaded, eg. --del clearlogo")
-
   parser.add_argument("-c", "--check", nargs="+", metavar="TYPE", \
-                      help="Check the named artwork TYPE(s) - or all - and warn if any internet \
+                      help="Check the named artwork TYPE(s) - or \"all\" - and warn if any internet \
                             (http) URLs are detected")
 
   parser.add_argument("-s", "--season", nargs="*", metavar="TYPE", \
@@ -468,21 +465,13 @@ def init():
 
 def main(args):
 
-  download_items = itemListToDict(["clearlogo:logo", "clearart"])
-  download_items.update(itemListToDict(args.add))
-
   # If running just a simple --check, remove all download items
   if not (args.local and args.prefix) and args.nodownload:
     download_items = {}
     season_items = {}
     episode_items = {}
   else:
-    # Remove any artwork types that should not be downloaded
-    if args.remove:
-      for aname in args.remove:
-        if aname in download_items: del download_items[aname]
-
-    # Load season and episode artwork download items
+    download_items = itemListToDict(args.add)
     season_items = itemListToDict(args.season)
     episode_items = itemListToDict(args.episode)
 
