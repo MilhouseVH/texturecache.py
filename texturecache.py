@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.2"
+    self.VERSION="1.0.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -3474,8 +3474,9 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
       localfiles.sort(key=lambda row: row[3])
       for row in localfiles:
         database.dumpRow(row)
-        FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
-        if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1])
+        if os.path.exists(gConfig.getFilePath(row[1])):
+          FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
+        if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1], warnmissing=False)
       gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
                     % (format(len(localfiles), ",d"),
                        format(int(FSIZE/1024), ",d")))

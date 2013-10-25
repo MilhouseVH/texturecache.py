@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.0.3 (25/10/2013)
+* Fix: [issue #9](https://github.com/MilhouseVH/texturecache.py/issues/9), error during prune when dds file already deleted
+
 ##Version 1.0.2 (18/10/2013)
 * Add: New options, `set` and `testset`, to allow limited modification of `movie`, `tvshow`, `episode`, `musicvideo`, `artist`, `album` and `song` library items. Use `testset` to verify the request is valid before performing any update.
 
