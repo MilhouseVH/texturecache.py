@@ -51,7 +51,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.3"
+    self.VERSION="1.0.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -72,6 +72,7 @@ class MyConfiguration(object):
     embedded_urls = "^image://video, ^image://music"
 
     config = ConfigParser.SafeConfigParser()
+    self.config = config
 
     #Use @section argument if passed on command line
     #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
@@ -134,6 +135,7 @@ class MyConfiguration(object):
 
     self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", _USER_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
+    self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
     if self.XBMC_BASE[-1:] not in ["/", "\\"]: self.XBMC_BASE += "/"
@@ -167,18 +169,6 @@ class MyConfiguration(object):
     # so there is no need to actually download the artwork.
     # v0.8.8: Leave enabled for now, may only be sufficient in recent builds.
     self.DOWNLOAD_PAYLOAD = self.getBoolean(config, "download.payload","yes")
-
-    # Pre-delete artwork if the filesystem is mounted, as deleting artwork within threads
-    # will result in database locks and inability of the remote client to query its own
-    # database, resulting in invalid responses.
-    if self.getValue(config, "download.predelete", "auto") == "auto":
-      if self.getDBPath().startswith("/mnt") or self.getDBPath().startswith("\\\\"):
-        ISMOUNT = True
-      else:
-        ISMOUNT = False
-      self.DOWNLOAD_PREDELETE = (os.path.ismount(self.getDBPath()) or ISMOUNT)
-    else:
-      self.DOWNLOAD_PREDELETE = self.getBoolean(config, "download.predelete","no")
 
     self.DOWNLOAD_THREADS = {}
     for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
@@ -271,6 +261,29 @@ class MyConfiguration(object):
     self.WATCHEDOVERWRITE = self.getBoolean(config, "watched.overwrite", "no")
 
     self.MAC_ADDRESS = self.getValue(config, "network.mac", "")
+
+  # Call this method once we have worked out which version of JSON API
+  # or database we are working with
+  def postConfig(self):
+    config = self.config
+
+    # Allow restoration of resume points with Gotham+
+    self.JSON_HASRESUME = True if self.JSONVER >= (6, 2, 0) else False
+
+    # Pre-delete artwork if the database filesystem is mounted, as deleting artwork within threads
+    # will result in database locks and inability of the remote client to query its own
+    # database, resulting in invalid responses.
+    if self.getValue(config, "download.predelete", "auto") == "auto":
+      if self.USEJSONDB:
+        self.DOWNLOAD_PREDELETE = False
+      else:
+        if self.getDBPath().startswith("/mnt") or self.getDBPath().startswith("\\\\"):
+          ISMOUNT = True
+        else:
+          ISMOUNT = False
+        self.DOWNLOAD_PREDELETE = (os.path.ismount(self.getDBPath()) or ISMOUNT)
+    else:
+      self.DOWNLOAD_PREDELETE = self.getBoolean(config, "download.predelete","no")
 
   def getValue(self, config, aKey, default=None):
     value = default
@@ -640,7 +653,8 @@ class MyImageLoader(threading.Thread):
       if not self.config.DOWNLOAD_PREDELETE:
         if rowid != 0 and force:
           self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]" % (rowid, cachedurl, filename))
-          self.database.deleteItem(rowid, cachedurl)
+          with self.database:
+            self.database.deleteItem(rowid, cachedurl)
           self.totals.bump("Deleted", imgtype)
           PERFORM_DOWNLOAD = True
       if self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD:
@@ -682,6 +696,9 @@ class MyDB(object):
     self.config = config
     self.logger = logger
 
+    self.usejson = config.USEJSONDB
+
+    #mydb will be either a SQL db or MyJSONComms object
     self.mydb = None
     self.DBVERSION = None
     self.cursor = None
@@ -700,11 +717,14 @@ class MyDB(object):
 
   def getDB(self):
     if not self.mydb:
-      if not os.path.exists(self.config.getDBPath()):
-        raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
-      self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
-      self.mydb.text_factory = lambda x: x.decode('iso-8859-1')
-      self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
+      if self.usejson:
+        self.mydb = MyJSONComms(self.config, self.logger)
+      else:
+        if not os.path.exists(self.config.getDBPath()):
+          raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
+        self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
+        self.mydb.text_factory = lambda x: x.decode('iso-8859-1')
+        self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
   def execute(self, SQL):
@@ -730,32 +750,79 @@ class MyDB(object):
 
     return self.cursor
 
-  def fetchone(self): return self.cursor.fetchone()
-  def fetchall(self): return self.cursor.fetchall()
-  def commit(self): return self.getDB().commit()
+  def getRows(self, filter=None, order=None):
+    if self.usejson:
+      data = self.mydb.getTextures(filter, order)
+      if "result" in data and "textures" in data["result"]:
+        for r in data["result"]["textures"]:
+          r["url"] = urllib2.unquote(r["url"])[8:-1]
+        return data["result"]["textures"]
+      else:
+        return []
+    else:
+      return self._transform(self._getAllColumns(filter, order).fetchall())
 
-  def getAllColumns(self, extraSQL=None):
+#  def fetchone(self): return self.cursor.fetchone()
+#  def fetchall(self): return self.cursor.fetchall()
+#  def commit(self): return self.getDB().commit()
+
+  def getSingleRow(self, filter):
+    rows = self.getRows(filter)
+    if rows != []:
+      return rows[0]
+    else:
+      return None
+
+  def _getAllColumns(self, filter=None, order=None):
     if self.DBVERSION >= 13:
-      SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, s.height, s.width, s.usecount, s.lastusetime " \
+      SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, s.height, s.width, s.usecount, s.lastusetime, s.size, t.imagehash " \
             "FROM texture t JOIN sizes s ON (t.id = s.idtexture) "
     else:
-      SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, 0 as height, 0 as width, t.usecount, t.lastusetime " \
+      SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, 0 as height, 0 as width, t.usecount, t.lastusetime, 0 as size, t.imagehash " \
             "FROM texture t "
 
-    if extraSQL: SQL += extraSQL
+    if filter: SQL += filter
+    if order: SQL += order
 
     return self.execute(SQL)
 
-  def deleteItem(self, id, cachedURL = None, warnmissing=True):
-    if not cachedURL and id > 0:
-      SQL = "SELECT id, cachedurl, lasthashcheck, url FROM texture WHERE id=%d" % id
-      row = self.execute(SQL).fetchone()
+  # Return SQLite database rows as a dictionary list
+  # to match JSON equivalent
+  def _transform(self, rows):
+    data = []
+    if rows:
+      for r in rows:
+        data.append({"textureid": r[0], "cachedurl": r[1],
+                     "lasthashcheck": r[2], "url": r[3],
+                     "sizes":[{"height": r[4], "width": r[5], "usecount": r[6],
+                               "lastused": r[7], "size": r[8]}],
+                     "imagehash": r[9]})
+    return data
 
+  def delRowByID(self, id):
+    if id > 0:
+      if self.usejson:
+        data = self.mydb.delTexture(id)
+        if not ("result" in data and data["result"] == "OK"):
+          self.logger.out("id %s is not valid\n" % (self.config.IDFORMAT % int(id)))
+      else:
+        self.execute("DELETE FROM texture WHERE id=%d" % id)
+        self.getDB().commit()
+
+  def deleteItem(self, id, cachedURL=None, warnmissing=True):
+    # When deleting rows via JSON, the artwork file and also
+    # any corresponding dds file should also be removed
+    if self.usejson and id > 0:
+        self.delRowByID(id)
+        return
+
+    if not cachedURL and id > 0:
+      row = self.getSingleRow("WHERE id = %d" % id)
       if row == None:
         self.logger.out("id %s is not valid\n" % (self.config.IDFORMAT % int(id)))
         return
       else:
-        localFile = row[1]
+        localFile = row["cachedurl"]
     else:
       localFile = cachedURL
 
@@ -773,9 +840,7 @@ class MyDB(object):
         os.remove(self.config.getFilePath(localFile_dds))
         self.logger.log("FILE DELETE: Removed cached thumbnail file %s for id %s" % (localFile_dds, (self.config.IDFORMAT % id)))
 
-    if id > 0:
-      self.execute("DELETE FROM texture WHERE id=%d" % id)
-      self.commit()
+    self.delRowByID(id)
 
   def getRowByFilename(self, filename):
   # Strip image:// prefix, trailing / suffix, and unquote...
@@ -794,16 +859,14 @@ class MyDB(object):
     # If string contains unicode, replace unicode chars with % and
     # use LIKE instead of equality
     if ufilename.encode("ascii", "ignore") == ufilename.encode("utf-8"):
-      SQL = "SELECT id, cachedurl from texture where url = \"%s\"" % ufilename
+      SQL = "WHERE url = \"%s\"" % ufilename
     else:
       self.logger.log("Removing ASCII from filename: [%s]" % ufilename)
-      SQL = "SELECT id, cachedurl from texture where url like \"%s\"" % removeNonAscii(ufilename, "%")
+      SQL = "WHERE url LIKE \"%s\"" % removeNonAscii(ufilename, "%")
 
-    self.logger.log("SQL EXECUTE: [%s]" % SQL)
-    row = self.execute(SQL).fetchone()
-    self.logger.log("SQL RESULT : [%s]" % (row,))
+    rows = self.getRows(filter = SQL)
 
-    return row if row else None
+    return rows[0] if rows != [] else None
 
   def removeNonAscii(self, s, replaceWith = ""):
     if replaceWith == "":
@@ -813,9 +876,14 @@ class MyDB(object):
 
   def dumpRow(self, row):
     line= ("%s%s%-14s%s%04d%s%04d%s%04d%s%19s%s%19s%s%s\n" % \
-           ((self.config.IDFORMAT % row[0]), self.config.FSEP, row[1], self.config.FSEP, row[4],
-             self.config.FSEP,      row[5],  self.config.FSEP, row[6], self.config.FSEP, row[7],
-             self.config.FSEP,      row[2],  self.config.FSEP, row[3]))
+           ((self.config.IDFORMAT % row["textureid"]),
+             self.config.FSEP, row["cachedurl"],
+             self.config.FSEP, row["sizes"][0]["height"],
+             self.config.FSEP, row["sizes"][0]["width"],
+             self.config.FSEP, row["sizes"][0]["usecount"],
+             self.config.FSEP, row["sizes"][0]["lastused"],
+             self.config.FSEP, row["lasthashcheck"],
+             self.config.FSEP, row["url"]))
 
     self.logger.out(line)
 
@@ -845,6 +913,9 @@ class MyJSONComms(object):
   def __del__(self):
     if self.mysocket: self.mysocket.close()
     if self.myweb: self.myweb.close()
+
+  def close(self):
+    pass
 
   def getSocket(self):
     if not self.mysocket:
@@ -991,6 +1062,9 @@ class MyJSONComms(object):
 
           messages = []
 
+##REMOVEME
+          if ("result" in jdata and jdata["result"] == None): jdata["result"] = "OK"
+##REMOVEME
           if ("result" in jdata and "limits" in jdata["result"]):
             self.logger.log("%s.RECEIVED LIMITS: %s" % (id, jdata["result"]["limits"]))
 
@@ -1664,6 +1738,102 @@ class MyJSONComms(object):
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
 
+  def parseSQLFilter(self, filter):
+    if type(filter) is dict: return filter
+
+    if filter.lower().startswith("where "):
+      filter = filter[6:]
+
+    data = []
+
+    PATTERN = re.compile(r'''((?:[^ "']|"[^"]*"|'[^']*')+)''')
+
+    condition = None
+    fields = []
+    f = 0
+    for word in PATTERN.split(filter)[1::2]:
+      if word in ["and", "or"]:
+        condition = word
+        continue
+
+      fields.append(word)
+      f += 1
+
+      if f == 3:
+        if fields[0].startswith("t."): fields[0] = fields[0][2:]
+        if fields[0] == "id": fields[0] = "textureid"
+
+        if fields[1] == "=": fields[1] = "is"
+        if fields[1] == "!=": fields[1] = "isnot"
+        if fields[1] == ">": fields[1] = "greaterthan"
+        if fields[1] == "<": fields[1] = "lessthan"
+        if fields[1] == ">=": fields[1] = "=greaterthan"
+        if fields[1] == "<=": fields[1] = "=lessthan"
+        if fields[1].lower() == "like":
+          fields[1] = "contains"
+          fields[2] = fields[2].replace("%","")
+
+        if (fields[2].startswith("'") and fields[2].endswith("'")) or \
+           (fields[2].startswith('"') and fields[2].endswith('"')):
+          fields[2] = fields[2][1:-1]
+
+        if fields[1].startswith("="):
+          condition = "or"
+          data.append({"field": fields[0], "operator": "is", "value": fields[2]})
+          data.append({"field": fields[0], "operator": fields[1][1:], "value": fields[2]})
+        else:
+          data.append({"field": fields[0], "operator": fields[1], "value": fields[2]})
+        fields = []
+        f = 0
+
+    if condition:
+      return { condition: data }
+    else:
+      return data[0]
+
+  def parseSQLOrder(self, order):
+    if type(order) is dict: return order
+
+    if order.lower().startswith("order by "):
+      order = order[9:]
+
+    data = []
+
+    PATTERN = re.compile(r'''((?:[^ "']|"[^"]*"|'[^']*')+)''')
+
+    fields = []
+    f = 0
+    for word in PATTERN.split(order)[1::2]:
+      fields.append(word)
+      f += 1
+
+      if f == 2:
+        if fields[0].startswith("t."): fields[0] = fields[0][2:]
+        if fields[0] == "id": fields[0] = "textureid"
+        if fields[1].lower().startswith("asc"):
+          fields[1] = "ascending"
+        else:
+          fields[1] = "descending"
+
+        data.append({"method": fields[0], "order": fields[1]})
+        break
+    return data[0]
+
+  def getTextures(self, filter=None, order=None):
+    REQUEST = {"method": "Textures.GetTextures",
+               "params": {"properties": ["url", "cachedurl", "lasthashcheck", "imagehash", "sizes"]}}
+
+    if filter: REQUEST["params"]["filter"] = self.parseSQLFilter(filter)
+#    if order: REQUEST["params"]["sort"] = self.parseSQLOrder(order)
+
+    return self.sendJSON(REQUEST, "libTextures", checkResult=False)
+
+  def delTexture(self, id):
+    REQUEST = {"method": "Textures.RemoveTexture",
+               "params": {"id": id}}
+
+    return self.sendJSON(REQUEST, "libTextures", checkResult=False)
+
 #
 # Hold and print some pretty totals.
 #
@@ -1744,7 +1914,6 @@ class MyTotals(object):
       ctime = time.time()
       self.THREADS_HIST[tname] = (self.THREADS[tname], ctime)
       self.THREADS[tname] = 0
-#      if mediatype in self.ETIMES and imgtype in self.ETIMES[mediatype] and tname in self.ETIMES[mediatype][imgtype]:
       self.ETIMES[mediatype][imgtype][tname] = (self.ETIMES[mediatype][imgtype][tname][0], ctime)
 
   def stop(self):
@@ -2254,8 +2423,8 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   gLogger.progress("Loading database items...")
   dbfiles = {}
   with database:
-    rows = database.getAllColumns().fetchall()
-    for r in rows: dbfiles[r[3]] = r
+    rows = database.getRows()
+    for r in rows: dbfiles[r["url"]] = r
 
   gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
 
@@ -2290,8 +2459,8 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       if force:
         itemCount += 1
         item.status = 1
-        item.dbid = dbrow[0]
-        item.cachedurl = dbrow[1]
+        item.dbid = dbrow["textureid"]
+        item.cachedurl = dbrow["cachedurl"]
       else:
         if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
         TOTALS.bump("Skipped", item.itype)
@@ -3288,27 +3457,22 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
   with database:
     SQL = ""
     if (search != "" or filter != ""):
-      if search != "": SQL = "WHERE t.url LIKE '%" + search + "%' ORDER BY t.id ASC"
+      if search != "": SQL = "WHERE t.url LIKE '%" + search + "%'"
       if filter != "": SQL = filter + " "
 
     FSIZE = 0
     FCOUNT = 0
     ROWS = []
 
-    database.getAllColumns(SQL)
-
-    while True:
-      row = database.fetchone()
-      if row == None: break
-
+    for row in database.getRows(filter=SQL, order="ORDER BY t.id ASC"):
       if ACTION == "NONE":
         ROWS.append(row)
       elif ACTION == "EXISTS":
-        if not os.path.exists(gConfig.getFilePath(row[1])):
+        if not os.path.exists(gConfig.getFilePath(row["cachedurl"])):
           ROWS.append(row)
       elif ACTION == "STATS":
-        if os.path.exists(gConfig.getFilePath(row[1])):
-          FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
+        if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
+          FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
           ROWS.append(row)
 
     FCOUNT=len(ROWS)
@@ -3317,8 +3481,8 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
       i = 0
       for row in ROWS:
         i += 1
-        gLogger.progress("Deleting row %d (%d of %d)..." % (row[0], i, FCOUNT))
-        database.deleteItem(row[0], row[1], warnmissing=False)
+        gLogger.progress("Deleting row %d (%d of %d)..." % (row["textureid"], i, FCOUNT))
+        database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
         gLogger.progress("")
     else:
       for row in ROWS: database.dumpRow(row)
@@ -3327,7 +3491,7 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
       gLogger.out("\nFile Summary: %s files; Total size: %s KB\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
 
     if (search != "" or filter != "") and not delete:
-      gLogger.progress("Matching row ids: %s\n" % " ".join("%d" % r[0] for r in ROWS))
+      gLogger.progress("Matching row ids: %s\n" % " ".join("%d" % r["textureid"] for r in ROWS))
 
 # Delete row by id, and corresponding file item
 def sqlDelete( ids=[] ):
@@ -3354,9 +3518,9 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
 
     gLogger.progress("Loading texture cache...")
 
-    rows = database.getAllColumns().fetchall()
+    rows = database.getRows()
     for r in rows:
-      hash = r[1]
+      hash = r["cachedurl"]
       dbfiles[hash] = r
       ddsmap[os.path.splitext(hash)[0]] = hash
 
@@ -3395,7 +3559,7 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
           orphanedfiles.append(filename)
 
         elif libraryFiles:
-          URL = removeNonAscii(row[3])
+          URL = removeNonAscii(row["url"])
 
           isRetained = False
           if gConfig.PRUNE_RETAIN_TYPES:
@@ -3421,15 +3585,25 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
               # Last ditch attempt to find a matching key, database might be
               # slightly mangled
               if not keyIsHash:
-                key = getKeyFromFilename(row[3])
+                key = getKeyFromFilename(row["url"])
                 if key in libraryFiles:
                   del libraryFiles[key]
                 else:
                   localfiles.append(row)
-                  if clobberdds: localfiles.append([0, dds_file, row[2], "%s (DDS)" % row[3], row[4], row[5], row[6], row[7]])
+                  if clobberdds:
+                    newrow = row
+                    newrow["textureid"] = 0
+                    newrow["cachedurl"] = dds_file
+                    newrow["url"] = "%s (DDS)" % row["url"]
+                    localfiles.append(newrow)
               else:
                 localfiles.append(row)
-                if clobberdds: localfiles.append([0, dds_file, row[2], "%s (DDS)" % row[3], row[4], row[5], row[6], row[7]])
+                if clobberdds:
+                  newrow = row
+                  newrow["textureid"] = 0
+                  newrow["cachedurl"] = dds_file
+                  newrow["url"] = "%s (DDS)" % row["url"]
+                  localfiles.append(newrow)
             else:
                del libraryFiles[key]
 
@@ -3471,12 +3645,12 @@ def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=No
           gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
         gLogger.out("", newLine=True)
       FSIZE = 0
-      localfiles.sort(key=lambda row: row[3])
+      localfiles.sort(key=lambda row: row["url"])
       for row in localfiles:
         database.dumpRow(row)
-        if os.path.exists(gConfig.getFilePath(row[1])):
-          FSIZE += os.path.getsize(gConfig.getFilePath(row[1]))
-        if purge_nonlibrary_artwork: database.deleteItem(row[0], row[1], warnmissing=False)
+        if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
+          FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
+        if purge_nonlibrary_artwork: database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
       gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
                     % (format(len(localfiles), ",d"),
                        format(int(FSIZE/1024), ",d")))
@@ -4022,12 +4196,21 @@ def checkConfig(option):
   else:
     needDb = False
 
+  # These options require direct filesystem access
+  if option in ["f", "P", "R", "S", "X", "Xd", "f"]:
+    needFS = True
+  else:
+    needFS = False
+
   if option == "wake":
     needMAC = True
   else:
     needMAC = False
 
-  gotWeb = gotSocket = gotDb = gotMAC = False
+  if gConfig.USEJSONDB and needDb:
+    needSocket = True
+
+  gotWeb = gotSocket = gotDb = gotFS = gotMAC = False
   jsonGotVersion = 0
 
   if needWeb:
@@ -4104,6 +4287,15 @@ def checkConfig(option):
     gLogger.out(MSG)
     return False
 
+  # If API level insufficient to read Textures DB using JSON, fall back to SQLite3 calls
+  if needSocket and gConfig.USEJSONDB and gConfig.JSONVER < (6, 6, 2):
+    gLogger.log("JSON Texture DB API not supported - will use SQLite3 to access Texture DB")
+    gConfig.USEJSONDB = False
+
+  # If able to use JSON for Texture db access, no need to check DB availability
+  if needDb and gConfig.USEJSONDB:
+    needDb = False
+
   if needDb:
     try:
       database = MyDB(gConfig, gLogger)
@@ -4125,6 +4317,20 @@ def checkConfig(option):
     gLogger.out(MSG)
     return False
 
+  if needFS:
+    gotFS = os.path.exists(gConfig.getFilePath())
+
+  if needFS and not gotFS:
+    MSG = "FATAL: The task you wish to perform requires read/write file\n" \
+          "       access to the Thumbnails folder, which is inaccessible.\n\n" \
+          "       Specify the location of this folder using the thumbnails property\n" \
+          "       as an absolute path or relative to the userdata property.\n\n" \
+          "       The currently configured Thumbnails path is:\n" \
+          "       %s\n\n" \
+          "       Check settings in properties file %s\n" % (gConfig.getFilePath(), gConfig.CONFIG_NAME)
+    gLogger.out(MSG)
+    return False
+
   if needMAC and not gotMAC:
     MSG = "FATAL: The task you wish to perform requires a valid MAC address\n" \
           "       specified in the property \"network.mac\".\n\n" \
@@ -4132,8 +4338,7 @@ def checkConfig(option):
     gLogger.out(MSG)
     return False
 
-  # Allow restoration of resume points with Gotham+
-  gConfig.JSON_HASRESUME = True if gConfig.JSONVER >= (6, 2, 0) else False
+  gConfig.postConfig()
 
   return True
 
