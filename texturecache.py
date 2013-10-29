@@ -64,6 +64,10 @@ class MyConfiguration(object):
 
     self.JSONVER = (0, 0, 0)
 
+    self.JSONVER_RESUME = (6, 2, 0)
+    self.JSONVER_SETNULL = (6, 6, 3)
+    self.JSONVER_TEXTURE = (6, 6, 3)
+
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
     self.CONFIG_NAME = "texturecache.cfg"
@@ -268,7 +272,10 @@ class MyConfiguration(object):
     config = self.config
 
     # Allow restoration of resume points with Gotham+
-    self.JSON_HASRESUME = True if self.JSONVER >= (6, 2, 0) else False
+    self.JSON_HAS_RESUME = (self.JSONVER >= self.JSONVER_RESUME)
+
+    # set null artwork items in set
+    self.JSON_HAS_SETNULL = (self.JSONVER >= self.JSONVER_SETNULL)
 
     # Pre-delete artwork if the database filesystem is mounted, as deleting artwork within threads
     # will result in database locks and inability of the remote client to query its own
@@ -545,6 +552,31 @@ class MyLogger():
           if maxLen != 0 and len(d) > maxLen:
             d = "%s (truncated)" % d[:maxLen]
           self.LOGFILE.write("%s:%-10s: %s [%s]\n" % (datetime.datetime.now(), t, udata, d))
+        if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
+
+  # Use this method for large unicode data - tries to minimize
+  # creation of additional temporary buffers through concatenation.
+  def log2(self, prefix, udata, jsonrequest = None, maxLen=0):
+    if self.LOGGING:
+      with threading.Lock():
+        t = threading.current_thread().name
+        self.LOGFILE.write("%s:%-10s: %s" % (datetime.datetime.now(), t, prefix))
+
+        if jsonrequest == None:
+          if maxLen != 0 and not self.VERBOSE and len(udata) > maxLen:
+            d = "%s (truncated)" % udata[:maxLen]
+            self.LOGFILE.write(d)
+          else:
+            self.LOGFILE.write(udata)
+        else:
+          d = json.dumps(jsonrequest, ensure_ascii=True)
+          if maxLen != 0 and len(d) > maxLen:
+            d = "%s (truncated)" % d[:maxLen]
+          self.LOGFILE.write("[")
+          self.LOGFILE.write(d)
+          self.LOGFILE.write("]")
+
+        self.LOGFILE.write("\n")
         if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
 
   def toUnicode(self, data):
@@ -1015,7 +1047,7 @@ class MyJSONComms(object):
         newdata = s.recv(BUFFER_SIZE)
         if len(data) == 0: s.settimeout(1.0)
         data += newdata
-        LASTIO=time.time()
+        LASTIO = time.time()
         self.logger.log("%s.BUFFER RECEIVED (len %d)" % (id, len(newdata)))
         READ_ERR = False
       except socket.error as e:
@@ -1034,15 +1066,17 @@ class MyJSONComms(object):
             continue
 
         try:
-          if self.logger.LOGGING: self.logger.log("%s.PARSING JSON DATA: %s" % (id, udata), maxLen=256)
-
           START_PARSE_TIME = time.time()
 
           # Parse messages, to ensure the entire buffer is valid
-          # If buffer is not valid (VALUE EXCEPTION), we may need to read more data.
+          # If buffer is not valid (VlueError exception), we may need to read more data.
           messages = []
           for m in self.parseResponse(udata):
+            if self.logger.LOGGING and messages == []:
+              self.logger.log2("%s.PARSING JSON DATA: " % id, udata, maxLen=256)
             messages.append(m)
+
+          data = udata = None
 
           self.logger.log("%s.PARSING COMPLETE, elapsed time: %f seconds" % (id, time.time() - START_PARSE_TIME))
 
@@ -1062,9 +1096,6 @@ class MyJSONComms(object):
 
           messages = []
 
-##REMOVEME
-          if ("result" in jdata and jdata["result"] == None): jdata["result"] = "OK"
-##REMOVEME
           if ("result" in jdata and "limits" in jdata["result"]):
             self.logger.log("%s.RECEIVED LIMITS: %s" % (id, jdata["result"]["limits"]))
 
@@ -1099,7 +1130,7 @@ class MyJSONComms(object):
             raise
           else:
             self.logger.log("%s.Incomplete JSON data - continue reading socket" % id)
-            if self.logger.VERBOSE: self.logger.log("Ignored Value Error: %s" % e)
+            if self.logger.VERBOSE: self.logger.log2("Ignored Value Error: ", str(e))
             continue
         except Exception as e:
           self.logger.log("%s.GENERAL EXCEPTION: %s" % (id, str(e)))
@@ -1132,7 +1163,8 @@ class MyJSONComms(object):
         yield val
         idx = _w(data, idx).end()
     except ValueError as exc:
-      raise ValueError('%s (%r at position %d).' % (exc, data[idx:], idx))
+#      raise ValueError('%s (%r at position %d).' % (exc, data[idx:], idx))
+      raise ValueError('%s' % exc)
 
   # Process Notifications, optionally executing a callback function for
   # additional custom processing.
@@ -1836,7 +1868,7 @@ class MyJSONComms(object):
 
   def delTexture(self, id):
     REQUEST = {"method": "Textures.RemoveTexture",
-               "params": {"id": id}}
+               "params": {"textureid": id}}
 
     return self.sendJSON(REQUEST, "libTextures", checkResult=False)
 
@@ -2204,25 +2236,25 @@ class MyWatchedItem(object):
 
     return (self.name == name and self.episode_year == xepisode_year)
 
-  def refresh(self, HASRESUME, playcount, lastplayed, resume):
+  def refresh(self, HAS_RESUME, playcount, lastplayed, resume):
     # Update this object to reflect most recent (latest) values
 
     if playcount > self.playcount:   self.playcount = playcount
     if lastplayed > self.lastplayed: self.lastplayed = lastplayed
 
-    if HASRESUME:
+    if HAS_RESUME:
       if resume["position"] > self.resume["position"]:
         self.resume["position"] = resume["position"]
 
       if resume["total"] > self.resume["total"]:
         self.resume["total"] = resume["total"]
 
-  def setState(self, HASRESUME, playcount, lastplayed, resume):
+  def setState(self, HAS_RESUME, playcount, lastplayed, resume):
     # Assume no change is required
     self.state = 1
 
     if self.playcount == playcount and self.lastplayed == lastplayed:
-      if not HASRESUME: return
+      if not HAS_RESUME: return
       if self.resume == resume: return
 
     # Something has changed, apply object values to library
@@ -3217,9 +3249,9 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
           # Update watched object with latest library values unless overwriting,
           # in which case keep the values that are being restored.
           if not gConfig.WATCHEDOVERWRITE:
-            m.refresh(gConfig.JSON_HASRESUME, playcount, lastplayed, resume)
+            m.refresh(gConfig.JSON_HAS_RESUME, playcount, lastplayed, resume)
           # Set update state based on old/new values
-          m.setState(gConfig.JSON_HASRESUME, playcount, lastplayed, resume)
+          m.setState(gConfig.JSON_HAS_RESUME, playcount, lastplayed, resume)
 
     if "seasons" in item:
       watchedRestore("seasons", jcomms, filename, item["seasons"], "label", "season", \
@@ -3266,7 +3298,7 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
                          "lastplayed": mediaitem.lastplayed
                          }}
 
-  if gConfig.JSON_HASRESUME:
+  if gConfig.JSON_HAS_RESUME:
     REQUEST["params"]["resume"] = mediaitem.resume
 
   gLogger.progress("Restoring %s: %s..." % (mediaitem.mtype[:-1], shortName))
@@ -3323,10 +3355,10 @@ def duplicatesList(mediatype, jcomms, data):
       gLogger.out("", newLine=True)
 
 def getIntFloatStr(aValue):
-  if aValue.startswith('"') and aValue.endswith('"'):
+  if (aValue.startswith('"') and aValue.endswith('"')) or \
+     (aValue.startswith("'") and aValue.endswith("'")):
     return aValue[1:-1]
-  if aValue.startswith("'") and aValue.endswith("'"):
-    return aValue[1:-1]
+
   if aValue == "null":
     return None
 
@@ -3425,12 +3457,16 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
       else:
         pairs[KEY] = getIntFloatStr(pair)
 
+      print; print(gConfig.JSON_HAS_SETNULL)
+
       if (pairs[KEY] == None or pairs[KEY] == "") and \
          (KEY.startswith("art.") or KEY in ["fanart", "thumbnail", "thumb"]) and \
-         gConfig.JSONVER < (6, 6, 3):
+         not gConfig.JSON_HAS_SETNULL:
         value = "null" if pairs[KEY] == None else '"%s"' % pairs[KEY]
         gLogger.out("WARNING: Cannot set null/empty string value on field with " \
-                    "JSON API prior to v6.6.3 - ignoring %s %-6d (%s = %s)" % (idname, libraryid, KEY, value), newLine=True, log=True)
+                    "JSON API %d.%d.%d - ignoring %s %-6d (%s = %s)" % \
+                    (gConfig.JSONVER[0], gConfig.JSONVER[1], gConfig.JSONVER[2],
+                     idname, libraryid, KEY, value), newLine=True, log=True)
         return
 
     bKEY = not bKEY
@@ -3444,7 +3480,11 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
     for field in pair.split("."):
       i += 1
       if not field in R: R[field] = {}
-      if i == fc: R[field] = u"%s" % pairs[pair]
+      if i == fc:
+        if pairs[pair]:
+          R[field] = u"%s" % pairs[pair]
+        else:
+          R[field] = None
 
       R = R[field]
     R = pairs[pair]
@@ -3455,6 +3495,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
     gLogger.out("### DRY RUN ###", newLine=True)
   else:
     data = jcomms.sendJSON(REQUEST, "libSetDetails")
+    pass
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
@@ -4203,7 +4244,7 @@ def checkConfig(option):
     needDb = False
 
   # These options require direct filesystem access
-  if option in ["f", "P", "R", "S", "X", "Xd", "f"]:
+  if option in ["f", "P", "R", "S", "X", "Xd"]:
     needFS = True
   else:
     needFS = False
@@ -4294,13 +4335,13 @@ def checkConfig(option):
     return False
 
   # If API level insufficient to read Textures DB using JSON, fall back to SQLite3 calls
-  if needSocket and gConfig.USEJSONDB and gConfig.JSONVER < (6, 6, 2):
-    gLogger.log("JSON Texture DB API not supported - will use SQLite3 to access Texture DB")
-    gConfig.USEJSONDB = False
-
-  # If able to use JSON for Texture db access, no need to check DB availability
   if needDb and gConfig.USEJSONDB:
-    needDb = False
+    if gConfig.JSONVER < gConfig.JSONVER_TEXTURE:
+      gLogger.log("JSON Texture DB API not supported - will use SQLite3 to access Texture DB")
+      gConfig.USEJSONDB = False
+    else:
+      # If able to use JSON for Texture db access, no need to check DB availability
+      needDb = False
 
   if needDb:
     try:
