@@ -1763,6 +1763,10 @@ class MyJSONComms(object):
         if fields[0].startswith("t."): fields[0] = fields[0][2:]
         if fields[0] == "id": fields[0] = "textureid"
 
+        if (fields[2].startswith("'") and fields[2].endswith("'")) or \
+           (fields[2].startswith('"') and fields[2].endswith('"')):
+          fields[2] = fields[2][1:-1]
+
         if fields[1] == "=": fields[1] = "is"
         if fields[1] == "!=": fields[1] = "isnot"
         if fields[1] == ">": fields[1] = "greaterthan"
@@ -1770,17 +1774,19 @@ class MyJSONComms(object):
         if fields[1] == ">=": fields[1] = "=greaterthan"
         if fields[1] == "<=": fields[1] = "=lessthan"
         if fields[1].lower() == "like":
-          fields[1] = "contains"
+          if re.match("%.*%", fields[2]):
+            fields[1] = "contains"
+          elif re.match("%.*", fields[2]):
+            fields[1] = "endswith"
+          elif re.match(".*%", fields[2]):
+            fields[1] = "startswith"
+          else:
+            fields[1] = "is"
           fields[2] = fields[2].replace("%","")
 
-        if (fields[2].startswith("'") and fields[2].endswith("'")) or \
-           (fields[2].startswith('"') and fields[2].endswith('"')):
-          fields[2] = fields[2][1:-1]
-
         if fields[1].startswith("="):
-          condition = "or"
-          data.append({"field": fields[0], "operator": "is", "value": fields[2]})
-          data.append({"field": fields[0], "operator": fields[1][1:], "value": fields[2]})
+          data.append({"or": [{"field": fields[0], "operator": "is", "value": fields[2]},
+                              {"field": fields[0], "operator": fields[1][1:], "value": fields[2]}]})
         else:
           data.append({"field": fields[0], "operator": fields[1], "value": fields[2]})
         fields = []
