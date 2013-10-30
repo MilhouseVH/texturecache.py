@@ -95,13 +95,19 @@ def pathToAltLocal(infile):
   if not LOCAL_ALT: return infile
   return re.sub('^%s' % XBMC_PATH, LOCAL_ALT, infile)
 
-def pathToXBMC(infile):
+def pathToXBMC(infile, encode=True):
   global LOCAL_DIR, XBMC_PATH
+
+  if encode: infile = fsPathToXBMC(infile)
 
   if not infile: return infile
   if not LOCAL_DIR: return infile
   if not XBMC_PATH: return infile
   return re.sub('^%s' % LOCAL_DIR, XBMC_PATH, infile)
+
+# Encode file system paths such that Bröderna (fs) -> BrÃ¶derna (media library)
+def fsPathToXBMC(path):
+  return path.encode("utf-8").decode("iso-8859-1")
 
 def itemListToDict(aList):
   newDict = {}

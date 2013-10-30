@@ -157,12 +157,12 @@ class MyConfiguration(object):
     web_pass = self.getValue(config, "webserver.password", "")
 
     if (web_user and web_pass):
-      token = '%s:%s' % (web_user, web_pass)
+      token = "%s:%s" % (web_user, web_pass)
       if sys.version_info >= (3, 0):
         self.WEB_AUTH_TOKEN = base64.encodestring(bytes(token, "utf-8")).decode()
       else:
         self.WEB_AUTH_TOKEN = base64.encodestring(token)
-      self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace('\n', '')
+      self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace("\n", "")
     else:
       self.WEB_AUTH_TOKEN = None
 
@@ -334,7 +334,7 @@ class MyConfiguration(object):
       if default and default != "" and aList != "":
         aList = "%s,%s " % (default, aList.strip())
 
-    return [re.compile(x.strip()) for x in aList.split(',')] if aList else aList
+    return [re.compile(x.strip()) for x in aList.split(",")] if aList else aList
 
   def getListFromPattern(self, aPattern):
     if not aPattern: return None
@@ -755,7 +755,7 @@ class MyDB(object):
         if not os.path.exists(self.config.getDBPath()):
           raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
         self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
-        self.mydb.text_factory = lambda x: x.decode('iso-8859-1')
+        self.mydb.text_factory = lambda x: x.decode("iso-8859-1")
         self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
@@ -1163,8 +1163,8 @@ class MyJSONComms(object):
         yield val
         idx = _w(data, idx).end()
     except ValueError as exc:
-#      raise ValueError('%s (%r at position %d).' % (exc, data[idx:], idx))
-      raise ValueError('%s' % exc)
+#      raise ValueError("%s (%r at position %d)." % (exc, data[idx:], idx))
+      raise ValueError("%s" % exc)
 
   # Process Notifications, optionally executing a callback function for
   # additional custom processing.
@@ -3457,12 +3457,10 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
       else:
         pairs[KEY] = getIntFloatStr(pair)
 
-      print; print(gConfig.JSON_HAS_SETNULL)
-
       if (pairs[KEY] == None or pairs[KEY] == "") and \
          (KEY.startswith("art.") or KEY in ["fanart", "thumbnail", "thumb"]) and \
          not gConfig.JSON_HAS_SETNULL:
-        value = "null" if pairs[KEY] == None else '"%s"' % pairs[KEY]
+        value = "null" if pairs[KEY] == None else "\"%s\"" % pairs[KEY]
         gLogger.out("WARNING: Cannot set null/empty string value on field with " \
                     "JSON API %d.%d.%d - ignoring %s %-6d (%s = %s)" % \
                     (gConfig.JSONVER[0], gConfig.JSONVER[1], gConfig.JSONVER[2],
@@ -3482,7 +3480,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
       if not field in R: R[field] = {}
       if i == fc:
         if pairs[pair]:
-          R[field] = u"%s" % pairs[pair]
+          R[field] = pairs[pair].encode("iso-8859-1").decode("utf-8")
         else:
           R[field] = None
 
@@ -3495,7 +3493,6 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
     gLogger.out("### DRY RUN ###", newLine=True)
   else:
     data = jcomms.sendJSON(REQUEST, "libSetDetails")
-    pass
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
@@ -3749,7 +3746,7 @@ def getHash(string):
       if (crc & 0x80000000): crc = (crc << 1) ^ 0x04C11DB7
       else: crc = crc << 1;
     crc = crc & 0xFFFFFFFF
-  return '%08x' % crc
+  return "%08x" % crc
 
 # The following method is extremely slow on a Raspberry Pi, and
 # doesn't work well with unicode strings (returns wrong hash).
@@ -3976,7 +3973,7 @@ def doLibraryClean(media):
 
   jcomms.cleanLibrary(cleanMethod)
 
-def getDirectoryList(path, mediatype = "files"):
+def getDirectoryList(path, mediatype = "files", recurse=False):
   jcomms = MyJSONComms(gConfig, gLogger)
 
   data = jcomms.getDirectoryList(mediatype, path)
@@ -3998,6 +3995,8 @@ def getDirectoryList(path, mediatype = "files"):
       FNAME = fname
 
     gLogger.out("%s: %s" % (FTYPE, FNAME), newLine=True)
+    if recurse and ftype == "directory":
+      getDirectoryList(FNAME, mediatype, recurse)
 
 def showSources(media=None, withLabel=None):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -4027,7 +4026,7 @@ def wake_on_lan():
 
   # Check MAC address format and try to normalise to only 12 hex-digits
   if len(macaddress) == 12 + 5:
-    macaddress = macaddress.replace(macaddress[2], '')
+    macaddress = macaddress.replace(macaddress[2], "")
 
   # Determine if MAC address consists of only hex digits
   hex_digits = set("0123456789ABCDEF")
@@ -4038,10 +4037,10 @@ def wake_on_lan():
 
   # If not 12 digits or not all hex, throw an exception
   if len(macaddress) != 12 or not validhex:
-    raise ValueError('Incorrect MAC address format [%s]' % gConfig.MAC_ADDRESS)
+    raise ValueError("Incorrect MAC address format [%s]" % gConfig.MAC_ADDRESS)
 
   # Format the hex data as 6 bytes of FF, and 16 repetitions of the target MAC address (102 bytes total)
-  data = ''.join(['FF' * 6, macaddress * 16])
+  data = "".join(["FF" * 6, macaddress * 16])
 
   # Create the broadcast frame by converting each 2-char hex value to a byte
   frame = bytearray([])
@@ -4051,7 +4050,7 @@ def wake_on_lan():
   # Broadcast data to the LAN as a UDP datagram
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-  sock.sendto(frame, ('<broadcast>', 7))
+  sock.sendto(frame, ("<broadcast>", 7))
   sock.close()
 
 def showStatus(idleTime=600):
@@ -4135,16 +4134,36 @@ def getHMS(seconds):
 def showNotifications():
   MyJSONComms(gConfig, gLogger).listen()
 
+def pprint(msg):
+  MAXWIDTH=0
+
+  line = "Usage: %s" % os.path.basename(__file__)
+  prefix = (" " * len(line))
+
+  lines = []
+  for index, token in enumerate(msg.split("|")):
+    token = token.strip()
+    if index > 0 and (len(token) + len(line)) > MAXWIDTH:
+      lines.append(line)
+      line = prefix
+    line = "%s %s |" % (line, token)
+
+  lines.append(line[:-2])
+  lines.append("%s [@property=value ...]" % prefix)
+
+  print("\n".join(lines))
+
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
-  print("Usage: " + os.path.basename(__file__) + " sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] | " \
-        "rR | c [class [filter]] | nc [class [filter]] | | lc [class] | lnc [class] | C class filter | jJ class [filter] | " \
-        "qa class [filter] | qax class [filter] | pP | remove mediatype libraryid | watched class backup <filename> | " \
-        "watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | " \
-        "missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | " \
-        "vclean | sources [media] | sources media [label] | directory path | config | version | update | status [idleTime] | " \
-        "monitor | power <state> | exec [params] | execw [params] | wake")
+  pprint("sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] | \
+          rR | c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | jJ class [filter] | \
+          qa class [filter] | qax class [filter] | pP | remove mediatype libraryid | watched class backup <filename> | \
+          watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
+          missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
+          sources [media] | sources media [label] | directory path | rdirectory path | \
+          status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
+          config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
   print("  S          Same as \"s\" (search) but will validate cachedurl file exists, displaying only those that fail validation")
@@ -4180,6 +4199,7 @@ def usage(EXIT_CODE):
   print("  vclean     Clean video library")
   print("  sources    List all sources, or sources for specfic media type (video, music, pictures, files, programs) or label (eg. \"My Movies\")")
   print("  directory  Retrieve list of files in a specific directory (see sources)")
+  print("  rdirectory Recursive version of directory")
   print("  status     Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor    Display client event notifications as they occur")
   print("  power      Control power state of client, where state is one of suspend, hibernate, shutdown and reboot")
@@ -4231,7 +4251,8 @@ def checkConfig(option):
     needWeb = False
 
   if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
-                "remove", "vscan", "ascan", "vclean", "aclean", "directory", "sources",
+                "remove", "vscan", "ascan", "vclean", "aclean",
+                "directory", "rdirectory", "sources",
                 "status", "monitor", "power",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset"]:
     needSocket = True
@@ -4433,15 +4454,15 @@ def getLatestVersion(argv):
     USAGE  = "exec"
   elif argv[0] in ["qa", "qax", "query", "missing", "watched",
                    "power", "wake", "status", "monitor",
-                   "directory", "sources", "remove",
+                   "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "version", "update", "fupdate", "config",
                    "duplicates", "set", "testset"]:
     USAGE  = argv[0]
 
   HEADERS = []
-  HEADERS.append(('User-agent', user_agent))
-  HEADERS.append(('Referer', "http://www.%s" % USAGE))
+  HEADERS.append(("User-agent", user_agent))
+  HEADERS.append(("Referer", "http://www.%s" % USAGE))
 
   # Try checking version via Analytics URL
   (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS, headers = HEADERS)
@@ -4660,7 +4681,9 @@ def main(argv):
     doLibraryClean("audio")
 
   elif argv[0] == "directory" and len(argv) == 2:
-    getDirectoryList(argv[1])
+    getDirectoryList(argv[1], recurse=False)
+  elif argv[0] == "rdirectory" and len(argv) == 2:
+    getDirectoryList(argv[1], recurse=True)
 
   elif argv[0] == "sources" and len(argv) < 3:
     showSources(media=argv[1] if len(argv) == 2 else None)

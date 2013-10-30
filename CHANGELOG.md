@@ -3,6 +3,7 @@
 ##Version 1.0.4 (29/10/2013)
 * Add: New Texture JSON API. Use JSON to access Texture*.db rather than via SQLite when JSON API of the client is v6.6.3+. Use `@dbjson=no` to force old SQLite behaviour. When using JSON to access Texture*.db, only the following options still require direct access to the Userdata\Thumbnails folder: `f`, `P`, `R`, `S`, `X`, `Xd`. All other options require only a valid `xbmc.host` with all data accessed via JSON.
 * Add: Removal of artwork from the media library by setting url value to "null" (requires JSON API 6.6.3+)
+* Add: `rdirectory` option - recursive version of `directory`
 
 ##Version 1.0.3 (25/10/2013)
 * Fix: [issue #9](https://github.com/MilhouseVH/texturecache.py/issues/9), error during prune when dds file already deleted
