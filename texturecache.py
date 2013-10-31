@@ -139,8 +139,10 @@ class MyConfiguration(object):
 
     self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", _USER_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
-    self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
+
+    self.DBJSON = self.getValue(config, "dbjson", "auto")
+    self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
 
     if self.XBMC_BASE[-1:] not in ["/", "\\"]: self.XBMC_BASE += "/"
     if self.THUMBNAILS[-1:] not in ["/", "\\"]: self.THUMBNAILS += "/"
@@ -308,12 +310,12 @@ class MyConfiguration(object):
         if default == None:
           raise ConfigParser.NoOptionError(aKey, self.GLOBAL_SECTION)
 
-    return value
+    return value if value else default
 
   # default value will be used if key is present, but without a value
   def getBoolean(self, config, aKey, default="no"):
     temp = self.getValue(config, aKey, default).lower()
-    return True if (temp == "yes" or temp == "true") else False
+    return temp in ["yes", "true"]
 
   def getSimpleList(self, config, aKey, default=""):
     aStr = self.getValue(config, aKey, default)
@@ -4275,7 +4277,9 @@ def checkConfig(option):
   else:
     needMAC = False
 
-  if gConfig.USEJSONDB and needDb:
+  # If need to work out automatic value for USEJSONDB, or set explicitly, we
+  # need socket access for JSONVER
+  if needDb and (gConfig.DBJSON == "auto" or (gConfig.DBJSON != "auto" and gConfig.USEJSONDB)):
     needSocket = True
 
   gotWeb = gotSocket = gotDb = gotFS = gotMAC = False
@@ -4355,14 +4359,19 @@ def checkConfig(option):
     gLogger.out(MSG)
     return False
 
-  # If API level insufficient to read Textures DB using JSON, fall back to SQLite3 calls
-  if needDb and gConfig.USEJSONDB:
+  # If auto detection enabled, when API level insufficient to read Textures DB
+  # using JSON, fall back to SQLite3 calls
+  if needDb and gConfig.DBJSON == "auto":
     if gConfig.JSONVER < gConfig.JSONVER_TEXTURE:
-      gLogger.log("JSON Texture DB API not supported - will use SQLite3 to access Texture DB")
       gConfig.USEJSONDB = False
+      gLogger.log("JSON Texture DB API not supported - will use SQLite to access Texture DB")
     else:
       # If able to use JSON for Texture db access, no need to check DB availability
-      needDb = False
+      gConfig.USEJSONDB = True
+
+  # Don't access Textures database if using JSON API (either auto-detected or set explicitly)
+  if needDb and gConfig.USEJSONDB:
+    needDb = False
 
   if needDb:
     try:
