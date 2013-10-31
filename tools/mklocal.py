@@ -33,6 +33,8 @@
 #
 ################################################################################
 
+#version 0.1.0
+
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
 
