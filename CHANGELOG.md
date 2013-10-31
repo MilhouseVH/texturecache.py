@@ -1,7 +1,7 @@
 #Changelog
 
 ##Version 1.0.4 (29/10/2013)
-* Add: New Texture JSON API. Use JSON to access Texture*.db rather than via SQLite when JSON API version of the client is v6.6.3+. Use `@dbjson=no` to force old SQLite behaviour, @dbjson=yes to force JSON API, or leave @dbjson undefined for auto-selection (ie. use JSON API when available, fall back to SQLite if not). When using JSON to access Texture*.db, only the following options still require direct file system access to the Userdata\Thumbnails folder: `f`, `P`, `R`, `S`, `X`, `Xd`. All other options require only a valid `xbmc.host` with all data accessed via JSON.
+* Add: New Texture JSON API. Use JSON to access Texture*.db rather than via SQLite when JSON API version of the client is v6.6.3+. Use `@dbjson=no` to force old SQLite behaviour, `@dbjson=yes` to force JSON API, or leave `@dbjson` undefined for auto-selection (ie. use JSON API when available, fall back to SQLite if not). When using JSON to access Texture*.db, only the following options still require direct file system access to the Userdata\Thumbnails folder: `f`, `P`, `R`, `S`, `X`, `Xd`. All other options require only a valid `xbmc.host` with all data accessed via JSON.
 * Add: Ability to remove artwork urls from the media library by setting url value to "null" using `set` option is now supported (requires JSON API v6.6.3+)
 * Add: `rdirectory` option - recursive version of `directory`
 
