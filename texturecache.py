@@ -42,6 +42,7 @@ if sys.version_info >= (3, 0):
   import http.client as httplib
   import urllib.request as urllib2
   import queue as Queue
+  basestring = (str, bytes)
 else:
   import ConfigParser, StringIO, httplib, urllib2, Queue
 
@@ -58,22 +59,24 @@ class MyConfiguration(object):
 
     self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
 
-    self.HAS_PVR = False
-
-    namedSection = False
-
-    self.JSONVER = (0, 0, 0)
-
-    self.JSONVER_RESUME = (6, 2, 0)
-    self.JSONVER_SETNULL = (6, 6, 3)
-    self.JSONVER_TEXTURE = (6, 6, 3)
-
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
     self.CONFIG_NAME = "texturecache.cfg"
 
+    self.HAS_PVR = False
+
+    # These features only enabled by the respective API version
+    self.JSON_VER_CAPABILITIES = {"setresume":   (6,  2, 0),
+                                  "texturedb":   (6,  9, 0),
+                                  "removeart":   (6,  9, 1),
+                                  "setseason":   (6, 10, 0),
+                                  "setmovieset": (6, 12, 0)}
+
+    self.SetJSONVersion(0, 0, 0)
+
+    namedSection = False
     serial_urls = "assets\.fanart\.tv"
-    embedded_urls = "^image://video, ^image://music"
+    embedded_urls = "^video, ^music"
 
     config = ConfigParser.SafeConfigParser()
     self.config = config
@@ -247,7 +250,16 @@ class MyConfiguration(object):
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "no")
 
     self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls)
+
+    # Fix patterns as we now strip image:// from the urls, so we need to remove
+    # this prefix from any legacy patterns that may be specified by the user
+    for index, r in enumerate(self.CACHE_IGNORE_TYPES):
+      self.CACHE_IGNORE_TYPES[index] = re.compile(re.sub("^\^image://", "^", r.pattern))
+
     self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", "")
+    # Same fix as above
+    for index, r in enumerate(self.PRUNE_RETAIN_TYPES):
+      self.PRUNE_RETAIN_TYPES[index] = re.compile(re.sub("^\^image://", "^", r.pattern))
 
     self.RECACHEALL = self.getBoolean(config, "allow.recacheall","no")
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
@@ -268,21 +280,39 @@ class MyConfiguration(object):
 
     self.MAC_ADDRESS = self.getValue(config, "network.mac", "")
 
-  # Call this method once we have worked out which version of JSON API
-  # or database we are working with
-  def postConfig(self):
-    config = self.config
+  def SetJSONVersion(self, major, minor, patch):
+    self.JSON_VER = (major, minor, patch)
+    self.JSON_VER_STR = "v%d.%d.%d" % (major, minor, patch)
 
     # Allow restoration of resume points with Gotham+
-    self.JSON_HAS_RESUME = (self.JSONVER >= self.JSONVER_RESUME)
+    self.JSON_HAS_SETRESUME = self.HasJSONCapability("setresume")
 
-    # set null artwork items in set
-    self.JSON_HAS_SETNULL = (self.JSONVER >= self.JSONVER_SETNULL)
+    # Allow null artwork items in set
+    self.JSON_HAS_SETNULL = self.HasJSONCapability("removeart")
 
+    # JSON API supports VideoLibrary.SetSeasonDetails and VideoLibrary.SetMovieSetDetails
+    self.JSON_HAS_SETSEASON = self.HasJSONCapability("setseason")
+    self.JSON_HAS_SETMOVIESET = self.HasJSONCapability("setmovieset")
+
+    # JSON API has support for Textures database access
+    self.JSON_HAS_TEXTUREDB = self.HasJSONCapability("texturedb")
+
+  def HasJSONCapability(self, feature):
+    if feature not in self.JSON_VER_CAPABILITIES:
+      raise ValueError("Invalid JSON capability request for feature [%s]" % feature)
+
+    if self.JSON_VER_CAPABILITIES[feature] == (0, 0, 0):
+      return False
+    else:
+      return self.JSON_VER >= self.JSON_VER_CAPABILITIES[feature]
+
+  # Call this method once we have worked out if JSON or SQLite will be
+  # used to access textures database
+  def postConfig(self):
     # Pre-delete artwork if the database filesystem is mounted, as deleting artwork within threads
     # will result in database locks and inability of the remote client to query its own
     # database, resulting in invalid responses.
-    if self.getValue(config, "download.predelete", "auto") == "auto":
+    if self.getValue(self.config, "download.predelete", "auto") == "auto":
       if self.USEJSONDB:
         self.DOWNLOAD_PREDELETE = False
       else:
@@ -292,7 +322,7 @@ class MyConfiguration(object):
           ISMOUNT = False
         self.DOWNLOAD_PREDELETE = (os.path.ismount(self.getDBPath()) or ISMOUNT)
     else:
-      self.DOWNLOAD_PREDELETE = self.getBoolean(config, "download.predelete","no")
+      self.DOWNLOAD_PREDELETE = self.getBoolean(self.config, "download.predelete","no")
 
   def getValue(self, config, aKey, default=None):
     value = default
@@ -385,6 +415,32 @@ class MyConfiguration(object):
 
   def BooleanIsYesNo(self, x):
     return "yes" if x else "no"
+
+  def dumpJSONCapabilities(self):
+    if self.JSON_VER == (0, 0, 0):
+      return "Unknown, JSON version not acquired"
+    else:
+      caps = {}
+      for feature in self.JSON_VER_CAPABILITIES:
+        caps[feature] = self.HasJSONCapability(feature)
+      return caps
+
+  def dumpMemberVariables(self):
+    mv = {}
+    for key in self.__dict__.keys():
+      if key != "config":
+        value = self.__dict__[key]
+        if type(value) is list:
+          newlist = []
+          for v in value:
+            try:
+              newlist.append(v.pattern)
+            except:
+              newlist.append(v)
+          value = newlist
+        mv[key] = value
+
+    return mv
 
   def showConfig(self):
     print("Current properties (if exists, read from %s):" % (self.FILENAME))
@@ -498,7 +554,7 @@ class MyLogger():
       else:
         self.reset(initialValue=0)
 
-      udata = self.toUnicode(data)
+      udata = MyUtility().toUnicode(data)
       ulen = len(data)
       spaces = self.lastlen - ulen
       self.lastlen = ulen
@@ -517,7 +573,7 @@ class MyLogger():
 
   def out(self, data, newLine=False, log=False):
     with threading.Lock():
-      udata = self.toUnicode(data)
+      udata = MyUtility().toUnicode(data)
       ulen = len(data)
       spaces = self.lastlen - ulen
       self.lastlen = ulen if udata.rfind("\n") == -1 else 0
@@ -541,7 +597,7 @@ class MyLogger():
   def log(self, data, jsonrequest = None, maxLen=0):
     if self.LOGGING:
       with threading.Lock():
-        udata = self.toUnicode(data)
+        udata = MyUtility().toUnicode(data)
 
         t = threading.current_thread().name
         if jsonrequest == None:
@@ -581,24 +637,14 @@ class MyLogger():
         self.LOGFILE.write("\n")
         if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
 
-  def toUnicode(self, data):
-    if sys.version_info >= (3, 0):
-      return data
-
-    if isinstance(data, basestring):
-      if not isinstance(data, unicode):
-        try:
-          data = unicode(data, encoding="utf-8", errors="ignore")
-        except UnicodeDecodeError:
-          pass
-
-    return data
-
-  def removeNonAscii(self, s, replaceWith = ""):
-    if replaceWith == "":
-      return  "".join([x if ord(x) < 128 else ("%%%02x" % ord(x)) for x in s])
-    else:
-      return  "".join([x if ord(x) < 128 else replaceWith for x in s])
+  def err(self, data, newLine=False, log=False):
+    with threading.Lock():
+      udata = MyUtility().toUnicode(data)
+      sys.stderr.write("%-s" % udata)
+      if newLine:
+        sys.stderr.write("\n")
+      sys.stderr.flush()
+    if log: self.log(data)
 
 #
 # Image loader thread class.
@@ -623,8 +669,6 @@ class MyImageLoader(threading.Thread):
 
     self.force = force
     self.retry = retry
-
-    self.LAST_URL = None
 
     self.totals.init(self.name)
 
@@ -653,72 +697,72 @@ class MyImageLoader(threading.Thread):
 
       item = self.work_queue.get()
 
-      if not self.loadImage(item.mtype, item.itype, item.filename, item.dbid, item.cachedurl, self.retry, self.force, item.missingOK):
-        if not item.missingOK:
-          self.error_queue.put(item)
+      if not self.loadImage(item) and not item.missingOK:
+        self.error_queue.put(item)
 
       self.work_queue.task_done()
 
-      if self.work_queue.empty(): break
+      if self.work_queue.empty():
+        break
 
     self.showProgress(ignoreSelf=True)
 
     self.totals.stop()
 
-  def loadImage(self, mediatype, imgtype, filename, rowid, cachedurl, retry, force, missingOK = False):
-
-    ATTEMPT = 1 if retry < 1 else retry
-    PDRETRY = retry
+  def loadImage(self, item):
+    ATTEMPT = 1 if self.retry < 1 else self.retry
+    PDRETRY = self.retry
     PERFORM_DOWNLOAD = False
 
-    self.totals.start(mediatype, imgtype)
+    self.totals.start(item.mtype, item.itype)
 
     # Call Files.PrepareDownload. If failure, retry up to retry times, waiting a short
     # interval between each attempt.
-    self.LAST_URL = self.json.getDownloadURL(filename)
+    url = self.json.getDownloadURL(item.filename)
 
-    while PDRETRY > 0 and self.LAST_URL == None:
+    while PDRETRY > 0 and not url:
       self.logger.log("Retrying getDownloadURL(), %d attempts remaining" % PDRETRY)
       time.sleep(0.5)
       PDRETRY -= 1
-      self.LAST_URL = self.json.getDownloadURL(filename)
+      url = self.json.getDownloadURL(item.filename)
 
-    if self.LAST_URL != None:
+    if url:
       if not self.config.DOWNLOAD_PREDELETE:
-        if rowid != 0 and force:
-          self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]" % (rowid, cachedurl, filename))
+        if item.dbid != 0 and self.force:
+          self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]"
+                          % (item.dbid, item.cachedurl, item.decoded_filename))
           with self.database:
-            self.database.deleteItem(rowid, cachedurl)
-          self.totals.bump("Deleted", imgtype)
+            self.database.deleteItem(item.dbid, item.cachedurl)
+          self.totals.bump("Deleted", item.itype)
           PERFORM_DOWNLOAD = True
       if self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD:
-        self.logger.log("Proceeding with download of URL [%s]" % self.LAST_URL)
+        self.logger.log("Proceeding with download of URL [%s]" % url)
     else:
-      self.logger.log("Image not available for download - uncacheable (embedded?), or doesn't exist. Filename [%s]" % filename)
+      self.logger.log("Image not available for download - uncacheable (embedded?), or doesn't exist. Filename [%s]" % item.filename)
       ATTEMPT = 0
 
     while ATTEMPT > 0 and (self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD):
       try:
         # Don't need to download the whole image for it to be cached so just grab the first 1KB
-        PAYLOAD = self.json.sendWeb("GET", self.LAST_URL, readAmount=1024, rawData=True)
+        PAYLOAD = self.json.sendWeb("GET", url, readAmount=1024, rawData=True)
         if self.json.WEB_LAST_STATUS == httplib.OK:
           self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d], filename [%s]" \
-                        % (len(PAYLOAD), (retry - ATTEMPT + 1), filename))
+                        % (len(PAYLOAD), (self.retry - ATTEMPT + 1), item.decoded_filename))
           break
       except:
         pass
       ATTEMPT -= 1
       self.logger.log("Failed to download image URL [%s], status [%d], " \
-                   "attempts remaining [%d]" % (self.LAST_URL, self.json.WEB_LAST_STATUS, ATTEMPT))
+                   "attempts remaining [%d]" % (url, self.json.WEB_LAST_STATUS, ATTEMPT))
       if stopped.is_set(): ATTEMPT = 0
 
     if ATTEMPT == 0:
-      if not missingOK:
-        self.totals.bump("Error", imgtype)
+      if not item.missingOK:
+        self.totals.bump("Error", item.itype)
     else:
-      self.totals.bump("Cached", imgtype)
+      self.totals.bump("Cached", item.itype)
 
-    self.totals.finish(mediatype, imgtype)
+    self.totals.finish(item.mtype, item.itype)
 
     return ATTEMPT != 0
 
@@ -757,7 +801,6 @@ class MyDB(object):
         if not os.path.exists(self.config.getDBPath()):
           raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
         self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
-        self.mydb.text_factory = lambda x: x.decode("iso-8859-1")
         self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
@@ -784,24 +827,26 @@ class MyDB(object):
 
     return self.cursor
 
-  def getRows(self, filter=None, order=None):
+  def getRows(self, filter=None, order=None, allfields=False):
     if self.usejson:
-      data = self.mydb.getTextures(filter, order)
+      data = self.mydb.getTextures(filter, order, allfields)
       if "result" in data and "textures" in data["result"]:
+        # Could use MyUtility().normalise() here, but inlining this code
+        # is twice as fast
+        doDecode = True if sys.version_info < (3, 0) else False
         for r in data["result"]["textures"]:
-          r["url"] = urllib2.unquote(r["url"])[8:-1]
+          url = urllib2.unquote(r["url"])[8:-1]
+          if doDecode:
+            url = bytes(url.encode("iso-8859-1")).decode("utf-8")
+          r["url"] = url
         return data["result"]["textures"]
       else:
         return []
     else:
       return self._transform(self._getAllColumns(filter, order).fetchall())
 
-#  def fetchone(self): return self.cursor.fetchone()
-#  def fetchall(self): return self.cursor.fetchall()
-#  def commit(self): return self.getDB().commit()
-
   def getSingleRow(self, filter):
-    rows = self.getRows(filter)
+    rows = self.getRows(filter, allfields=True)
     if rows != []:
       return rows[0]
     else:
@@ -826,11 +871,11 @@ class MyDB(object):
     data = []
     if rows:
       for r in rows:
-        data.append({"textureid": r[0], "cachedurl": r[1],
-                     "lasthashcheck": r[2], "url": r[3],
-                     "sizes":[{"height": r[4], "width": r[5], "usecount": r[6],
-                               "lastused": r[7], "size": r[8]}],
-                     "imagehash": r[9]})
+        data.append({u"textureid": r[0], u"cachedurl": r[1],
+                     u"lasthashcheck": r[2], u"url": r[3],
+                     u"sizes":[{u"height": r[4], u"width": r[5], u"usecount": r[6],
+                               u"lastused": r[7], u"size": r[8]}],
+                     u"imagehash": r[9]})
     return data
 
   def delRowByID(self, id):
@@ -888,7 +933,10 @@ class MyDB(object):
     return row
 
   def getRowByFilename_Impl(self, filename, unquote=True):
-    ufilename = urllib2.unquote(filename) if unquote else filename
+    if unquote:
+      ufilename = MyUtility().normalise(filename)
+    else:
+      ufilename = filename
 
     # If string contains unicode, replace unicode chars with % and
     # use LIKE instead of equality
@@ -898,7 +946,7 @@ class MyDB(object):
       self.logger.log("Removing ASCII from filename: [%s]" % ufilename)
       SQL = "WHERE url LIKE \"%s\"" % removeNonAscii(ufilename, "%")
 
-    rows = self.getRows(filter = SQL)
+    rows = self.getRows(filter=SQL, allfields=True)
 
     return rows[0] if rows != [] else None
 
@@ -1060,7 +1108,7 @@ class MyJSONComms(object):
 
         # If data is not a str (Python2) then decode Python3 bytes to unicode representation
         if isinstance(data, str):
-          udata = self.logger.toUnicode(data)
+          udata = MyUtility().toUnicode(data)
         else:
           try:
             udata = data.decode("utf-8")
@@ -1332,7 +1380,7 @@ class MyJSONComms(object):
     # Not able to get a directory for remote files...
     if filename.find("image://http") != -1: return (None, None, None)
 
-    directory = urllib2.unquote(filename[8:-1])
+    directory = MyUtility().normalise(filename, strip=True)
 
     # Remove filename, leaving just directory...
     ADD_BACK=""
@@ -1477,29 +1525,29 @@ class MyJSONComms(object):
     REQUEST = {"method": method, "params":{arg: libraryId}}
     data = self.sendJSON(REQUEST, "libRemove", checkResult=True)
 
-  def dumpJSON(self, data, decode=False):
+  def dumpJSON(self, data, decode=False, ensure_ascii=True):
     if decode:
       self.logger.progress("Decoding URLs...")
       self.unquoteArtwork(data)
     self.logger.progress("")
-    self.logger.out(json.dumps(data, indent=2, ensure_ascii=True, sort_keys=False), newLine=True)
+    self.logger.out(json.dumps(data, indent=2, ensure_ascii=ensure_ascii, sort_keys=False), newLine=True)
 
   def unquoteArtwork(self, items):
     for item in items:
       for field in item:
         if field in ["seasons", "episodes", "channels"]: self.unquoteArtwork(item[field])
 
-        if field in ["fanart", "thumbnail"]: item[field] = urllib2.unquote(item[field])
+        if field in ["fanart", "thumbnail"]: item[field] = MyUtility().normalise(item[field])
 
         if field == "art":
           art = item["art"]
           for image in art:
-            art[image] = urllib2.unquote(art[image])
+            art[image] = MyUtility().normalise(art[image])
 
         if field == "cast":
           for cast in item["cast"]:
             if "thumbnail" in cast:
-              cast["thumbnail"] = urllib2.unquote(cast["thumbnail"])
+              cast["thumbnail"] = MyUtility().normalise(cast["thumbnail"])
 
   def getSources(self, media, labelPrefix=False, withLabel=None):
     REQUEST = {"method": "Files.GetSources", "params":{"media": media}}
@@ -1514,17 +1562,19 @@ class MyJSONComms(object):
         label = source["label"]
         if not withLabel or withLabel.lower() == label.lower():
           if file.startswith("multipath://"):
-            for qfile in file[12:].split("/"):
-              if qfile != "":
+            for apath in file[12:].split("/"):
+              if apath != "":
+                apath= MyUtility().normalise(apath)[:-1]
                 if labelPrefix:
-                  source_list.append("%s: %s" % (label, urllib2.unquote(qfile)[:-1]))
+                  source_list.append("%s: %s" % (label, apath))
                 else:
-                  source_list.append(urllib2.unquote(qfile)[:-1])
+                  source_list.append(apath)
           else:
+            apath = MyUtility().normalise(file)[:-1]
             if labelPrefix:
-              source_list.append("%s: %s" % (label, file[:-1]))
+              source_list.append("%s: %s" % (label, apath))
             else:
-              source_list.append(file[:-1])
+              source_list.append(apath)
 
     return sorted(source_list)
 
@@ -1538,7 +1588,7 @@ class MyJSONComms(object):
     # but also some random junk...
     ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".sub", ".idx", ".strm", \
                   ".m3u", ".pls", ".cue", \
-                  ".log", ".ini", ".txt", \
+                  ".log", ".ini", ".txt", ".url", ".md5", \
                   ".bak", ".info", ".db", ".gz", ".tar", ".rar", ".zip"]
 
     for extension in self.config.NONMEDIA_FILETYPES:
@@ -1859,9 +1909,12 @@ class MyJSONComms(object):
         break
     return data[0]
 
-  def getTextures(self, filter=None, order=None):
+  def getTextures(self, filter=None, order=None, allfields=False):
     REQUEST = {"method": "Textures.GetTextures",
-               "params": {"properties": ["url", "cachedurl", "lasthashcheck", "imagehash", "sizes"]}}
+               "params": {"properties": ["cachedurl", "url"]}}
+
+    if allfields:
+      REQUEST["params"]["properties"].extend(["lasthashcheck", "imagehash", "sizes"])
 
     if filter: REQUEST["params"]["filter"] = self.parseSQLFilter(filter)
 #    if order: REQUEST["params"]["sort"] = self.parseSQLOrder(order)
@@ -2162,23 +2215,27 @@ class MyTotals(object):
 #
 class MyMediaItem(object):
   def __init__(self, mediaType, imageType, name, season, episode, filename, dbid, cachedurl, libraryid, missingOK):
-    self.status = 1 # 0=OK, 0=Ignore
+    self.status = 1 # 0=Ignore/Skipped, 1=To be cached, 2=Queued for downloading
     self.mtype = mediaType
     self.itype = imageType
     self.name = name
     self.season = season
     self.episode = episode
     self.filename = filename
-    self.decoded_filename = urllib2.unquote(self.filename) if self.filename else self.filename
+    self.decoded_filename = MyUtility().normalise(self.filename, strip=True) if self.filename else self.filename
     self.dbid = dbid
     self.cachedurl = cachedurl
     self.libraryid = libraryid
     self.missingOK = missingOK
 
   def __str__(self):
-    return "{%d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s}" % \
-            (self.status, self.mtype, self.itype, self.name, self.season, \
-             self.episode, self.decoded_filename, self.dbid, self.cachedurl, \
+    season = "\"%s\"" % self.season if self.season else self.season
+    episode = "\"%s\"" % self.episode if self.episode else self.episode
+    cachedurl = "\"%s\"" % self.cachedurl if self.cachedurl else self.cachedurl
+
+    return "{%d, \"%s\", \"%s\", \"%s\", %s, %s, \"%s\", %d, %s, %s, %s}" % \
+            (self.status, self.mtype, self.itype, self.name, season, episode, \
+             self.decoded_filename, self.dbid, cachedurl, \
              self.libraryid, self.missingOK)
 
   def getFullName(self):
@@ -2263,11 +2320,66 @@ class MyWatchedItem(object):
     self.state = 0
     return
 
-def removeNonAscii(s, replaceWith = ""):
-  if replaceWith == "":
-    return  "".join([x if ord(x) < 128 else ("%%%02x" % ord(x)) for x in s])
-  else:
-    return  "".join([x if ord(x) < 128 else replaceWith for x in s])
+# Helper class...
+class MyUtility(object):
+  # Convert quoted filename into consistent utf-8 representation
+  # for both Python2 and Python3.
+  def normalise(self, value, strip=False):
+    if not value: return value
+
+    if strip:
+      v = urllib2.unquote(re.sub("^image://(.*)/","\\1",value))
+    else:
+      v = urllib2.unquote(value)
+
+    if sys.version_info < (3, 0):
+      v = bytes(v.encode("iso-8859-1")).decode("utf-8")
+
+    return v
+
+  def toUnicode(self, data):
+    if sys.version_info >= (3, 0):
+      return data
+
+    if isinstance(data, basestring):
+      if not isinstance(data, unicode):
+        try:
+          data = unicode(data, encoding="utf-8", errors="ignore")
+        except UnicodeDecodeError:
+          pass
+
+    return data
+
+  #
+  # Some JSON paths may have incorrect path seperators.
+  # Use this function to attempt to correct those path seperators.
+  #
+  # Shares ("smb://", "nfs://" etc.) will always use forward slashes.
+  #
+  # Non-shares will use a slash appropriate to the OS to which the path
+  # corresponds so attempt to find the FIRST slash (forward or back) and
+  # then use that as the path seperator, replacing any of the opposite
+  # kind.
+  #
+  # If no slash is found, do nothing.
+  #
+  # See: http://forum.xbmc.org/showthread.php?tid=153502&pid=1477147#pid1477147
+  #
+  def fixSlashes(self, filename):
+    # Share (eg. "smb://", "nfs://" etc.)
+    if re.search("^.*://.*", filename):
+      return filename.replace("\\", "/")
+    else:
+      bslash = filename.find("\\")
+      fslash = filename.find("/")
+      if bslash == -1: bslash = len(filename)
+      if fslash == -1: fslash = len(filename)
+      if bslash < fslash:
+        return filename.replace("/", "\\")
+      elif fslash < bslash:
+        return filename.replace("\\", "/")
+      else:
+        return filename
 
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons
@@ -2276,8 +2388,8 @@ def removeNonAscii(s, replaceWith = ""):
 # Sets doesn't support filters, so filter this list after retrieval.
 #
 def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, \
-                      decode=False, nodownload=False, lastRun=False, labels=None, query="", \
-                      filename=None, wlBackup=True):
+                      decode=False, ensure_ascii=True, nodownload=False, lastRun=False, \
+                      labels=None, query="", filename=None, wlBackup=True):
 
   if not mediatype in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
@@ -2415,7 +2527,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     elif action == "qa":
       qaData(mediatype, jcomms, database, data, title_name, id_name, rescan)
     elif action == "dump":
-      jcomms.dumpJSON(data, decode)
+      jcomms.dumpJSON(data, decode, ensure_ascii)
     elif action == "missing":
       fileList = jcomms.getAllFilesForSource(mediatype, labels)
       missingFiles(mediatype, data, fileList, title_name, id_name)
@@ -2463,7 +2575,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   gLogger.progress("Loading database items...")
   dbfiles = {}
   with database:
-    rows = database.getRows()
+    rows = database.getRows(allfields=False)
     for r in rows: dbfiles[r["url"]] = r
 
   gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
@@ -2476,21 +2588,17 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   for item in mediaitems:
     if item.mtype == "tvshows" and item.season == "Season All": TOTALS.bump("Season-all", item.itype)
 
-    filename = re.sub("^image://(.*)/","\\1", item.decoded_filename)
-    if sys.version_info >= (3, 0):
-      filename = bytes(filename, "utf-8").decode("iso-8859-1")
+    dbrow = dbfiles.get(item.decoded_filename, None)
 
-    dbrow = dbfiles.get(filename, None)
-
-    # Lookup the path without unquoting it - some paths end up in the cache
-    # while still quoted
+    # Lookup the path using original unquoted version - some paths end up in
+    # the cache while still quoted
     if not dbrow:
       dbrow = dbfiles.get(item.filename[:-1], None)
 
       # If the path has swapped a "/" for a "\" (or vice versa) then we won't
       # match against the cache - unmangle, and try again.
       if not dbrow:
-        dbrow = dbfiles.get(fixSlashes(filename), None)
+        dbrow = dbfiles.get(MyUtility().fixSlashes(item.decoded_filename), None)
 
     # Don't need to cache file if it's already in the cache, unless forced...
     # Assign the texture cache database id and cachedurl so that removal will avoid having
@@ -2502,9 +2610,9 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
         item.dbid = dbrow["textureid"]
         item.cachedurl = dbrow["cachedurl"]
       else:
-        if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
-        TOTALS.bump("Skipped", item.itype)
         item.status = 0
+        TOTALS.bump("Skipped", item.itype)
+        if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
     # These items we are missing from the cache...
     else:
       itemCount += 1
@@ -2580,7 +2688,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
                 sc += 1
                 if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
                 single_work_queue.put(item)
-                item.status = 0
+                item.status = 2
                 isSingle = True
                 break
 
@@ -2588,7 +2696,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
             mc += 1
             if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: %s" % item)
             multiple_work_queue.put(item)
-            item.status = 0
+            item.status = 2
 
           gLogger.progress("Queueing work item: Single thread %d, Multi thread %d" % (sc, mc), every=50, finalItem=(c==itemCount))
 
@@ -2736,10 +2844,10 @@ def evaluateURL(imgtype, url, imagecache):
     return False
 
   if gConfig.CACHE_IGNORE_TYPES:
-    decoded_url = urllib2.unquote(url)
+    decoded_url = MyUtility().normalise(url, strip=True)
     for ignore in gConfig.CACHE_IGNORE_TYPES:
       if ignore.search(decoded_url):
-        gLogger.log("Ignored image due to rule [%s]: %s" % (ignore.pattern, decoded_url))
+        gLogger.log("Ignored [%-12s] image due to [%s] rule: %s" % (imgtype, ignore.pattern, decoded_url))
         TOTALS.bump("Ignored", imgtype)
         imagecache[url] = 1
         return False
@@ -2813,7 +2921,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       if artwork == "":
         missing["Missing %s" % j] = not i.startswith("?")
       else:
-        decoded_url = urllib2.unquote(artwork)
+        decoded_url = MyUtility().normalise(artwork)
         FAILED = False
         if gConfig.QA_FAIL_TYPES:
           for qafailtype in gConfig.QA_FAIL_TYPES:
@@ -2976,7 +3084,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
               if MATCHED: break
             matched_value = ", ".join(str(x) for x in temp)
           else:
-            if temp is str and temp.startswith("image://"): temp = urllib2.unquote(temp)
+            if isinstance(temp, basestring): temp = MyUtility().normalise(temp, strip=True)
             MATCHED = evaluateCondition(temp, condition, value)
             if inverted: MATCHED = not MATCHED
             matched_value = temp
@@ -3083,6 +3191,8 @@ def parseQuery(query):
 
   FIELDNAME_NEXT = True
   tField = tValue = tCondition = tLogic = None
+
+  query = MyUtility().toUnicode(query)
 
   newValue = ""
   IN_STR=False
@@ -3251,9 +3361,9 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
           # Update watched object with latest library values unless overwriting,
           # in which case keep the values that are being restored.
           if not gConfig.WATCHEDOVERWRITE:
-            m.refresh(gConfig.JSON_HAS_RESUME, playcount, lastplayed, resume)
+            m.refresh(gConfig.JSON_HAS_SETRESUME, playcount, lastplayed, resume)
           # Set update state based on old/new values
-          m.setState(gConfig.JSON_HAS_RESUME, playcount, lastplayed, resume)
+          m.setState(gConfig.JSON_HAS_SETRESUME, playcount, lastplayed, resume)
 
     if "seasons" in item:
       watchedRestore("seasons", jcomms, filename, item["seasons"], "label", "season", \
@@ -3300,7 +3410,7 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
                          "lastplayed": mediaitem.lastplayed
                          }}
 
-  if gConfig.JSON_HAS_RESUME:
+  if gConfig.JSON_HAS_SETRESUME:
     REQUEST["params"]["resume"] = mediaitem.resume
 
   gLogger.progress("Restoring %s: %s..." % (mediaitem.mtype[:-1], shortName))
@@ -3396,7 +3506,11 @@ def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
   # Fix unicode bacsklash mangling from the command line...
   ukvpairs = []
   for kv in kvpairs:
-    ukvpairs.append(kv.encode("utf_8").decode("unicode_escape"))
+    try:
+      kv = kv.encode("iso-8859-1").decode("unicode_escape")
+    except UnicodeDecodeError:
+      pass
+    ukvpairs.append(MyUtility().toUnicode(kv))
 
   jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
   setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun)
@@ -3406,9 +3520,25 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
   if mtype == "movie":
     method = "VideoLibrary.SetMovieDetails"
     idname = "movieid"
+  elif mtype == "set":
+    if gConfig.JSON_HAS_SETMOVIESET:
+      method = "VideoLibrary.SetMovieSetDetails"
+      idname = "setid"
+    else:
+      gLogger.out("WARNING: %s is not supported by this version of JSON API (%s) - ignored"
+                  % (mtype, gConfig.JSON_VER_STR), newLine=True)
+      return
   elif mtype == "tvshow":
     method = "VideoLibrary.SetTVShowDetails"
     idname = "tvshowid"
+  elif mtype == "season":
+    if gConfig.JSON_HAS_SETSEASON:
+      method = "VideoLibrary.SetSeasonDetails"
+      idname = "seasonid"
+    else:
+      gLogger.out("WARNING: %s is not supported by this version of JSON API (%s) - ignored"
+                  % (mtype, gConfig.JSON_VER_STR), newLine=True)
+      return
   elif mtype == "episode":
     method = "VideoLibrary.SetEpisodeDetails"
     idname = "episodeid"
@@ -3425,7 +3555,8 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
     method = "AudioLibrary.SetSongDetails"
     idname = "songid"
   else:
-    gLogger.out("ERROR: %s is not a valid media type for this operation (id: %d)" % (mtype, libraryid), newLine=True)
+    gLogger.out("ERROR: %s is not a valid media type for this operation (id: %d)"
+                % (mtype, libraryid), newLine=True)
     return
 
   if libraryid < 1:
@@ -3464,9 +3595,8 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
          not gConfig.JSON_HAS_SETNULL:
         value = "null" if pairs[KEY] == None else "\"%s\"" % pairs[KEY]
         gLogger.out("WARNING: Cannot set null/empty string value on field with " \
-                    "JSON API %d.%d.%d - ignoring %s %-6d (%s = %s)" % \
-                    (gConfig.JSONVER[0], gConfig.JSONVER[1], gConfig.JSONVER[2],
-                     idname, libraryid, KEY, value), newLine=True, log=True)
+                    "JSON API %s - ignoring %s %6d (%s = %s)" % \
+                    (gConfig.JSON_VER_STR, idname, libraryid, KEY, value), newLine=True, log=True)
         return
 
     bKEY = not bKEY
@@ -3482,7 +3612,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
       if not field in R: R[field] = {}
       if i == fc:
         if pairs[pair]:
-          R[field] = pairs[pair].encode("iso-8859-1").decode("utf-8")
+          R[field] = pairs[pair]
         else:
           R[field] = None
 
@@ -3494,7 +3624,9 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
     gLogger.out(json.dumps(REQUEST, indent=2, ensure_ascii=True, sort_keys=False), newLine=True)
     gLogger.out("### DRY RUN ###", newLine=True)
   else:
-    data = jcomms.sendJSON(REQUEST, "libSetDetails")
+    # Don't bother calling SetFoo if nothing actually being set
+    if len(REQUEST["params"]) > 1:
+      data = jcomms.sendJSON(REQUEST, "libSetDetails")
 
 # Extract data, using optional simple search, or complex SQL filter.
 def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
@@ -3510,7 +3642,7 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
     FCOUNT = 0
     ROWS = []
 
-    for row in database.getRows(filter=SQL, order="ORDER BY t.id ASC"):
+    for row in database.getRows(filter=SQL, order="ORDER BY t.id ASC", allfields=True):
       if ACTION == "NONE":
         ROWS.append(row)
       elif ACTION == "EXISTS":
@@ -3550,193 +3682,164 @@ def sqlDelete( ids=[] ):
         gLogger.out("id %s is not valid\n" % id)
         continue
 
-def dirScan(removeOrphans=False, purge_nonlibrary_artwork=False, libraryFiles=None, keyIsHash=False):
+def orphanCheck(removeOrphans=False):
   database = MyDB(gConfig, gLogger)
 
+  dbfiles = {}
+  ddsmap = {}
+  orphanedfiles = []
+
+  gLogger.progress("Loading texture cache...")
+
   with database:
-    dbfiles = {}
-    ddsmap = {}
-    orphanedfiles = []
-    localfiles = []
-
-    re_search_addon = re.compile("^.*%s.xbmc%saddons%s.*" % (os.sep, os.sep, os.sep))
-    re_search_mirror = re.compile("^http://mirrors.xbmc.org/addons/.*")
-
-    gLogger.progress("Loading texture cache...")
-
-    rows = database.getRows()
+    rows = database.getRows(allfields=False)
     for r in rows:
       hash = r["cachedurl"]
       dbfiles[hash] = r
       ddsmap[os.path.splitext(hash)[0]] = hash
+    rows = None
 
-    gLogger.log("Loaded %d rows from texture cache" % len(rows))
+  gLogger.log("Loaded %d rows from texture cache" % len(dbfiles))
 
-    gLogger.progress("Scanning Thumbnails directory...")
+  gLogger.progress("Scanning Thumbnails directory...")
 
-    path = gConfig.getFilePath()
+  path = gConfig.getFilePath()
 
-    for (root, dirs, files) in os.walk(path):
-      newroot = root.replace(path,"")
-      basedir = os.path.basename(newroot)
-      for file in files:
-        if basedir == "":
-          hash = file
-        else:
-          hash = "%s/%s" % (basedir, file)
+  for (root, dirs, files) in os.walk(path):
+    newroot = root.replace(path,"")
+    basedir = os.path.basename(newroot)
+    for file in files:
+      if basedir == "":
+        hash = file
+      else:
+        hash = "%s/%s" % (basedir, file)
 
-        gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
+      gLogger.progress("Scanning Thumbnails directory [%s]..." % hash, every=25)
 
-        hash_parts = os.path.splitext(hash)
+      hash_parts = os.path.splitext(hash)
 
-        # If it's a dds file, it should be associated with another
-        # file with the same hash, but different extension. Find
-        # this other file in the ddsmap - if it's there, ignore
-        # the dds file, otherwise leave the dds file to be reported
-        # as an orphaned file.
-        if hash_parts[1] == ".dds" and ddsmap.get(hash_parts[0], None):
-            continue
+      # If it's a dds file, it should be associated with another
+      # file with the same hash, but different extension. Find
+      # this other file in the ddsmap - if it's there, ignore
+      # the dds file, otherwise leave the dds file to be reported
+      # as an orphaned file.
+      if hash_parts[1] == ".dds" and ddsmap.get(hash_parts[0], None):
+          continue
 
-        row = dbfiles.get(hash, None)
+      row = dbfiles.get(hash, None)
 
-        if not row:
-          filename = os.path.join(newroot, file)
-          gLogger.log("Orphan file detected: [%s] with likely hash [%s]" % (filename, hash))
-          orphanedfiles.append(filename)
+      if not row:
+        filename = os.path.join(newroot, file)
+        gLogger.log("Orphan file detected: [%s] with likely hash [%s]" % (filename, hash))
+        orphanedfiles.append(filename)
 
-        elif libraryFiles:
-          URL = removeNonAscii(row["url"])
+  gLogger.progress("")
 
-          isRetained = False
-          if gConfig.PRUNE_RETAIN_TYPES:
-            for retain in gConfig.PRUNE_RETAIN_TYPES:
-              if retain.search(URL):
-                gLogger.log("Retained image due to rule [%s]" % retain.pattern)
-                isRetained = True
-                break
+  gLogger.log("Identified %d orphaned files" % len(orphanedfiles))
 
-          # Ignore add-on/mirror related images
-          if not re_search_addon.search(URL) and \
-             not re_search_mirror.search(URL) and \
-             not isRetained:
+  if removeOrphans and gConfig.ORPHAN_LIMIT_CHECK and len(orphanedfiles) > (len(dbfiles)/20):
+    gLogger.log("Something is wrong here, that's far too many orphaned files - 5% limit exceeded!")
+    gLogger.out("Found %s orphaned files for %s database files.\n\n" % (format(len(orphanedfiles), ",d"), format(len(dbfiles), ",d")))
+    gLogger.out("This is far too many orphaned files for this number of\n")
+    gLogger.out("database files - more than 5% - and something may be wrong.\n\n")
+    gLogger.out("Check your configuration, database, and Thumbnails folder.\n\n")
+    gLogger.out("Add \"orphan.limit.check = no\" to the properties file\n")
+    gLogger.out("if you wish to disable this check.\n")
+    return
 
-            key = hash_parts[0] if keyIsHash else URL
+  FSIZE=0
 
-            if not key in libraryFiles:
-              # If current file type isn't a dds, determine if a matching dds file exists
-              # in case it is necessary to delete the dds file along with the artwork row.
-              dds_file = "%s.dds" % hash_parts[0]
-              clobberdds = hash_parts[1] != ".dds" and os.path.exists(gConfig.getFilePath(dds_file))
+  for ofile in orphanedfiles:
+    fsize = os.path.getsize(gConfig.getFilePath(ofile))
+    FSIZE += fsize
+    gLogger.out("Orphaned file found: Name [%s], Created [%s], Size [%s]%s\n" % \
+      (ofile,
+       time.ctime(os.path.getctime(gConfig.getFilePath(ofile))),
+       format(fsize, ",d"),
+       ", REMOVING..." if removeOrphans else ""))
+    if removeOrphans:
+      gLogger.log("Removing orphan file: %s" % gConfig.getFilePath(ofile))
+      os.remove(gConfig.getFilePath(ofile))
 
-              # Last ditch attempt to find a matching key, database might be
-              # slightly mangled
-              if not keyIsHash:
-                key = getKeyFromFilename(row["url"])
-                if key in libraryFiles:
-                  del libraryFiles[key]
-                else:
-                  localfiles.append(row)
-                  if clobberdds:
-                    newrow = row
-                    newrow["textureid"] = 0
-                    newrow["cachedurl"] = dds_file
-                    newrow["url"] = "%s (DDS)" % row["url"]
-                    localfiles.append(newrow)
-              else:
-                localfiles.append(row)
-                if clobberdds:
-                  newrow = row
-                  newrow["textureid"] = 0
-                  newrow["cachedurl"] = dds_file
-                  newrow["url"] = "%s (DDS)" % row["url"]
-                  localfiles.append(newrow)
-            else:
-               del libraryFiles[key]
+  gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
+                  % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
 
-    gLogger.progress("")
+def pruneCache(purge_nonlibrary_artwork):
+  dbfiles = {}
+  localfiles = []
+  libraryFiles = getAllFiles(keyFunction=getKeyFromFilename)
 
-    # Orphan check, with optional remove...
-    if libraryFiles == None:
-      gLogger.log("Identified %d orphaned files" % len(orphanedfiles))
-      if removeOrphans and gConfig.ORPHAN_LIMIT_CHECK and len(orphanedfiles) > (len(dbfiles)/20):
-        gLogger.log("Something is wrong here, that's far too many orphaned files - 5% limit exceeded!")
-        gLogger.out("Found %s orphaned files for %s database files.\n\n" % (format(len(orphanedfiles), ",d"), format(len(dbfiles), ",d")))
-        gLogger.out("This is far too many orphaned files for this number of\n")
-        gLogger.out("database files - more than 5% - and something may be wrong.\n\n")
-        gLogger.out("Check your configuration, database, and Thumbnails folder.\n\n")
-        gLogger.out("Add \"orphan.limit.check = no\" to the properties file\n")
-        gLogger.out("if you wish to disable this check.\n")
-        return
-      FSIZE=0
-      for ofile in orphanedfiles:
-        fsize = os.path.getsize(gConfig.getFilePath(ofile))
-        FSIZE += fsize
-        gLogger.out("Orphaned file found: Name [%s], Created [%s], Size [%s]%s\n" % \
-          (ofile,
-           time.ctime(os.path.getctime(gConfig.getFilePath(ofile))),
-           format(fsize, ",d"),
-           ", REMOVING..." if removeOrphans else ""))
-        if removeOrphans:
-          gLogger.log("Removing orphan file: %s" % gConfig.getFilePath(ofile))
-          os.remove(gConfig.getFilePath(ofile))
-      gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
-                    % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
+  gLogger.progress("Loading texture cache...")
+  database = MyDB(gConfig, gLogger)
+  with database:
+    rows = database.getRows(allfields=True)
+    for r in rows:
+      dbfiles[r["cachedurl"]] = r
+    rows = None
 
-    # Prune, with optional remove...
-    if libraryFiles != None:
-      if localfiles != []:
-        if purge_nonlibrary_artwork:
-          gLogger.out("Pruning cached images from texture cache...", newLine=True)
-        else:
-          gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
-        gLogger.out("", newLine=True)
-      FSIZE = 0
-      localfiles.sort(key=lambda row: row["url"])
-      for row in localfiles:
-        database.dumpRow(row)
-        if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
-          FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
-        if purge_nonlibrary_artwork: database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
-      gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
-                    % (format(len(localfiles), ",d"),
-                       format(int(FSIZE/1024), ",d")))
-      if len(orphanedfiles) != 0:
-        FSIZE=0
-        for ofile in orphanedfiles:
-          FSIZE += os.path.getsize(gConfig.getFilePath(ofile))
-        gLogger.out("WARNING: %s \"orphaned\" files (total size: %s KB) were also detected!\n\n" \
-                      % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
+  totalrows = len(dbfiles)
 
-#
-# Some JSON paths may have incorrect path seperators.
-# Use this function to attempt to correct those path seperators.
-#
-# Shares ("smb://", "nfs://" etc.) will always use forward slashes.
-#
-# Non-shares will use a slash appropriate to the OS to which the path
-# corresponds so attempt to find the FIRST slash (forward or back) and
-# then use that as the path seperator, replacing any of the opposite
-# kind.
-#
-# If no slash is found, do nothing.
-#
-# See: http://forum.xbmc.org/showthread.php?tid=153502&pid=1477147#pid1477147
-#
-def fixSlashes(filename):
-  # Share (eg. "smb://", "nfs://" etc.)
-  if re.search("^.*://.*", filename):
-    return filename.replace("\\", "/")
-  else:
-    bslash = filename.find("\\")
-    fslash = filename.find("/")
-    if bslash == -1: bslash = len(filename)
-    if fslash == -1: fslash = len(filename)
-    if bslash < fslash:
-      return filename.replace("/", "\\")
-    elif fslash < bslash:
-      return filename.replace("\\", "/")
+  gLogger.log("Loaded %d rows from texture cache" % totalrows)
+
+  gLogger.progress("Processing texture cache...")
+
+  re_search_addon = re.compile(r"^.*[/\\]\.xbmc[/\\]addons[/\\].*")
+  re_search_mirror = re.compile(r"^http://mirrors.xbmc.org/addons/.*")
+
+  for rownum, hash in enumerate(dbfiles):
+    gLogger.progress("Processing texture cache...%d%%" % (100 * rownum / totalrows), every=25)
+
+    row = dbfiles[hash]
+    URL = row["url"]
+
+    isRetained = False
+    if gConfig.PRUNE_RETAIN_TYPES:
+      for retain in gConfig.PRUNE_RETAIN_TYPES:
+        if retain.search(URL):
+          gLogger.log("Retained image due to rule [%s]" % retain.pattern)
+          isRetained = True
+          break
+
+    # Ignore add-on/mirror related images
+    if not re_search_addon.search(URL) and \
+       not re_search_mirror.search(URL) and \
+       not isRetained:
+
+      if URL in libraryFiles:
+        del libraryFiles[URL]
+      else:
+        localfiles.append(row)
+
+  gLogger.progress("")
+
+  # Prune, with optional remove...
+  if localfiles != []:
+    if purge_nonlibrary_artwork:
+      gLogger.out("Pruning cached images from texture cache...", newLine=True)
     else:
-      return filename
+      gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
+    gLogger.out("", newLine=True)
+
+  FSIZE = 0
+  GOTSIZE = False
+  localfiles.sort(key=lambda row: row["url"])
+
+  with database:
+    for row in localfiles:
+      database.dumpRow(row)
+      if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
+          GOTSIZE = True
+          FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
+      if purge_nonlibrary_artwork:
+        database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
+
+  if GOTSIZE:
+    gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
+                  % (format(len(localfiles), ",d"),
+                     format(int(FSIZE/1024), ",d")))
+  else:
+    gLogger.out("\nSummary: %s files\n\n" \
+                  % (format(len(localfiles), ",d")))
 
 def getHash(string):
   string = string.lower()
@@ -3756,21 +3859,16 @@ def getHash(string):
 # function) is sufficient for our needs and also about twice
 # as fast on a Pi.
 def getKeyFromHash(filename):
-  url = re.sub("^image://(.*)/","\\1",filename)
-  url = urllib2.unquote(url)
+  url = MyUtility().normalise(filename, strip=True)
   hash = getHash(url)
-  return "%s%s%s" % (hash[0:1], os.sep, hash)
+  return "%s/%s" % (hash[0:1], hash)
 
 def getKeyFromFilename(filename):
-  f = urllib2.unquote(re.sub("^image://(.*)/","\\1",filename))
-
-  if sys.version_info >= (3, 0):
-    f = bytes(f, "utf-8").decode("iso-8859-1")
-
-  return fixSlashes(removeNonAscii(f))
+  if not filename: return filename
+  url = MyUtility().normalise(filename, strip=True)
+  return MyUtility().fixSlashes(url)
 
 def getAllFiles(keyFunction):
-
   jcomms = MyJSONComms(gConfig, gLogger)
 
   files = {}
@@ -3925,12 +4023,6 @@ def getAllFiles(keyFunction):
 
   return files
 
-def pruneCache(purge_nonlibrary_artwork=False):
-
-  files = getAllFiles(keyFunction=getKeyFromFilename)
-
-  dirScan("N", purge_nonlibrary_artwork, libraryFiles=files, keyIsHash=False)
-
 def removeMedia(mtype, libraryid):
   MTYPE = {}
   MTYPE["movie"] = "Movie"
@@ -3984,8 +4076,7 @@ def getDirectoryList(path, mediatype = "files", recurse=False):
     gLogger.out("No directory listing available.", newLine=True)
     return
 
-  files = data["result"]["files"]
-  for file in files:
+  for file in sorted(data["result"]["files"]):
     ftype = file["filetype"]
     fname = file["file"]
 
@@ -3996,7 +4087,7 @@ def getDirectoryList(path, mediatype = "files", recurse=False):
       FTYPE = "FILE"
       FNAME = fname
 
-    gLogger.out("%s: %s" % (FTYPE, FNAME), newLine=True)
+    gLogger.out("%-4s: %s" % (FTYPE, FNAME), newLine=True)
     if recurse and ftype == "directory":
       getDirectoryList(FNAME, mediatype, recurse)
 
@@ -4140,27 +4231,28 @@ def pprint(msg):
   MAXWIDTH=0
 
   line = "Usage: %s" % os.path.basename(__file__)
-  prefix = (" " * len(line))
+  indent = (" " * len(line))
 
   lines = []
   for index, token in enumerate(msg.split("|")):
     token = token.strip()
     if index > 0 and (len(token) + len(line)) > MAXWIDTH:
       lines.append(line)
-      line = prefix
+      line = indent
     line = "%s %s |" % (line, token)
 
   lines.append(line[:-2])
-  lines.append("%s [@property=value ...]" % prefix)
+  lines.append("%s [@property=value ...]" % indent)
 
   print("\n".join(lines))
 
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
-  pprint("sS <string> | xXf [sql-filter] | Xd | dD <id[id id]>] | \
-          rR | c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | jJ class [filter] | \
-          qa class [filter] | qax class [filter] | pP | remove mediatype libraryid | watched class backup <filename> | \
+  pprint("[s, S] <string> | [x, X, f] [sql-filter] | Xd | d <id[id id]>] | \
+          c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
+          [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
+          remove mediatype libraryid | watched class backup <filename> | \
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
           sources [media] | sources media [label] | directory path | rdirectory path | \
@@ -4174,8 +4266,6 @@ def usage(EXIT_CODE):
   print("  Xd         Same as \"x\" (extract) but will DELETE those rows for which no cachedurl file exists")
   print("  f          Same as x, but include file summary (file count, accumulated file size)")
   print("  d          Delete rows with matching ids, along with associated cached images")
-  print("  r          Reverse search to identify \"orphaned\" Thumbnail files not present in texture cache")
-  print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
   print("  c          Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
   print("  C          Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
   print("  nc         Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
@@ -4184,11 +4274,14 @@ def usage(EXIT_CODE):
   print("  j          Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results.")
   print("  J          Same as \"j\", but includes extra JSON audio/video fields as defined in properties file.")
   print("  jd, Jd     Functionality equivalent to j/J, but all urls are decoded")
+  print("  jr, Jr     Functionality equivalent to j/J, but all urls are decoded and non-ASCII characters output (ie. \"raw\")")
   print("  qa         Run QA check on movies, tags and tvshows, identifying media with missing artwork or plots")
   print("  qax        Same as qa, but remove and rescan those media items with missing details.")
   print("             Configure with qa.zero.*, qa.blank.* and qa.art.* properties. Prefix field with ? to render warning only.")
   print("  p          Display files present in texture cache that don't exist in the media library")
   print("  P          Prune (automatically remove) cached items that don't exist in the media library")
+  print("  r          Reverse search to identify \"orphaned\" Thumbnail files that are not present in the texture cache database")
+  print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
   print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
   print("  duplicates List movies with multiple versions as determined by imdb number")
@@ -4252,7 +4345,8 @@ def checkConfig(option):
   else:
     needWeb = False
 
-  if option in ["c","C","nc","lc","lnc","j","jd","J","Jd","qa","qax","query", "p","P",
+  if option in ["c","C","nc","lc","lnc","j","J","jd","Jd","jr","Jr",
+                "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power",
@@ -4267,7 +4361,7 @@ def checkConfig(option):
     needDb = False
 
   # These options require direct filesystem access
-  if option in ["f", "P", "R", "S", "X", "Xd"]:
+  if option in ["f", "r", "R", "S", "X", "Xd"]:
     needFS = True
   else:
     needFS = False
@@ -4277,8 +4371,8 @@ def checkConfig(option):
   else:
     needMAC = False
 
-  # If need to work out automatic value for USEJSONDB, or set explicitly, we
-  # need socket access for JSONVER
+  # If we need to work out a value for USEJSONDB, or it is enabled explicitly, we
+  # need socket access to determine the current version of JSON API
   if needDb and (gConfig.DBJSON == "auto" or (gConfig.DBJSON != "auto" and gConfig.USEJSONDB)):
     needSocket = True
 
@@ -4323,9 +4417,9 @@ def checkConfig(option):
         if "version" in data["result"]:
           jsonGotVersion = data["result"]["version"]
           if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
-            gConfig.JSONVER = (jsonGotVersion.get("major",0),
-                               jsonGotVersion.get("minor",0),
-                               jsonGotVersion.get("patch",0))
+            gConfig.SetJSONVersion(jsonGotVersion.get("major",0),
+                                   jsonGotVersion.get("minor",0),
+                                   jsonGotVersion.get("patch",0))
             jsonGotVersion = jsonGotVersion["major"]
 
       REQUEST = {"method": "XBMC.GetInfoBooleans",
@@ -4362,12 +4456,12 @@ def checkConfig(option):
   # If auto detection enabled, when API level insufficient to read Textures DB
   # using JSON, fall back to SQLite3 calls
   if needDb and gConfig.DBJSON == "auto":
-    if gConfig.JSONVER < gConfig.JSONVER_TEXTURE:
-      gConfig.USEJSONDB = False
-      gLogger.log("JSON Texture DB API not supported - will use SQLite to access Texture DB")
-    else:
+    if gConfig.JSON_HAS_TEXTUREDB:
       # If able to use JSON for Texture db access, no need to check DB availability
       gConfig.USEJSONDB = True
+    else:
+      gConfig.USEJSONDB = False
+      gLogger.log("JSON Texture DB API not supported - will use SQLite to access Texture DB")
 
   # Don't access Textures database if using JSON API (either auto-detected or set explicitly)
   if needDb and gConfig.USEJSONDB:
@@ -4404,7 +4498,7 @@ def checkConfig(option):
           "       as an absolute path or relative to the userdata property.\n\n" \
           "       The currently configured Thumbnails path is:\n" \
           "       %s\n\n" \
-          "       Check settings in properties file %s\n" % (gConfig.getFilePath(), gConfig.CONFIG_NAME)
+          "       Check userdata and thumbnails settings in properties file %s\n" % (gConfig.getFilePath(), gConfig.CONFIG_NAME)
     gLogger.out(MSG)
     return False
 
@@ -4417,23 +4511,28 @@ def checkConfig(option):
 
   gConfig.postConfig()
 
+  if gLogger.VERBOSE and gLogger.LOGGING:
+    gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
+    gLogger.log("CONFIG VALUES: %s" % gConfig.dumpMemberVariables())
+
   return True
 
 def checkUpdate(argv, forcedCheck = False):
   (remoteVersion, remoteHash) = getLatestVersion(argv)
 
   if forcedCheck:
-    print("Current Version: v%s" % gConfig.VERSION)
-    print("Latest  Version: %s" % ("v" + remoteVersion if remoteVersion else "Unknown"))
-    print("")
+    gLogger.out("Current Version: v%s" % gConfig.VERSION, newLine=True)
+    gLogger.out("Latest  Version: %s" % ("v" + remoteVersion if remoteVersion else "Unknown"), newLine=True)
+    gLogger.out("", newLine=True)
 
   if remoteVersion and remoteVersion > gConfig.VERSION:
-    print("A new version of this script is available - use the \"update\" option to automatically apply update.")
-    print("")
+    out_method = gLogger.out if forcedCheck else gLogger.err
+    out_method("A new version of this script is available - use the \"update\" option to apply update.", newLine=True)
+    out_method("", newLine=True)
 
   if forcedCheck:
     url = gConfig.GITHUB.replace("//raw.","//").replace("/master","/blob/master")
-    print("Full changelog: %s/CHANGELOG.md" % url)
+    gLogger.out("Full changelog: %s/CHANGELOG.md" % url, newLine=True)
 
 def getLatestVersion(argv):
   # Need user agent etc. for analytics
@@ -4451,7 +4550,7 @@ def getLatestVersion(argv):
   USAGE = "unknown"
   if argv[0] in ["c", "C", "nc", "lc", "lnc"]:
     USAGE = "cache"
-  elif argv[0] in ["j", "J", "jd", "Jd"]:
+  elif argv[0] in ["j", "J", "jd", "Jd", "jr", "Jr"]:
     USAGE  = "dump"
   elif argv[0] in ["p", "P"]:
     USAGE  = "prune"
@@ -4595,10 +4694,12 @@ def main(argv):
   elif argv[0] == "f" and len(argv) == 2:
     sqlExtract("STATS", "", argv[1])
 
-  elif argv[0] in ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "qa", "qax", "query"]:
+  elif argv[0] in ["c", "C", "nc", "lc", "lnc",
+                   "j", "J", "jd", "Jd", "jr", "Jr",
+                   "qa", "qax", "query"]:
     _stats  = False
 
-    if argv[0] in ["j", "J", "jd", "Jd"]:
+    if argv[0] in ["j", "J", "jd", "Jd", "jr", "Jr"]:
       _action = "dump"
     elif argv[0] in ["qa", "qax"]:
       _action = "qa"
@@ -4612,8 +4713,9 @@ def main(argv):
     _rescan     = True if argv[0] == "qax" else False
     _lastRun    = True if argv[0] in ["lc", "lnc"] else False
     _nodownload = True if argv[0] in ["nc", "lnc"] else False
-    _decode     = True if argv[0] in ["jd", "Jd"] else False
-    _extraFields= True if argv[0] in ["J", "Jd"] else False
+    _decode     = True if argv[0] in ["jd", "Jd", "jr", "Jr"] else False
+    _ensure_ascii=False if argv[0] in ["jr", "Jr"] else True
+    _extraFields= True if argv[0] in ["J", "Jd", "Jr"] else False
 
     _filter     = ""
     _query      = ""
@@ -4651,7 +4753,8 @@ def main(argv):
       for _media in _multi_call:
         jsonQuery(_action, mediatype=_media, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
-                  rescan=_rescan, decode=_decode, extraFields=_extraFields, query=_query)
+                  rescan=_rescan, decode=_decode, ensure_ascii=_ensure_ascii,
+                  extraFields=_extraFields, query=_query)
       if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
     else:
       usage(1)
@@ -4663,10 +4766,10 @@ def main(argv):
     sqlDelete(argv[1:])
 
   elif argv[0] == "r":
-    dirScan(removeOrphans=False)
+    orphanCheck(removeOrphans=False)
 
   elif argv[0] == "R":
-    dirScan(removeOrphans=True)
+    orphanCheck(removeOrphans=True)
 
   elif argv[0] == "p" and len(argv) == 1:
     pruneCache(purge_nonlibrary_artwork=False)
@@ -4754,6 +4857,8 @@ def main(argv):
 
   else:
     usage(1)
+
+  gLogger.log("Successful completion")
 
   sys.exit(EXIT_CODE)
 

@@ -1,7 +1,9 @@
 
 #Changelog
 
-## 30/10/2013
+## 04/11/2013
+* Replace `--add` argument with `--artwork`
+* Replace `--nodownload/-n` with `--readonly/-r`
 * Fix: Foreign encoding in filenames
 
 ## 21/10/2013

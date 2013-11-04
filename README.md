@@ -25,7 +25,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[r, R]** Reverse query cache, identifying any "orphaned" files no longer referenced by texture cache database, with option to auto-delete files
 
-**[j, J, jd, Jd]** Query media library using JSON API, and output content using JSON notation (and suitable for further external processing). The **jd** and **Jd** options will decode (unquote) all artwork urls. **J** and **Jd** options will include additional user configurable fields when querying media library (see [properties file](#optional-properties-file))
+**[j, J, jd, Jd, jr, Jr]** Query media library using JSON API, and output content using JSON notation (and suitable for further external processing). The **jd** and **Jd** options will decode (unquote) all artwork urls. **jr** and **Jr** options will not guarantee ASCII output of decoded urls (ie. the data will be "raw"). **J**, **Jd** and **Jr** options will include additional user configurable fields when querying media library (see [properties file](#optional-properties-file))
 
 **[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Define QA properties using `qa.zero.*`, `qa.blank.*` and `qa.art.*` properties. Enable "[qa.file = yes](#optional-properties-file)" for file validation during QA.
 
@@ -45,7 +45,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[aclean, vclean]** Clean audio/video library
 
-**[directory]** Obtain directory listing for a specific path (see **sources**)
+**[directory, rdirectory]** Obtain directory listing for a specific path (see **sources**). Use **rdirectory** for a recursive listing.
 
 **[sources]** List of sources for a specific media class (video, music, pictures, files, programs), optionally filtered by label (eg. "My Movies")
 
@@ -379,7 +379,7 @@ extrajson.tvshows.season =
 extrajson.tvshows.episode =
 qaperiod = 30
 qa.file = no
-qa.fail.urls = image://video, image://music
+qa.fail.urls = ^video, ^music
 qa.warn.urls =
 qa.art.addons =
 qa.art.albums =
@@ -410,7 +410,7 @@ qa.zero.tvshows.season =
 qa.zero.tvshows.tvshow =
 cache.castthumb = no
 cache.hideallitems = no
-cache.ignore.types = image://video, image://music
+cache.ignore.types = ^video, ^music
 prune.retain.types =
 logfile =
 logfile.verbose = no
@@ -433,7 +433,7 @@ The `qa.art.*`, `qa.blank.*` and `qa.zero.*` files can be used to replace or add
 
 Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes` if you require cast artwork to be re-cached, or considered when pruning.
 
-Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `image://video` and `image://music`. Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
+Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `^video` and `^music` (not that these patterns are applied after the image:// prefix has been removed from the url). Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
 
 Prevent caching of "Season All" posters/fanart/banners by enabling `cache.hideallitems` - default is to cache these items. Corresponds with similar hideallitems value in advancedsettings.xml.
 

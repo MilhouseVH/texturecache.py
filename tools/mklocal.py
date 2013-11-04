@@ -73,6 +73,12 @@ def debug(indent, msg):
   global VERBOSE
   if VERBOSE: printerr("##DEBUG## %s%s" % (" "*(indent*2), msg))
 
+def debug2(atype, msg, value1="", value2=""):
+  if value1:
+    debug(2, "[%-10s] %-40s %s%s" % (atype, msg, value1, value2))
+  else:
+    debug(2, "[%-10s] %s" % (atype, msg))
+
 def addEllipsis(maxlen, aStr):
   if len(aStr) <= maxlen: return aStr
 
@@ -97,19 +103,13 @@ def pathToAltLocal(infile):
   if not LOCAL_ALT: return infile
   return re.sub('^%s' % XBMC_PATH, LOCAL_ALT, infile)
 
-def pathToXBMC(infile, encode=True):
+def pathToXBMC(infile):
   global LOCAL_DIR, XBMC_PATH
-
-  if encode: infile = fsPathToXBMC(infile)
 
   if not infile: return infile
   if not LOCAL_DIR: return infile
   if not XBMC_PATH: return infile
   return re.sub('^%s' % LOCAL_DIR, XBMC_PATH, infile)
-
-# Encode file system paths such that Bröderna (fs) -> BrÃ¶derna (media library)
-def fsPathToXBMC(path):
-  return path.encode("utf-8").decode("iso-8859-1")
 
 def itemListToDict(aList):
   newDict = {}
@@ -168,18 +168,15 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
     newname = processArtwork(args, mediatype, mediatitle, aitem, mediafile, oldname, artpath)
 
-    if mediatype == "season":
-      debug(2, "[%s] Can't assign values to library for season artwork, ignoring [%s]" % (aitem, newname))
+    if not newname and oldname:
+      debug2(aitem, "Assigning null value to library item")
+      workitem["items"]["art.%s" % aitem] = None
     else:
-      if not newname and oldname:
-        debug(2, "[%s] Assigning null value to library (removal)" % (aitem))
-        workitem["items"]["art.%s" % aitem] = None
+      if newname and newname != oldname:
+        debug2(aitem, "Changing library value to:", newname)
+        workitem["items"]["art.%s" % aitem] = newname
       else:
-        if newname and newname != oldname:
-          debug(2, "[%s] Changing library value to [%s]" % (aitem, newname))
-          workitem["items"]["art.%s" % aitem] = newname
-        else:
-          debug(2, "[%s] No library change required, keeping: [%s]" % (aitem, oldname))
+        debug2(aitem, "No library change required, keeping:", oldname)
 
   if args.check:
     clist = args.check if args.check != ["all"] else [x for x in art if not x.startswith("tvshow.") ]
@@ -199,17 +196,17 @@ def processArtwork(args, mediatype, title, atype, filename, currentname, pathnam
   for source_type in [".png", ".jpg"]:
     target = "%s%s" % (pathname, source_type)
     if os.path.exists(target):
-      debug(2, "[%s] Found pre-existing local: [%s]" % (atype, target))
+      debug2(atype, "Found pre-existing local file:", target)
       target = pathToXBMC(target)
-      debug(2, "[%s] Converting filename to XBMC path: [%s]" % (atype, target))
+      debug2(atype, "Converting local filename to XBMC path:", target)
       return target
 
   # If we don't currently have a remote source, return nothing
   if not currentname: return None
 
   # If we're not downloading, just return the current file name
-  if args.nodownload:
-    warning(args, "**  NEEDED  **", atype, title, "Downloading is disabled", currentname)
+  if args.readonly:
+    warning(args, "**  NEEDED  **", atype, title, "readonly enabled", currentname)
     return currentname
 
   # We're going to create a new file.
@@ -220,7 +217,7 @@ def processArtwork(args, mediatype, title, atype, filename, currentname, pathnam
   # Download the new artwork and convert the name of the new file
   # back into a valid XBMC path.
   fname = pathToXBMC(getImage(args, title, atype, filename, currentname, target))
-  debug(2, "[%s] Converting filename to XBMC path: [%s]" % (atype, fname))
+  debug2(atype, "Converting local filename to XBMC path:", fname)
   return fname
 
 def getImage(args, title, atype, filename, source, target):
@@ -241,31 +238,34 @@ def getImage(args, title, atype, filename, source, target):
   if not source.startswith("http://"):
     newsource = source
     found_file = os.path.exists(newsource)
-    debug(2, "[%s] Lookup non-HTTP file [%s] [%s]" % (atype, newsource, "SUCCESS" if found_file else "FAIL"))
+    debug2(atype, "Lookup non-HTTP file", newsource, ("[%s]" % "SUCCESS" if found_file else "FAIL"))
 
     # Try using name of file plus artwork type and same extension as
     # alternative source
     if LOCAL_ALT and not found_file:
       newsource = "%s-%s%s" % (pathToAltLocal(os.path.splitext(filename)[0]), atype, os.path.splitext(source)[1])
       found_file = os.path.exists(newsource)
-      debug(2, "[%s] Lookup non-HTTP file [%s] [%s] (based on media filename)" % (atype, newsource, "SUCCESS" if found_file else "FAIL"))
+      debug2(atype, "Lookup non-HTTP file", newsource, ("[%s] (based on media filename)" % "SUCCESS" if found_file else "FAIL"))
 
     if found_file:
       if not args.dryrun:
-        debug(2, "[%s] Copying to local: [%s]" % (atype, target))
-        dtarget= os.path.dirname(target)
-        if not os.path.exists(dtarget): os.makedirs(dtarget)
-        shutil.copyfile(newsource, target)
-        debug(2, "[%s] Copied to local %d bytes: [%s]" % (atype, os.path.getsize(target), target))
+        if newsource != target:
+          debug2(atype, "Copying to local file:", target)
+          dtarget= os.path.dirname(target)
+          if not os.path.exists(dtarget): os.makedirs(dtarget)
+          shutil.copyfile(newsource, target)
+          debug2(atype, ("Copied %d bytes of data:" % os.path.getsize(target)), target)
+        else:
+          debug2(atype, "WARNING! target is same as source - skipping copy:", target)
       else:
-        debug(2, "[%s] (DRYRUN) Skipping copy to local: [%s]" % (atype, target))
+        debug2(atype, "Dry run, skipping file creation:", target)
 
       info(args, "%9d bytes" % os.path.getsize(newsource), atype, title, None, None, target=target)
       return target
 
     # Couldn't copy anything and don't have an alternative source, so stay with current local file
     if not LOCAL_ALT:
-      debug(2, "[%s] No alternate source for non-HTTP files, using: [%s]" % (atype, target))
+      debug2(atype, "No alternate source for non-HTTP files, using:", target)
       return target
 
     warning(args, "**UNAVAILABLE**", atype, title, "Source not readable", source)
@@ -275,12 +275,12 @@ def getImage(args, title, atype, filename, source, target):
   # Download from the web site...
   idata = ""
   try:
-    debug(2, "[%s] Downloading URL [%s]" % (atype, source))
+    debug2(atype, "Downloading URL", source)
     response = urllib2.urlopen(source)
     idata = response.read()
-    debug(2, "[%s] Successfully downloaded %d bytes of data" % (atype, len(idata)))
+    debug2(atype, ("Downloaded %d bytes of data:" % len(idata)), source)
   except Exception as e:
-    debug(2, "[%s] Failure to download [%s]" % (atype, str(e)))
+    debug2(atype, "Failure to download!", str(e))
     warning(args, "**UNAVAILABLE**", atype, title, str(e), source)
     NOT_AVAILABLE_CACHE[source] = 0
     return None
@@ -295,11 +295,11 @@ def getImage(args, title, atype, filename, source, target):
       ifile.flush()
       os.fsync(ifile.fileno())
       ifile.close()
-      debug(2, "[%s] Download written to [%s]" % (atype, target))
+      debug2(atype, "Downloaded file written to:", target)
     except:
       raise
   else:
-      debug(2, "[%s] (DRYRUN) Skipping file creation: [%s]" % (atype, target))
+      debug2(atype, "Dry run, skipping file creation:", target)
 
   info(args, "%9d bytes" % len(idata), atype, title, None, None, target=target)
   return target
@@ -332,15 +332,18 @@ def getJSONdata(args):
 def showConfig(args, mDownload):
   global LOCAL_DIR, LOCAL_ALT, XBMC_PATH
 
+  def _blank(value):
+    return (value if value else "Not specified")
+
   printerr("Current configuration:")
   printerr("")
-  printerr("  Local Path : %s" % LOCAL_DIR)
-  printerr("  Alt Local  : %s" % LOCAL_ALT)
-  printerr("  XBMC Path  : %s" % XBMC_PATH)
-  printerr("  Downloading: %s" % ("No" if args.nodownload else "Yes"))
+  printerr("  Local Path : %s" % _blank(LOCAL_DIR))
+  printerr("  Alt Local  : %s" % _blank(LOCAL_ALT))
+  printerr("  XBMC Path  : %s" % _blank(XBMC_PATH))
+  printerr("  Read Only  : %s" % ("Yes" if args.readonly else "No"))
   printerr("  Dry Run    : %s" % ("Yes" if args.dryrun else "No"))
   printerr("")
-  printerr("  Downloading: %s" % listToString(mDownload, translate=True))
+  printerr("  Artwork:     %s" % listToString(mDownload, translate=True))
   if args.season:
     printerr("")
     printerr("  TV Seasons : %s" % listToString(args.season))
@@ -352,7 +355,7 @@ def showConfig(args, mDownload):
   printerr("")
 
 def listToString(aList, translate=False):
-  if not aList: return "None"
+  if not aList: return "Not Specified"
 
   tmpStr = ""
 
@@ -396,21 +399,21 @@ def init():
 
   parser.add_argument("-A", "--altlocal", metavar="PATH", \
                       help="Alternate local directory which may contain artwork that can be READ \
-                            and copied to --local, could be the original source folder.")
+                            and copied to --local, could be the original source folder")
 
   parser.add_argument("-i", "--input", default="-", const="-", nargs="?", metavar="FILENAME", \
                       help="Optional FILENAME containing JSON movie/tvshow data for processing. \
-                            Read from stdin if FILENAME is - or not specified.")
+                            Read from stdin if FILENAME is - or not specified")
 
   parser.add_argument("-o", "--output", const="-", nargs="?", metavar="FILENAME", \
                       help="Output a data structure suitable for consumption by texturecache.py [test]set, \
                             used to update an XBMC media library converting remote urls into \
-                            local urls. Written to stdout if FILENAME is - or not specified.")
+                            local urls. Written to stdout if FILENAME is - or not specified")
 
   parser.add_argument("--dryrun", action="store_true", \
                       help="Don't create anything (although downloads will be attempted)")
 
-  parser.add_argument("-n", "--nodownload", action="store_true", \
+  parser.add_argument("-r", "--readonly", action="store_true", \
                       help="Don't download (or, if specified, copy from --altlocal) new artwork, \
                             only use existing --local artwork")
 
@@ -418,17 +421,18 @@ def init():
                       help="Don't display a warning for media files with a path that does not match \
                             that set by --prefix")
 
-  parser.add_argument("-a", "--add", nargs="+", metavar="TYPE", \
-                      help="Add named artwork TYPE(s) for download, eg. --add discart banner landscape. \
-                            Specify TYPE:NAME if NAME differs from TYPE, eg. \"clearlogo:logo\"")
+  parser.add_argument("-a", "--artwork", nargs="+", metavar="TYPE", \
+                      help="Artwork TYPE(s) for download, eg. \"--artwork  discart banner\" \
+                            Specify TYPE:SUFFIX if SUFFIX differs from TYPE, \
+                            eg. \"--artwork thumb:poster\" would create \"thumb\" library items \
+                            with a \"-poster\" filename suffix")
 
   parser.add_argument("-c", "--check", nargs="+", metavar="TYPE", \
                       help="Check the named artwork TYPE(s) - or \"all\" - and warn if any internet \
                             (http) URLs are detected")
 
   parser.add_argument("-s", "--season", nargs="*", metavar="TYPE", \
-                      help="For TV Shows, process season items (default: poster banner landscape). \
-                            Not possible to modify media library due to non-existent \"VideoLibrary.SetSeasonDetails\" method.")
+                      help="For TV Shows, process season items (default: poster banner landscape)")
 
   parser.add_argument("-e", "--episode", nargs="*", metavar="TYPE", \
                       help="For TV Shows, process episode items (default: thumb)")
@@ -457,10 +461,10 @@ def init():
 
   # Disable downloading if output path not set, or prefix not known
   # as then impossible to create valid output filenames
-  if not LOCAL_DIR: args.nodownload = True
-  if not XBMC_PATH: args.nodownload = True
+  if not LOCAL_DIR: args.readonly = True
+  if not XBMC_PATH: args.readonly = True
 
-  if not args.nodownload:
+  if not args.readonly:
     if not os.path.exists(LOCAL_DIR):
       parser.error("local DIRECTORY %s does not exist!" % LOCAL_DIR)
     if LOCAL_ALT and not os.path.exists(LOCAL_ALT):
@@ -473,17 +477,18 @@ def init():
 
 def main(args):
 
-  # If running just a simple --check, remove all download items
-  if not (args.local and args.prefix) and args.nodownload:
+  download_items = itemListToDict(args.artwork)
+  season_items = itemListToDict(args.season)
+  episode_items = itemListToDict(args.episode)
+
+  if args.verbose: showConfig(args, download_items)
+
+  # If --readonly and no --local or --prefix specified, don't download anything
+  # as without anywhere to look for existing art there's no point...
+  if args.readonly and not (args.local and args.prefix):
     download_items = {}
     season_items = {}
     episode_items = {}
-  else:
-    download_items = itemListToDict(args.add)
-    season_items = itemListToDict(args.season)
-    episode_items = itemListToDict(args.episode)
-
-  if args.verbose: showConfig(args, download_items)
 
   data = getJSONdata(args)
 

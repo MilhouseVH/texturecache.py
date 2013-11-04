@@ -1,9 +1,21 @@
 #Changelog
 
-##Version 1.0.4 (29/10/2013)
-* Add: New Texture JSON API. Use JSON to access Texture*.db rather than via SQLite when JSON API version of the client is v6.6.3+. Use `@dbjson=no` to force old SQLite behaviour, `@dbjson=yes` to force JSON API, or leave `@dbjson` undefined for auto-selection (ie. use JSON API when available, fall back to SQLite if not). When using JSON to access Texture*.db, only the following options still require direct file system access to the Userdata\Thumbnails folder: `f`, `P`, `R`, `S`, `X`, `Xd`. All other options require only a valid `xbmc.host` with all data accessed via JSON.
-* Add: Ability to remove artwork urls from the media library by setting url value to "null" using `set` option is now supported (requires JSON API v6.6.3+)
-* Add: `rdirectory` option - recursive version of `directory`
+##Version 1.0.4 (04/11/2013)
+* Add: New Texture JSON API (requires JSON API v6.10.0+).
+
+  Access the Textures*.db database using JSON rather than via SQLite. Use `@dbjson=no` to force old SQLite behaviour, `@dbjson=yes` to force JSON API, or leave `@dbjson` undefined for auto-selection (ie. use JSON API when available, fall back to SQLite when not).
+
+  When using JSON to access Textures*.db, only the following options still require direct file system access to the `Userdata\Thumbnails` folder: `f`, `r`, `R`, `S`, `X`, `Xd`. All other options (including prune, `p` and `P`) now require only a valid `xbmc.host` and  no filesystem access so no need to mount a remote share while pruning a remote client.
+
+  As pruning no longer has (or requires) access to the Thumbnails folder when using JSON API, I've had to remove the "orphan" warning at the end of the prune process.
+* Add: Ability to remove artwork urls from the media library with `set` option by specifyng url value of `"null"` (or `null`, or `""`) (requires JSON API v6.9.0+)
+* Add: Support for setting of `season` fields (requires JSON API v6.10.0+)
+* Add: Support for setting of `set` (movie set) fields (requires JSON API v6.12.0+)
+* Add: `rdirectory` option, a recursive version of `directory`
+* Add: `jr` and `Jr` options for "raw" JSON output that isn't guaranteed to be ASCII (urls will be decoded/unquoted, however)
+* Chg: For reasons of consistency, `cache.ignore.types` patterns no longer need to specify `image://` prefix. Defaults are now: `^video, ^music`. Old patterns that include `^image://` will be automatically corrected to remove `image://`.
+* Fix: Reworked charset encoding, hopefully saner than before, now with fewer conversions and increased consistency between Python2 & Python3.
+* Fix: Added some memory optimisations to try and reduce memory consumption on low memory devices (eg. R-Pi)
 
 ##Version 1.0.3 (25/10/2013)
 * Fix: [issue #9](https://github.com/MilhouseVH/texturecache.py/issues/9), error during prune when dds file already deleted
