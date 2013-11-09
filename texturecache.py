@@ -4808,22 +4808,11 @@ def downloadLatestVersion(argv, force=False):
 
   print("Successfully updated from v%s to v%s" % (gConfig.VERSION, remoteVersion))
 
-def t1():
-  file = "image://I:\\Filmes\\007 Collection\\22.James.Bond.007.Quantum.of.Solace/banner.jpg/"
-
-  file = MyUtility.normalise(file, strip=True)
-  print(file)
-  print(MyUtility.fixSlashes(file))
-
-  sys.exit(2)
-
 def main(argv):
 
   loadConfig(argv)
 
   if len(argv) == 0: usage(1)
-
-#  t1()
 
   if not checkConfig(argv[0]): sys.exit(2)
 
