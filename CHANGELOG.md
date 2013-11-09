@@ -1,5 +1,14 @@
 #Changelog
 
+##Version 1.0.5 (09/11/2013)
+* Add: Augment movie set dump (`j sets`, `J sets` etc.) with list of member movies. Movie entries will be ordered by `sorttitle` if present in media library. Suppress this behaviour with `@setmembers=no`. When using `J`, `Jd` and `Jr` options, specify additional *movie* fields with `@extrajson.movies`, otherwise default movie fields will be returned (`movieid`, `file`, `title` and `sorttile`).
+* Add: `purge hashed site [site]` and `purge unhashed site [site]` options to remove artwork associated with sites, with or without hashes. Use `purgetest` in place of `purge` to see which artwork items would be selected for removal.
+* Chg: If SQLite3 module not available, don't complain just force `@dbjson=yes` (should simplify ATV2/Gotham installations)
+* Chg: Make `@logfile.verbose=yes` the default setting - has no impact unless logging is actually enabled with `@logfile=<filename>`
+* Chg: If platform is darwin (ie. ATV2), use a better default `userdata` path
+* Fix: Correct mangled slashes also in the quoted download url, so that the requested (and now unmangled) url creates an unmangled entry in the Textures db
+* Fix: Correctly validate `streamdetails` during `qa`/`qax` if specified on `qa.blank.*`
+
 ##Version 1.0.4 (04/11/2013)
 * Add: New Texture JSON API (requires JSON API v6.10.0+).
 
@@ -8,7 +17,7 @@
   When using JSON to access Textures*.db, only the following options still require direct file system access to the `Userdata\Thumbnails` folder: `f`, `r`, `R`, `S`, `X`, `Xd`. All other options (including prune, `p` and `P`) now require only a valid `xbmc.host` and  no filesystem access so no need to mount a remote share while pruning a remote client.
 
   As pruning no longer has (or requires) access to the Thumbnails folder when using JSON API, I've had to remove the "orphan" warning at the end of the prune process.
-* Add: Ability to remove artwork urls from the media library with `set` option by specifyng url value of `"null"` (or `null`, or `""`) (requires JSON API v6.9.0+)
+* Add: Ability to remove artwork urls from the media library with `set` option by specifying url value of `"null"` (or `null`, or `""`) (requires JSON API v6.9.0+)
 * Add: Support for setting of `season` fields (requires JSON API v6.10.0+)
 * Add: Support for setting of `set` (movie set) fields (requires JSON API v6.12.0+)
 * Add: `rdirectory` option, a recursive version of `directory`

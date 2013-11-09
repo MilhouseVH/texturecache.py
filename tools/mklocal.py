@@ -111,14 +111,110 @@ def pathToXBMC(infile):
   if not XBMC_PATH: return infile
   return re.sub('^%s' % LOCAL_DIR, XBMC_PATH, infile)
 
-def itemListToDict(aList):
-  newDict = {}
+def itemList(aList):
+  newList = []
   if aList:
     for aname in aList:
       (aname, value) = (aname, aname) if aname.find(":") == -1 else aname.split(":")
       if aname == "clearlogo" and value == "clearlogo": value = "logo"
-      newDict.update({aname: value})
-  return newDict
+      newList.append({"type": aname, "suffix": value})
+  return newList
+
+def getSlash(filename):
+  # Share (eg. "smb://", "nfs://" etc.)
+  if re.search("^.*://.*", filename):
+    return "/"
+  else:
+    bslash = filename.find("\\")
+    fslash = filename.find("/")
+    if bslash == -1: bslash = len(filename)
+    if fslash == -1: fslash = len(filename)
+    if bslash < fslash:
+      return "\\"
+    else:
+      return "/"
+
+def findSetParent(setname, members, level=0):
+#  parent = findTitleSetParent(setname, members)
+#  if not parent:
+#    parent = findMostCommonSetParent(setname, members)
+#  return parent
+  return findMostFrequentSetParent(setname, members)
+
+def findTitleSetParent(setname, members):
+  for member in members:
+    file = os.path.dirname(member["file"])
+    pos = file.rfind(setname)
+    if pos != -1:
+      return "%s%s" % (file[:pos + len(setname)], getSlash(file))
+  else:
+    return None
+
+# Use this method if unable to find parent based on title, will
+# try to match based on a common parent
+def findCommonSetParent(setname, members, level=0):
+  commonparent = os.path.dirname(members[0]["file"])
+  for i in range(0, level):
+    commonparent = os.path.dirname(commonparent)
+    if commonparent == "": return ""
+
+  sameparent = True
+  for member in members:
+    file = member["file"]
+    if not file.startswith(commonparent):
+      sameparent = False
+      break
+
+  if sameparent:
+    return "%s%s" % (commonparent, getSlash(commonparent))
+  else:
+    return findCommonSetParent(setname, members, level+1)
+
+# Use this method if unable to find parent based on title, will
+# find the most commonly referenced parent folder within the set.
+# Uses recursion to build up a list of path frequencies, then returns
+# the longest instance of the most frequently used path.
+def findMostFrequentSetParent(setname, members, level=0, counts=None):
+  # XBMC sets will either be together in one shared folder, or individual
+  # folders below a shared parent, so only need to consider two levels (the file
+  # folder and the parent)
+  if level > 1: return
+
+  if not counts: counts = {}
+
+  # Walk "back" up the path for each level, counting frequency
+  for member in members:
+    parent = os.path.dirname(member["file"])
+    for i in range(0, level):
+      parent = os.path.dirname(parent)
+      if not parent: break
+    if parent != "":
+      counts[parent] = counts.get(parent, 0) + 1
+
+  findMostFrequentSetParent(setname, members, level+1, counts)
+
+  if level == 0:
+    # Sort paths into descending order of frequency
+    sorted_counts = sorted(counts, key=counts.get, reverse=True)
+
+    maxfreq = counts[sorted_counts[0]]
+
+    # Now sort just the most frquently used paths by descending length
+    sorted_counts = [x for x in sorted(counts, key=len, reverse=True) if counts[x] == maxfreq]
+
+    return "%s%s" % (sorted_counts[0], getSlash(sorted_counts[0]))
+
+def formatArtworkFilename(mediatype, filename, suffix, season):
+  if mediatype in ["movie", "episode"]:
+    return "%s-%s" % (filename, suffix)
+  elif mediatype == "season":
+    if season == 0:
+      season_name = "season-specials"
+    else:
+      season_name = "season%02d" % season
+    return "%s%s-%s" % (filename, season_name, suffix)
+  else:
+    return "%s%s" % (filename, suffix)
 
 def processItem(args, mediatype, media, download_items, showTitle=None, showPath=None):
   global XBMC_PATH, COUNT, TOTAL
@@ -128,8 +224,15 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   workitem = {}
   workitem["items"] = {}
+  keepitem = {}
+  keepitem["items"] = {}
 
-  mediafile = media.get("file", showPath)
+  # Use first file in files[] for "set"
+  if mediatype == "set":
+    mediafile = findSetParent(media["title"], media["tc.members"])
+  else:
+    mediafile = media.get("file", showPath)
+
   mediatitle = "%s %s" % (showTitle, media["label"]) if showTitle else media["label"]
 
   debug(0, "mediatype [%s]; mediatitle [%s]" % (mediatype, mediatitle))
@@ -144,51 +247,52 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   debug(1, "local root name would be [%s]" % (filename))
 
-  if mediatype != "season":
+  # seasonid requires JSON API v6.10.0+
+  libraryid = "%sid" % mediatype
+  if libraryid in media:
     workitem["type"] = mediatype
     workitem["title"] = mediatitle
-    workitem["libraryid"] = media["%sid" % mediatype]
+    workitem["libraryid"] = media[libraryid]
 
   art = media["art"]
 
-  for aitem in download_items:
-    oldname = art.get(aitem, None)
+  for artitem in download_items:
+    oldname = art.get(artitem["type"], None)
     if oldname: oldname = oldname[8:-1]
 
-    if mediatype in ["movie", "episode"]:
-      artpath = "%s-%s" % (filename, download_items[aitem])
-    elif mediatype == "season":
-      if media["season"] == 0:
-        season_num = "season-specials"
-      else:
-        season_num = "season%02d" % media["season"]
-      artpath = "%s%s-%s" % (filename, season_num, download_items[aitem])
-    else:
-      artpath = "%s%s" % (filename, download_items[aitem])
+    artpath = formatArtworkFilename(mediatype, filename, artitem["suffix"], media.get("season", None))
 
-    newname = processArtwork(args, mediatype, mediatitle, aitem, mediafile, oldname, artpath)
+    label = "art.%s" % artitem["type"]
+
+    if label in keepitem["items"]:
+      debug(1, "already found a value for artwork type [%s] - ignoring" % artitem["type"])
+      continue
+
+    newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath)
 
     if not newname and oldname:
-      debug2(aitem, "Assigning null value to library item")
-      workitem["items"]["art.%s" % aitem] = None
+      debug2(artitem["type"], "Assigning null value to library item")
+      workitem["items"][label] = None
     else:
       if newname and newname != oldname:
-        debug2(aitem, "Changing library value to:", newname)
-        workitem["items"]["art.%s" % aitem] = newname
+        debug2(artitem["type"], "Changing library value to:", newname)
+        workitem["items"][label] = newname
+        keepitem["items"][label] = newname
       else:
-        debug2(aitem, "No library change required, keeping:", oldname)
+        debug2(artitem["type"], "No library change required, keeping:", oldname)
+        keepitem["items"][label] = newname
 
   if args.check:
     clist = args.check if args.check != ["all"] else [x for x in art if not x.startswith("tvshow.") ]
-    for aitem in clist:
-      if aitem in art:
-        aname = art[aitem][8:-1]
+    for artitem in clist:
+      if artitem in art:
+        aname = art[artitem][8:-1]
         if aname.startswith("http"):
-          info(args, "**REMOTE FILE**", aitem, mediatitle, "Remote URL found", aname)
+          info(args, "**REMOTE FILE**", artitem, mediatitle, "Remote URL found", aname)
 
   return workitem
 
-def processArtwork(args, mediatype, title, atype, filename, currentname, pathname):
+def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname):
   debug(1, "artwork type [%s] known by XBMC as [%s]" % (atype, currentname))
 
   # See if we already have a file of the desired artwork type, either in
@@ -216,11 +320,11 @@ def processArtwork(args, mediatype, title, atype, filename, currentname, pathnam
 
   # Download the new artwork and convert the name of the new file
   # back into a valid XBMC path.
-  fname = pathToXBMC(getImage(args, title, atype, filename, currentname, target))
+  fname = pathToXBMC(getImage(args, mediatype, media, title, atype, filename, currentname, target))
   debug2(atype, "Converting local filename to XBMC path:", fname)
   return fname
 
-def getImage(args, title, atype, filename, source, target):
+def getImage(args, mediatype, media, title, atype, filename, source, target):
   global NOT_AVAILABLE_CACHE, LOCAL_ALT
 
   # If it's not a remote file, maybe we just need to copy it from
@@ -238,14 +342,19 @@ def getImage(args, title, atype, filename, source, target):
   if not source.startswith("http://"):
     newsource = source
     found_file = os.path.exists(newsource)
-    debug2(atype, "Lookup non-HTTP file", newsource, ("[%s]" % "SUCCESS" if found_file else "FAIL"))
+    debug2(atype, "Lookup non-HTTP file using altlocal path:", newsource, (" [%s]" % ("SUCCESS" if found_file else "FAIL")))
 
     # Try using name of file plus artwork type and same extension as
     # alternative source
     if LOCAL_ALT and not found_file:
-      newsource = "%s-%s%s" % (pathToAltLocal(os.path.splitext(filename)[0]), atype, os.path.splitext(source)[1])
-      found_file = os.path.exists(newsource)
-      debug2(atype, "Lookup non-HTTP file", newsource, ("[%s] (based on media filename)" % "SUCCESS" if found_file else "FAIL"))
+      currentsource = newsource
+
+      newsource = formatArtworkFilename(mediatype, pathToAltLocal(os.path.splitext(filename)[0]), atype, media.get("season", None))
+      newsource = "%s%s" % (newsource, os.path.splitext(source)[1])
+
+      if newsource != currentsource:
+        found_file = os.path.exists(newsource)
+        debug2(atype, "Lookup non-HTTP file using altlocal path:", newsource, (" [%s] (based on media filename)" % ("SUCCESS" if found_file else "FAIL")))
 
     if found_file:
       if not args.dryrun:
@@ -268,7 +377,7 @@ def getImage(args, title, atype, filename, source, target):
       debug2(atype, "No alternate source for non-HTTP files, using:", target)
       return target
 
-    warning(args, "**UNAVAILABLE**", atype, title, "Source not readable", source)
+    warning(args, "**UNAVAILABLE**", atype, title, "Source not available", source)
     NOT_AVAILABLE_CACHE[source] = 0
     return None
 
@@ -329,7 +438,7 @@ def getJSONdata(args):
 
   return jdata
 
-def showConfig(args, mDownload):
+def showConfig(args, download_items, season_items, episode_items):
   global LOCAL_DIR, LOCAL_ALT, XBMC_PATH
 
   def _blank(value):
@@ -343,13 +452,13 @@ def showConfig(args, mDownload):
   printerr("  Read Only  : %s" % ("Yes" if args.readonly else "No"))
   printerr("  Dry Run    : %s" % ("Yes" if args.dryrun else "No"))
   printerr("")
-  printerr("  Artwork:     %s" % listToString(mDownload, translate=True))
+  printerr("  Artwork:     %s" % listToString(download_items, translate=True))
   if args.season:
     printerr("")
-    printerr("  TV Seasons : %s" % listToString(args.season))
+    printerr("  TV Seasons : %s" % listToString(season_items, translate=True))
   if args.episode:
     printerr("")
-    printerr("  TV Episodes: %s" % listToString(args.episode))
+    printerr("  TV Episodes: %s" % listToString(episode_items, translate=True))
   printerr("")
   printerr("  Checking   : %s" % listToString(args.check))
   printerr("")
@@ -359,12 +468,19 @@ def listToString(aList, translate=False):
 
   tmpStr = ""
 
-  for aname in aList:
+  for artitem in aList:
     if tmpStr != "": tmpStr = "%s\n%s" % (tmpStr, " " * 15)
-    if translate:
-      tmpStr = "%s%-12s as %s.[png,jpg]" % (tmpStr, aname, aList[aname])
+
+    if "type" in artitem:
+      atype = artitem["type"]
+      asuffix = artitem["suffix"]
     else:
-      tmpStr = "%s%s" % (tmpStr, aname)
+      atype = asuffix = artitem
+
+    if translate:
+      tmpStr = "%s%-12s as %s.[png,jpg]" % (tmpStr, atype, asuffix)
+    else:
+      tmpStr = "%s%s" % (tmpStr, atype)
 
   return tmpStr
 
@@ -447,7 +563,7 @@ def init():
 
   VERBOSE = args.verbose
 
-  if args.season == []: args.season = ["poster","banner","landscape"]
+  if args.season == []: args.season = ["poster", "banner", "landscape"]
   if args.episode == []: args.episode = ["thumb"]
 
   LOCAL_DIR = args.local
@@ -477,18 +593,18 @@ def init():
 
 def main(args):
 
-  download_items = itemListToDict(args.artwork)
-  season_items = itemListToDict(args.season)
-  episode_items = itemListToDict(args.episode)
+  download_items = itemList(args.artwork)
+  season_items = itemList(args.season)
+  episode_items = itemList(args.episode)
 
-  if args.verbose: showConfig(args, download_items)
+  if args.verbose: showConfig(args, download_items, season_items, episode_items)
 
   # If --readonly and no --local or --prefix specified, don't download anything
   # as without anywhere to look for existing art there's no point...
   if args.readonly and not (args.local and args.prefix):
-    download_items = {}
-    season_items = {}
-    episode_items = {}
+    download_items = []
+    season_items = []
+    episode_items = []
 
   data = getJSONdata(args)
 
@@ -497,18 +613,21 @@ def main(args):
   for media in data:
     if "movieid" in media:
       mediatype = "movie"
+    elif "setid" in media:
+      mediatype = "set"
     elif "tvshowid" in media:
       mediatype = "tvshow"
     else:
-      printerr("FATAL: Unsupported input data - movie and tvshow data for now!")
+      printerr("FATAL: Unsupported input data - movie, sets and tvshow data for now!")
       sys.exit(1)
 
     mediatitle = media["label"]
-    mediafile = media["file"]
 
     if mediatype == "tvshow":
       workitem = processItem(args, "tvshow", media, download_items)
       if args.output and workitem["items"]: workitems.append(workitem)
+
+      mediafile = media["file"]
 
       for season in media.get("seasons",[]):
         if args.season:

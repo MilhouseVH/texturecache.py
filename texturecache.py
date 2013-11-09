@@ -30,11 +30,22 @@
 #
 ################################################################################
 
-import sqlite3 as lite
-import os, sys, platform, json, re, datetime, time
+import os, sys, platform, re, datetime, time
 import socket, base64, hashlib
 import threading, random
 import errno, codecs
+
+try:
+  import json
+except:
+  import simplejson as json
+
+# We can use JSON API for Textures.db access, so if sqlite3 module
+# is not available, it's not terminal
+try:
+  import sqlite3 as lite
+except ImportError:
+  lite = None
 
 if sys.version_info >= (3, 0):
   import configparser as ConfigParser
@@ -52,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.4"
+    self.VERSION="1.0.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -66,11 +77,12 @@ class MyConfiguration(object):
     self.HAS_PVR = False
 
     # These features only enabled by the respective API version
-    self.JSON_VER_CAPABILITIES = {"setresume":   (6,  2, 0),
-                                  "texturedb":   (6,  9, 0),
-                                  "removeart":   (6,  9, 1),
-                                  "setseason":   (6, 10, 0),
-                                  "setmovieset": (6, 12, 0)}
+    self.JSON_VER_CAPABILITIES = {"setresume":    (6,  2, 0),
+                                  "texturedb":    (6,  9, 0),
+                                  "removeart":    (6,  9, 1),
+                                  "setseason":    (6, 10, 0),
+                                  "setmovieset":  (6, 12, 0),
+                                  "filternullval":(0,  0, 0)}
 
     self.SetJSONVersion(0, 0, 0)
 
@@ -134,9 +146,13 @@ class MyConfiguration(object):
     self.IDFORMAT = self.getValue(config, "format", "%06d")
     self.FSEP = self.getValue(config, "sep", "|")
 
+    _atv2_path = "/User/Library/Preferences/XBMC/userdata"
+
     #Windows
     if sys.platform == "win32":
       _USER_DEFAULT = "%s\\XBMC\\userdata" % os.environ["appdata"]
+    elif sys.platform == "darwin" and os.path.exists(_atv2_path):
+      _USER_DEFAULT = _atv2_path
     else:
       _USER_DEFAULT = "~/.xbmc/userdata"
 
@@ -144,8 +160,14 @@ class MyConfiguration(object):
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
-    self.DBJSON = self.getValue(config, "dbjson", "auto")
-    self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
+    # If there is no SQLite3 module available, force JSON API usage instead
+    if not lite:
+      self.DBJSON = "yes"
+      self.USEJSONDB = True
+    else:
+      # if dbjson not specified, auto-detect otherwise should be yes/no
+      self.DBJSON = self.getValue(config, "dbjson", "auto")
+      self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
 
     if self.XBMC_BASE[-1:] not in ["/", "\\"]: self.XBMC_BASE += "/"
     if self.THUMBNAILS[-1:] not in ["/", "\\"]: self.THUMBNAILS += "/"
@@ -160,6 +182,12 @@ class MyConfiguration(object):
     self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
     web_user = self.getValue(config, "webserver.username", "")
     web_pass = self.getValue(config, "webserver.password", "")
+
+    self.WEB_CONNECTTIMEOUT = self.getValue(config, "webserver.ctimeout", 0.5, allowundefined=True)
+    if self.WEB_CONNECTTIMEOUT: self.WEB_CONNECTTIMEOUT = float(self.WEB_CONNECTTIMEOUT)
+
+    self.RPC_CONNECTTIMEOUT = self.getValue(config, "rpc.ctimeout", 0.5, allowundefined=True)
+    if self.RPC_CONNECTTIMEOUT: self.RPC_CONNECTTIMEOUT = float(self.RPC_CONNECTTIMEOUT)
 
     if (web_user and web_pass):
       token = "%s:%s" % (web_user, web_pass)
@@ -247,7 +275,7 @@ class MyConfiguration(object):
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
 
     self.LOGFILE = self.getValue(config, "logfile", "")
-    self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "no")
+    self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
 
     self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls)
 
@@ -280,6 +308,8 @@ class MyConfiguration(object):
 
     self.MAC_ADDRESS = self.getValue(config, "network.mac", "")
 
+    self.ADD_SET_MEMBERS = self.getBoolean(config, "setmembers", "yes")
+
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
     self.JSON_VER_STR = "v%d.%d.%d" % (major, minor, patch)
@@ -296,6 +326,9 @@ class MyConfiguration(object):
 
     # JSON API has support for Textures database access
     self.JSON_HAS_TEXTUREDB = self.HasJSONCapability("texturedb")
+
+    # Filter is/isnot operator broken for empty string value (""), use only if API is fixed
+    self.JSON_HAS_FILTERNULLVALUE = self.HasJSONCapability("filternullval")
 
   def HasJSONCapability(self, feature):
     if feature not in self.JSON_VER_CAPABILITIES:
@@ -324,20 +357,24 @@ class MyConfiguration(object):
     else:
       self.DOWNLOAD_PREDELETE = self.getBoolean(self.config, "download.predelete","no")
 
-  def getValue(self, config, aKey, default=None):
-    value = default
+  def getValue(self, config, aKey, default=None, allowundefined=False):
+    value = None
 
     try:
       value = config.get(self.THIS_SECTION, aKey)
+      # If value being undefined is valid, return None for undefined values
+      if not value and allowundefined: return None
     except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
       if self.THIS_SECTION != self.GLOBAL_SECTION:
         try:
           value = config.get(self.GLOBAL_SECTION, aKey)
+          # If value being undefined is valid, return None for undefined values
+          if not value and allowundefined: return None
         except ConfigParser.NoOptionError:
-          if default == None:
+          if default == None and not allowNone:
             raise ConfigParser.NoOptionError(aKey, "%s (or global section)" % self.THIS_SECTION)
       else:
-        if default == None:
+        if default == None and not allowNone:
           raise ConfigParser.NoOptionError(aKey, self.GLOBAL_SECTION)
 
     return value if value else default
@@ -440,7 +477,7 @@ class MyConfiguration(object):
           value = newlist
         mv[key] = value
 
-    return mv
+    return json.dumps(mv, indent=2, sort_keys=True)
 
   def showConfig(self):
     print("Current properties (if exists, read from %s):" % (self.FILENAME))
@@ -451,7 +488,9 @@ class MyConfiguration(object):
     print("  thumbnails = %s " % self.THUMBNAILS)
     print("  xbmc.host = %s" % self.XBMC_HOST)
     print("  webserver.port = %s" % self.WEB_PORT)
+    print("  webserver.ctimeout = %s" % self.WEB_CONNECTTIMEOUT)
     print("  rpc.port = %s" % self.RPC_PORT)
+    print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
     print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
     print("  download.retry = %d" % self.DOWNLOAD_RETRY)
@@ -472,6 +511,7 @@ class MyConfiguration(object):
     print("  extrajson.tvshows.tvshow = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.tvshow"]))
     print("  extrajson.tvshows.season = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.season"]))
     print("  extrajson.tvshows.episode= %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.episode"]))
+    print("  setmembers = %s" % self.BooleanIsYesNo(self.ADD_SET_MEMBERS))
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
     print("  qa.fail.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_FAIL_TYPES)))
@@ -554,7 +594,7 @@ class MyLogger():
       else:
         self.reset(initialValue=0)
 
-      udata = MyUtility().toUnicode(data)
+      udata = MyUtility.toUnicode(data)
       ulen = len(data)
       spaces = self.lastlen - ulen
       self.lastlen = ulen
@@ -573,7 +613,7 @@ class MyLogger():
 
   def out(self, data, newLine=False, log=False):
     with threading.Lock():
-      udata = MyUtility().toUnicode(data)
+      udata = MyUtility.toUnicode(data)
       ulen = len(data)
       spaces = self.lastlen - ulen
       self.lastlen = ulen if udata.rfind("\n") == -1 else 0
@@ -597,7 +637,7 @@ class MyLogger():
   def log(self, data, jsonrequest = None, maxLen=0):
     if self.LOGGING:
       with threading.Lock():
-        udata = MyUtility().toUnicode(data)
+        udata = MyUtility.toUnicode(data)
 
         t = threading.current_thread().name
         if jsonrequest == None:
@@ -639,7 +679,7 @@ class MyLogger():
 
   def err(self, data, newLine=False, log=False):
     with threading.Lock():
-      udata = MyUtility().toUnicode(data)
+      udata = MyUtility.toUnicode(data)
       sys.stderr.write("%-s" % udata)
       if newLine:
         sys.stderr.write("\n")
@@ -778,6 +818,7 @@ class MyDB(object):
 
     #mydb will be either a SQL db or MyJSONComms object
     self.mydb = None
+
     self.DBVERSION = None
     self.cursor = None
 
@@ -807,6 +848,7 @@ class MyDB(object):
   def execute(self, SQL):
     self.cursor = self.getDB().cursor()
     self.logger.log("EXECUTING SQL: %s" % SQL)
+
     try:
       self.cursor.execute(SQL)
     except lite.OperationalError as e:
@@ -831,19 +873,14 @@ class MyDB(object):
     if self.usejson:
       data = self.mydb.getTextures(filter, order, allfields)
       if "result" in data and "textures" in data["result"]:
-        # Could use MyUtility().normalise() here, but inlining this code
-        # is twice as fast
-        doDecode = True if sys.version_info < (3, 0) else False
+        funcNormalise = MyUtility.normalise
         for r in data["result"]["textures"]:
-          url = urllib2.unquote(r["url"])[8:-1]
-          if doDecode:
-            url = bytes(url.encode("iso-8859-1")).decode("utf-8")
-          r["url"] = url
+          r["url"] = funcNormalise(r["url"], strip=True)
         return data["result"]["textures"]
       else:
         return []
     else:
-      return self._transform(self._getAllColumns(filter, order).fetchall())
+      return self._transform(self._getAllColumns(filter, order))
 
   def getSingleRow(self, filter):
     rows = self.getRows(filter, allfields=True)
@@ -863,7 +900,7 @@ class MyDB(object):
     if filter: SQL += filter
     if order: SQL += order
 
-    return self.execute(SQL)
+    return self.execute(SQL).fetchall()
 
   # Return SQLite database rows as a dictionary list
   # to match JSON equivalent
@@ -934,7 +971,7 @@ class MyDB(object):
 
   def getRowByFilename_Impl(self, filename, unquote=True):
     if unquote:
-      ufilename = MyUtility().normalise(filename)
+      ufilename = MyUtility.normalise(filename)
     else:
       ufilename = filename
 
@@ -976,9 +1013,11 @@ class MyDB(object):
 # use HTTP.
 #
 class MyJSONComms(object):
-  def __init__(self, config, logger):
+  def __init__(self, config, logger, connecttimeout=None):
     self.config = config
     self.logger = logger
+    self.connecttimeout = connecttimeout
+
     self.mysocket = None
     self.myweb = None
     self.WEB_LAST_STATUS = -1
@@ -1002,7 +1041,9 @@ class MyJSONComms(object):
   def getSocket(self):
     if not self.mysocket:
       self.mysocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      self.mysocket.settimeout(self.connecttimeout)
       self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
+      self.mysocket.settimeout(None)
     return self.mysocket
 
   # Use a secondary socket object for simple lookups to avoid having to handle
@@ -1017,7 +1058,7 @@ class MyJSONComms(object):
   def getWeb(self):
     if not self.myweb or self.config.WEB_SINGLESHOT:
       if self.myweb: self.myweb.close()
-      self.myweb = httplib.HTTPConnection("%s:%s" % (self.config.XBMC_HOST, self.config.WEB_PORT))
+      self.myweb = httplib.HTTPConnection("%s:%s" % (self.config.XBMC_HOST, self.config.WEB_PORT), timeout=self.connecttimeout)
       self.WEB_LAST_STATUS = -1
       if self.config.DEBUG: self.myweb.set_debuglevel(1)
     return self.myweb
@@ -1076,7 +1117,7 @@ class MyJSONComms(object):
 
     s = self.getSocket()
     self.logger.log("%s.JSON SOCKET REQUEST:" % id, jsonrequest=request)
-    START_IO_TIME=time.time()
+    START_IO_TIME = time.time()
 
     if sys.version_info >= (3, 0):
       s.send(bytes(json.dumps(request), "utf-8"))
@@ -1108,7 +1149,7 @@ class MyJSONComms(object):
 
         # If data is not a str (Python2) then decode Python3 bytes to unicode representation
         if isinstance(data, str):
-          udata = MyUtility().toUnicode(data)
+          udata = MyUtility.toUnicode(data)
         else:
           try:
             udata = data.decode("utf-8")
@@ -1380,7 +1421,7 @@ class MyJSONComms(object):
     # Not able to get a directory for remote files...
     if filename.find("image://http") != -1: return (None, None, None)
 
-    directory = MyUtility().normalise(filename, strip=True)
+    directory = MyUtility.normalise(filename, strip=True)
 
     # Remove filename, leaving just directory...
     ADD_BACK=""
@@ -1530,24 +1571,23 @@ class MyJSONComms(object):
       self.logger.progress("Decoding URLs...")
       self.unquoteArtwork(data)
     self.logger.progress("")
-    self.logger.out(json.dumps(data, indent=2, ensure_ascii=ensure_ascii, sort_keys=False), newLine=True)
+    self.logger.out(json.dumps(data, indent=2, ensure_ascii=ensure_ascii, sort_keys=True), newLine=True)
 
   def unquoteArtwork(self, items):
     for item in items:
       for field in item:
-        if field in ["seasons", "episodes", "channels"]: self.unquoteArtwork(item[field])
-
-        if field in ["fanart", "thumbnail"]: item[field] = MyUtility().normalise(item[field])
-
-        if field == "art":
+        if field in ["seasons", "episodes", "channels", "tc.members"]:
+          self.unquoteArtwork(item[field])
+        elif field in ["fanart", "thumbnail"]:
+          item[field] = MyUtility.normalise(item[field])
+        elif field == "art":
           art = item["art"]
           for image in art:
-            art[image] = MyUtility().normalise(art[image])
-
-        if field == "cast":
+            art[image] = MyUtility.normalise(art[image])
+        elif field == "cast":
           for cast in item["cast"]:
             if "thumbnail" in cast:
-              cast["thumbnail"] = MyUtility().normalise(cast["thumbnail"])
+              cast["thumbnail"] = MyUtility.normalise(cast["thumbnail"])
 
   def getSources(self, media, labelPrefix=False, withLabel=None):
     REQUEST = {"method": "Files.GetSources", "params":{"media": media}}
@@ -1564,13 +1604,13 @@ class MyJSONComms(object):
           if file.startswith("multipath://"):
             for apath in file[12:].split("/"):
               if apath != "":
-                apath= MyUtility().normalise(apath)[:-1]
+                apath= MyUtility.normalise(apath)[:-1]
                 if labelPrefix:
                   source_list.append("%s: %s" % (label, apath))
                 else:
                   source_list.append(apath)
           else:
-            apath = MyUtility().normalise(file)[:-1]
+            apath = MyUtility.normalise(file)[:-1]
             if labelPrefix:
               source_list.append("%s: %s" % (label, apath))
             else:
@@ -1661,7 +1701,7 @@ class MyJSONComms(object):
               filter = None, useExtraFields = False, secondaryFields = None,
               showid = None, seasonid = None, channelgroupid = None, lastRun = False, subType = None):
 
-    XTRA = mediatype
+    EXTRA = mediatype
     SECTION = mediatype
     FILTER = "title"
     TITLE = "title"
@@ -1707,7 +1747,7 @@ class MyJSONComms(object):
       REQUEST = {"method":"VideoLibrary.GetMovies",
                  "params":{"sort": {"order": "ascending", "method": "title"},
                            "properties":["title", "art"]}}
-      XTRA = "movies"
+      EXTRA = "movies"
       SECTION = "movies"
       IDENTIFIER = "movieid"
     elif mediatype == "sets":
@@ -1715,18 +1755,25 @@ class MyJSONComms(object):
                  "params":{"sort": {"order": "ascending", "method": "title"},
                            "properties":["title", "art"]}}
       FILTER = ""
+    elif mediatype == "sets-members":
+      REQUEST = {"method":"VideoLibrary.GetMovies",
+                 "params":{"sort": {"order": "ascending", "method": "sorttitle"},
+                           "properties":["file", "set", "title", "sorttitle"]}}
+      EXTRA = "movies"
+      SECTION = "movies"
+      IDENTIFIER = "movieid"
     elif mediatype == "tvshows":
       REQUEST = {"method":"VideoLibrary.GetTVShows",
                  "params":{"sort": {"order": "ascending", "method": "title"},
                            "properties":["title", "art"]}}
-      XTRA = "tvshows.tvshow"
+      EXTRA = "tvshows.tvshow"
     elif mediatype == "seasons":
       REQUEST = {"method":"VideoLibrary.GetSeasons",
                  "params":{"sort": {"order": "ascending", "method": "season"},
                            "tvshowid": showid, "properties":["season", "art"]}}
       FILTER = ""
       TITLE = "label"
-      XTRA = "tvshows.season"
+      EXTRA = "tvshows.season"
       IDENTIFIER = "season"
     elif mediatype == "episodes":
       REQUEST = {"method":"VideoLibrary.GetEpisodes",
@@ -1734,7 +1781,7 @@ class MyJSONComms(object):
                            "tvshowid": showid, "season": seasonid, "properties":["art"]}}
       FILTER = ""
       TITLE = "label"
-      XTRA = "tvshows.episode"
+      EXTRA = "tvshows.episode"
     elif mediatype == "agenres":
         REQUEST = {"method":"AudioLibrary.GetGenres",
                    "params":{"properties":["title", "thumbnail"]}}
@@ -1763,6 +1810,16 @@ class MyJSONComms(object):
             word += 1
             if (word%2 == 0) and tag in ["and","or"]: filterBoolean = tag
             else: self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
+    elif mediatype == "sets-members":
+        if filter:
+          self.addFilter(REQUEST, {"field": "set", "operator": "contains", "value": filter})
+        else:
+          # JSON filter is broken when handling empty (null) strings - they're ignored - though
+          # hopefully this will be fixed in a later version of API, in which case use it
+          if self.config.JSON_HAS_FILTERNULLVALUE:
+            self.addFilter(REQUEST, {"field": "set", "operator": "isnot", "value": ""})
+          else:
+            self.addFilter(REQUEST, {"field": "set", "operator": "doesnotcontain", "value": "@@@@@@@@@@@@"})
     elif filter and filter.strip() != "" and not mediatype in ["addons", "agenres", "vgenres",
                                                                "sets", "seasons", "episodes",
                                                                "pvr.tv", "pvr.radio", "pvr.channels"]:
@@ -1803,14 +1860,14 @@ class MyJSONComms(object):
       if mediatype in ["songs", "movies", "tags", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
 
-      self.addProperties(REQUEST, ", ".join(self.config.getQAFields("zero", XTRA)))
-      self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", XTRA)))
+      self.addProperties(REQUEST, ", ".join(self.config.getQAFields("zero", EXTRA)))
+      self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", EXTRA)))
     elif action == "dump":
       if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
-      xtraFields = self.config.XTRAJSON["extrajson.%s" % XTRA] if XTRA != "" else None
-      if useExtraFields and xtraFields:
-        self.addProperties(REQUEST, xtraFields)
+      extraFields = self.config.XTRAJSON["extrajson.%s" % EXTRA] if EXTRA != "" else None
+      if useExtraFields and extraFields:
+        self.addProperties(REQUEST, extraFields)
       if secondaryFields:
         self.addProperties(REQUEST, secondaryFields)
     elif action == "query" and not mediatype in ["tvshows", "seasons", "pvr.tv", "pvr.radio"]:
@@ -2222,7 +2279,7 @@ class MyMediaItem(object):
     self.season = season
     self.episode = episode
     self.filename = filename
-    self.decoded_filename = MyUtility().normalise(self.filename, strip=True) if self.filename else self.filename
+    self.decoded_filename = MyUtility.normalise(self.filename, strip=True) if self.filename else self.filename
     self.dbid = dbid
     self.cachedurl = cachedurl
     self.libraryid = libraryid
@@ -2322,24 +2379,27 @@ class MyWatchedItem(object):
 
 # Helper class...
 class MyUtility(object):
-  # Convert quoted filename into consistent utf-8 representation
-  # for both Python2 and Python3.
-  def normalise(self, value, strip=False):
+  isPython3 = (sys.version_info >= (3, 0))
+
+  # Convert quoted filename into consistent utf-8
+  # representation for both Python2 and Python3
+  @staticmethod
+  def normalise(value, strip=False):
     if not value: return value
 
-    if strip:
-      v = urllib2.unquote(re.sub("^image://(.*)/","\\1",value))
-    else:
-      v = urllib2.unquote(value)
+    v = urllib2.unquote(value)
 
-    if sys.version_info < (3, 0):
+    if strip and v.startswith("image://"):
+      v = v[8:-1]
+
+    if not MyUtility.isPython3:
       v = bytes(v.encode("iso-8859-1")).decode("utf-8")
 
     return v
 
-  def toUnicode(self, data):
-    if sys.version_info >= (3, 0):
-      return data
+  @staticmethod
+  def toUnicode(data):
+    if MyUtility.isPython3: return data
 
     if isinstance(data, basestring):
       if not isinstance(data, unicode):
@@ -2359,27 +2419,45 @@ class MyUtility(object):
   # Non-shares will use a slash appropriate to the OS to which the path
   # corresponds so attempt to find the FIRST slash (forward or back) and
   # then use that as the path seperator, replacing any of the opposite
-  # kind.
+  # kind. The reason being that path mangling addons are likely to mangle
+  # only the last slashes but not the first.
   #
-  # If no slash is found, do nothing.
+  # If only one type of slash found (or neither slash found), do nothing.
   #
   # See: http://forum.xbmc.org/showthread.php?tid=153502&pid=1477147#pid1477147
   #
-  def fixSlashes(self, filename):
+  @staticmethod
+  def fixSlashes(filename):
     # Share (eg. "smb://", "nfs://" etc.)
     if re.search("^.*://.*", filename):
       return filename.replace("\\", "/")
-    else:
-      bslash = filename.find("\\")
-      fslash = filename.find("/")
-      if bslash == -1: bslash = len(filename)
-      if fslash == -1: fslash = len(filename)
-      if bslash < fslash:
-        return filename.replace("/", "\\")
-      elif fslash < bslash:
-        return filename.replace("\\", "/")
-      else:
-        return filename
+
+    bslash = filename.find("\\")
+    fslash = filename.find("/")
+
+    if bslash == -1 or fslash == -1:
+      return filename
+    elif bslash < fslash:
+      return filename.replace("/", "\\")
+    else: #fslash < bslash:
+      return filename.replace("\\", "/")
+
+  # Same as above, but url is quoted
+  @staticmethod
+  def fixSlashesQuoted(url):
+    # Share (eg. "smb://", "nfs://" etc.)
+    if re.search("^.*%3a%2f%2f.*", url):
+      return url.replace("%5c", "%2f")
+
+    bslash = url.find("%5c")
+    fslash = url.find("%2f")
+
+    if bslash == -1 or fslash == -1:
+      return url
+    elif bslash < fslash:
+      return url.replace("%2f", "%5c")
+    else: #fslash < bslash:
+      return url.replace("%5c", "%2f")
 
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons
@@ -2417,7 +2495,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   if mediatype == "tvshows": TOTALS.addSeasonAll()
 
-  gLogger.progress("Loading %s..." % mediatype, every = 1)
+  gLogger.progress("Loading %s..." % mediatype)
 
   TOTALS.TimeStart(mediatype, "Load")
 
@@ -2452,6 +2530,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   else:
     data = []
 
+  # Manually filter these mediatypes as JSON doesn't support filtering
   if data and filter and mediatype in ["addons", "agenres", "sets", "pvr.tv", "pvr.radio"]:
     gLogger.log("Filtering %s on %s = %s" % (mediatype, title_name, filter))
     filteredData = []
@@ -2459,6 +2538,22 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       if re.search(filter, d[title_name], re.IGNORECASE):
         filteredData.append(d)
     data = filteredData
+
+  # Add movie file members to sets when dumping
+  if action == "dump" and mediatype == "sets" and gConfig.ADD_SET_MEMBERS and data:
+    gLogger.progress("Loading movie set members...")
+    (s, t, i, fdata) = jcomms.getData(action, "sets-members", filter, extraFields, lastRun=lastRun, secondaryFields=None)
+    if fdata and "result" in fdata and s in fdata["result"]:
+      set_files = {}
+      for movie in fdata["result"][s]:
+        set_name = movie["set"]
+        if set_name:
+          del movie["set"]
+          if "label" in movie: del movie["label"]
+          if set_name not in set_files: set_files[set_name] = []
+          set_files[set_name].append(movie)
+      for set in data:
+        set["tc.members"] = set_files.get(set["title"], [])
 
   # Combine PVR channelgroups with PVR channels to create a hierarchical structure that can be parsed
   if mediatype in ["pvr.tv", "pvr.radio"]:
@@ -2479,7 +2574,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   if mediatype == "tvshows":
     for tvshow in data:
       title = tvshow["title"]
-      gLogger.progress("Loading TV Show: [%s]..." % title, every = 1)
+      gLogger.progress("Loading TV Show: [%s]..." % title)
       (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun=lastRun)
       if not "result" in data2: return
       limits = data2["result"]["limits"]
@@ -2487,7 +2582,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
-        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid), every = 1)
+        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid))
         (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun=lastRun, secondaryFields=secondaryFields)
         if not "result" in data3: return
         limits = data3["result"]["limits"]
@@ -2575,8 +2670,8 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   gLogger.progress("Loading database items...")
   dbfiles = {}
   with database:
-    rows = database.getRows(allfields=False)
-    for r in rows: dbfiles[r["url"]] = r
+    for r in database.getRows(allfields=False):
+      dbfiles[r["url"]] = r
 
   gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
 
@@ -2598,7 +2693,13 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       # If the path has swapped a "/" for a "\" (or vice versa) then we won't
       # match against the cache - unmangle, and try again.
       if not dbrow:
-        dbrow = dbfiles.get(MyUtility().fixSlashes(item.decoded_filename), None)
+        fixedFilename = MyUtility.fixSlashes(item.decoded_filename)
+        dbrow = dbfiles.get(fixedFilename, None)
+        # Need to fix original filename now too, so re-quote fixed url...
+        if dbrow:
+          gLogger.log("Unmangled filename: [%s] -> [%s]" % (item.decoded_filename, fixedFilename))
+          item.filename = MyUtility.fixSlashesQuoted(item.filename)
+          item.decoded_filename = fixedFilename
 
     # Don't need to cache file if it's already in the cache, unless forced...
     # Assign the texture cache database id and cachedurl so that removal will avoid having
@@ -2844,7 +2945,7 @@ def evaluateURL(imgtype, url, imagecache):
     return False
 
   if gConfig.CACHE_IGNORE_TYPES:
-    decoded_url = MyUtility().normalise(url, strip=True)
+    decoded_url = MyUtility.normalise(url, strip=True)
     for ignore in gConfig.CACHE_IGNORE_TYPES:
       if ignore.search(decoded_url):
         gLogger.log("Ignored [%-12s] image due to [%s] rule: %s" % (imgtype, ignore.pattern, decoded_url))
@@ -2906,11 +3007,24 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
 
     for i in zero_items:
       j = i[1:] if i.startswith("?") else i
-      if not j in item or item[j] == 0: missing["Zero %s" % j] = not i.startswith("?")
+      ismissing = True
+      if j in item:
+        ismissing = (item[j] == 0)
+      if missing: missing["Zero %s" % j] = not i.startswith("?")
 
     for i in blank_items:
       j = i[1:] if i.startswith("?") else i
-      if not j in item or item[j] == "" or item[j] == [] or item[j] == [""]: missing["Missing %s" % j] = not i.startswith("?")
+      ismissing = True
+      if j in item:
+        if type(item[j]) is dict:
+          # Example dict: streamdetails
+          for field in item[j]:
+            if item[j][field]:
+              ismissing = False
+              break
+        else:
+          ismissing = (item[j] == "" or item[j] == [] or item[j] == [""])
+      if ismissing: missing["Missing %s" % j] = not i.startswith("?")
 
     for i in art_items:
       j = i[1:] if i.startswith("?") else i
@@ -2921,7 +3035,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       if artwork == "":
         missing["Missing %s" % j] = not i.startswith("?")
       else:
-        decoded_url = MyUtility().normalise(artwork)
+        decoded_url = MyUtility.normalise(artwork)
         FAILED = False
         if gConfig.QA_FAIL_TYPES:
           for qafailtype in gConfig.QA_FAIL_TYPES:
@@ -3084,7 +3198,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
               if MATCHED: break
             matched_value = ", ".join(str(x) for x in temp)
           else:
-            if isinstance(temp, basestring): temp = MyUtility().normalise(temp, strip=True)
+            if isinstance(temp, basestring): temp = MyUtility.normalise(temp, strip=True)
             MATCHED = evaluateCondition(temp, condition, value)
             if inverted: MATCHED = not MATCHED
             matched_value = temp
@@ -3192,7 +3306,7 @@ def parseQuery(query):
   FIELDNAME_NEXT = True
   tField = tValue = tCondition = tLogic = None
 
-  query = MyUtility().toUnicode(query)
+  query = MyUtility.toUnicode(query)
 
   newValue = ""
   IN_STR=False
@@ -3510,7 +3624,7 @@ def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
       kv = kv.encode("iso-8859-1").decode("unicode_escape")
     except UnicodeDecodeError:
       pass
-    ukvpairs.append(MyUtility().toUnicode(kv))
+    ukvpairs.append(MyUtility.toUnicode(kv))
 
   jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
   setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun)
@@ -3692,12 +3806,10 @@ def orphanCheck(removeOrphans=False):
   gLogger.progress("Loading texture cache...")
 
   with database:
-    rows = database.getRows(allfields=False)
-    for r in rows:
+    for r in database.getRows(allfields=False):
       hash = r["cachedurl"]
       dbfiles[hash] = r
       ddsmap[os.path.splitext(hash)[0]] = hash
-    rows = None
 
   gLogger.log("Loaded %d rows from texture cache" % len(dbfiles))
 
@@ -3771,11 +3883,10 @@ def pruneCache(purge_nonlibrary_artwork):
 
   gLogger.progress("Loading texture cache...")
   database = MyDB(gConfig, gLogger)
+
   with database:
-    rows = database.getRows(allfields=True)
-    for r in rows:
+    for r in database.getRows(allfields=True):
       dbfiles[r["cachedurl"]] = r
-    rows = None
 
   totalrows = len(dbfiles)
 
@@ -3859,14 +3970,14 @@ def getHash(string):
 # function) is sufficient for our needs and also about twice
 # as fast on a Pi.
 def getKeyFromHash(filename):
-  url = MyUtility().normalise(filename, strip=True)
+  url = MyUtility.normalise(filename, strip=True)
   hash = getHash(url)
   return "%s/%s" % (hash[0:1], hash)
 
 def getKeyFromFilename(filename):
   if not filename: return filename
-  url = MyUtility().normalise(filename, strip=True)
-  return MyUtility().fixSlashes(url)
+  url = MyUtility.normalise(filename, strip=True)
+  return MyUtility.fixSlashes(url)
 
 def getAllFiles(keyFunction):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -4047,6 +4158,40 @@ def removeMedia(mtype, libraryid):
     gLogger.out("Done", newLine=True)
   else:
     gLogger.out("ERROR: Does not exist - media type [%s] libraryid [%d]" % (mtype, libraryid), newLine=True)
+
+# Remove artwork that matches specific site urls, with or without lasthaschcheck
+def purgeArtwork(sites, withHash=False, dryRun=True):
+  database = MyDB(gConfig, gLogger)
+
+  hashcheck = "lasthashcheck != ''" if withHash else "lasthashcheck = ''"
+
+  with database:
+    for site in [x for x in sites if x != ""]:
+      SQL = "WHERE %s and url like '%%%s%%'" % (hashcheck, site)
+
+      gLogger.progress("Querying database for site: %s" % site)
+      rows = database.getRows(filter=SQL, order="ORDER BY t.id ASC", allfields=True)
+
+      # Filter out hashed/unhashed rows if JSON API ignores null values on the filter...
+      if gConfig.USEJSONDB and not gConfig.JSON_HAS_FILTERNULLVALUE:
+        newrows = []
+        for r in rows:
+          if (withHash and r["lasthashcheck"]) or \
+             (not withHash and not r["lasthashcheck"]):
+            newrows.append(r)
+        rows = newrows
+        newrows = None
+
+      gLogger.out("Purging %d %s items for site %s" % (len(rows), ("hashed" if withHash else "unhashed"), site), newLine=True)
+
+      for r in rows:
+        if dryRun:
+          gLogger.out("Dry-run, would remove: %s" % r["url"], newLine=True)
+        else:
+          gLogger.progress("Removing: %s" % r["url"])
+          database.deleteItem(r["textureid"], r["cachedurl"], warnmissing=False)
+
+      gLogger.progress("")
 
 def doLibraryScan(media, path):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -4235,7 +4380,7 @@ def pprint(msg):
 
   lines = []
   for index, token in enumerate(msg.split("|")):
-    token = token.strip()
+    token = token.strip().replace(";", "|")
     if index > 0 and (len(token) + len(line)) > MAXWIDTH:
       lines.append(line)
       line = indent
@@ -4252,6 +4397,8 @@ def usage(EXIT_CODE):
   pprint("[s, S] <string> | [x, X, f] [sql-filter] | Xd | d <id[id id]>] | \
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
+          purge hashed;unhashed site [site [site]] | \
+          purgetest hashed;unhashed site [site [site]] | \
           remove mediatype libraryid | watched class backup <filename> | \
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
@@ -4282,6 +4429,8 @@ def usage(EXIT_CODE):
   print("  P          Prune (automatically remove) cached items that don't exist in the media library")
   print("  r          Reverse search to identify \"orphaned\" Thumbnail files that are not present in the texture cache database")
   print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
+  print("  purge      Remove cached artwork for specified sites, with or without hash")
+  print("  purgetest  Dry-run version of purge")
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
   print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
   print("  duplicates List movies with multiple versions as determined by imdb number")
@@ -4340,57 +4489,55 @@ def checkConfig(option):
 
   jsonNeedVersion = 6
 
-  if option in ["c","C"]:
-    needWeb = True
-  else:
-    needWeb = False
+  # Web server access
+  optWeb = ["c","C"]
 
-  if option in ["c","C","nc","lc","lnc","j","J","jd","Jd","jr","Jr",
+  # Socket (JSON RPC) access
+  optSocket = ["c","C","nc","lc","lnc","j","J","jd","Jd","jr","Jr",
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw", "missing", "watched", "duplicates", "set", "testset"]:
-    needSocket = True
-  else:
-    needSocket = False
+                "exec", "execw", "missing", "watched", "duplicates", "set", "testset"]
 
-  if option in ["s","S","x","X","Xd","f","c","C","nc","lc","lnc","d","r","R","p","P"]:
-    needDb = True
-  else:
-    needDb = False
+  # Database access (could be SQLite, could be JSON - needs to be determined later)
+  optDb = ["s","S","x","X","Xd","f","c","C","nc","lc","lnc","d","r","R","p","P", "purge", "purgetest"]
 
   # These options require direct filesystem access
-  if option in ["f", "r", "R", "S", "X", "Xd"]:
-    needFS = True
-  else:
-    needFS = False
+  optFS1 = ["f", "r", "R", "S", "X", "Xd"]
 
-  if option == "wake":
-    needMAC = True
-  else:
-    needMAC = False
+  # These options may require direct filesystem access, depending on JSON Texture API availability
+  optFS2 = ["P", "purge", "C"]
 
-  # If we need to work out a value for USEJSONDB, or it is enabled explicitly, we
-  # need socket access to determine the current version of JSON API
-  if needDb and (gConfig.DBJSON == "auto" or (gConfig.DBJSON != "auto" and gConfig.USEJSONDB)):
-    needSocket = True
+  # Network MAC
+  optMAC = ["wake"]
+
+  needWeb    = (option in optWeb)
+  needSocket = (option in optSocket)
+  needDb     = (option in optDb)
+  needFS1    = (option in optFS1)
+  needFS2    = (option in optFS2)
+  needMAC    = (option in optMAC)
+
+  # If we need to work out a value for USEJSONDB, we need to check JSON
+  # to determine the current version of JSON API
+  trySocket = False
+
+  if needDb or needFS2:
+    if gConfig.DBJSON == "auto":
+      trySocket = True
+    elif gConfig.USEJSONDB:
+      needSocket = True
 
   gotWeb = gotSocket = gotDb = gotFS = gotMAC = False
   jsonGotVersion = 0
 
   if needWeb:
     try:
-      defaultTimeout = socket.getdefaulttimeout()
-      socket.setdefaulttimeout(7.5)
-
-      jcomms = MyJSONComms(gConfig, gLogger)
+      jcomms = MyJSONComms(gConfig, gLogger, connecttimeout=gConfig.WEB_CONNECTTIMEOUT)
       REQUEST = {"method": "JSONRPC.Ping"}
-      data = jcomms.sendJSON(REQUEST, "libPing", timeout=7.5, checkResult=False, useWebServer=True)
-      if "result" in data and data["result"] == "pong":
-        gotWeb = True
-
-      socket.setdefaulttimeout(defaultTimeout)
+      data = jcomms.sendJSON(REQUEST, "libPing", checkResult=False, useWebServer=True)
+      gotWeb = ("result" in data and data["result"] == "pong")
     except socket.error:
       pass
 
@@ -4403,24 +4550,22 @@ def checkConfig(option):
     gLogger.out(MSG)
     return False
 
-  if needSocket:
+  if needSocket or trySocket:
     try:
-      jcomms = MyJSONComms(gConfig, gLogger)
-      REQUEST = {"method": "JSONRPC.Ping"}
-      data = jcomms.sendJSON(REQUEST, "libPing", timeout=7.5, checkResult=False)
-      if "result" in data and data["result"] == "pong":
-        gotSocket = True
+      jcomms = MyJSONComms(gConfig, gLogger, connecttimeout=gConfig.RPC_CONNECTTIMEOUT)
 
       REQUEST = {"method": "JSONRPC.Version"}
-      data = jcomms.sendJSON(REQUEST, "libVersion", timeout=7.5, checkResult=False)
-      if "result" in data:
-        if "version" in data["result"]:
-          jsonGotVersion = data["result"]["version"]
-          if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
-            gConfig.SetJSONVersion(jsonGotVersion.get("major",0),
-                                   jsonGotVersion.get("minor",0),
-                                   jsonGotVersion.get("patch",0))
-            jsonGotVersion = jsonGotVersion["major"]
+      data = jcomms.sendJSON(REQUEST, "libVersion", checkResult=False)
+
+      gotSocket = True
+
+      if "result" in data and "version" in data["result"]:
+        jsonGotVersion = data["result"]["version"]
+        if type(jsonGotVersion) is dict and "major" in jsonGotVersion:
+          gConfig.SetJSONVersion(jsonGotVersion.get("major",0),
+                                 jsonGotVersion.get("minor",0),
+                                 jsonGotVersion.get("patch",0))
+          jsonGotVersion = jsonGotVersion["major"]
 
       REQUEST = {"method": "XBMC.GetInfoBooleans",
                  "params": { "booleans": ["System.GetBool(pvrmanager.enabled)"] }}
@@ -4428,9 +4573,6 @@ def checkConfig(option):
       gConfig.HAS_PVR = ("result" in data and data["result"].get("System.GetBool(pvrmanager.enabled)", False))
     except socket.error:
       pass
-
-  if needMAC:
-    gotMAC = (gConfig.MAC_ADDRESS != "")
 
   if needSocket and not gotSocket:
     MSG = "FATAL: The task you wish to perform requires that the JSON-RPC server is\n" \
@@ -4463,11 +4605,13 @@ def checkConfig(option):
       gConfig.USEJSONDB = False
       gLogger.log("JSON Texture DB API not supported - will use SQLite to access Texture DB")
 
-  # Don't access Textures database if using JSON API (either auto-detected or set explicitly)
-  if needDb and gConfig.USEJSONDB:
-    needDb = False
+  # If JSON Textures API is to be used...
+  if gConfig.USEJSONDB:
+    # Don't access Textures database using SQLite
+    # Don't access file system either
+    needDb = needFS2 = False
 
-  if needDb:
+  if needDb and lite:
     try:
       database = MyDB(gConfig, gLogger)
       con = database.getDB()
@@ -4480,18 +4624,24 @@ def checkConfig(option):
       pass
 
   if needDb and not gotDb:
+    if not lite:
+      gLogger.log("ERROR: SQLite3 module not imported")
+
     MSG = "FATAL: The task you wish to perform requires read/write file\n" \
           "       access to the XBMC sqlite3 Texture Cache database.\n\n" \
           "       The following sqlite3 database could not be opened:\n" \
           "       %s\n\n" \
-          "       Check settings in properties file %s\n" % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
+          "       Check settings in properties file %s,\n" \
+          "       or upgrade your XBMC client to use a more recent\n" \
+          "       version that supports Textures JSON API.\n" \
+                  % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
     gLogger.out(MSG)
     return False
 
-  if needFS:
+  if needFS1 or needFS2:
     gotFS = os.path.exists(gConfig.getFilePath())
 
-  if needFS and not gotFS:
+  if (needFS1 or needFS2) and not gotFS:
     MSG = "FATAL: The task you wish to perform requires read/write file\n" \
           "       access to the Thumbnails folder, which is inaccessible.\n\n" \
           "       Specify the location of this folder using the thumbnails property\n" \
@@ -4501,6 +4651,9 @@ def checkConfig(option):
           "       Check userdata and thumbnails settings in properties file %s\n" % (gConfig.getFilePath(), gConfig.CONFIG_NAME)
     gLogger.out(MSG)
     return False
+
+  if needMAC:
+    gotMAC = (gConfig.MAC_ADDRESS != "")
 
   if needMAC and not gotMAC:
     MSG = "FATAL: The task you wish to perform requires a valid MAC address\n" \
@@ -4513,7 +4666,7 @@ def checkConfig(option):
 
   if gLogger.VERBOSE and gLogger.LOGGING:
     gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
-    gLogger.log("CONFIG VALUES: %s" % gConfig.dumpMemberVariables())
+    gLogger.log("CONFIG VALUES: \n%s" % gConfig.dumpMemberVariables())
 
   return True
 
@@ -4655,11 +4808,22 @@ def downloadLatestVersion(argv, force=False):
 
   print("Successfully updated from v%s to v%s" % (gConfig.VERSION, remoteVersion))
 
+def t1():
+  file = "image://I:\\Filmes\\007 Collection\\22.James.Bond.007.Quantum.of.Solace/banner.jpg/"
+
+  file = MyUtility.normalise(file, strip=True)
+  print(file)
+  print(MyUtility.fixSlashes(file))
+
+  sys.exit(2)
+
 def main(argv):
 
   loadConfig(argv)
 
   if len(argv) == 0: usage(1)
+
+#  t1()
 
   if not checkConfig(argv[0]): sys.exit(2)
 
@@ -4779,6 +4943,12 @@ def main(argv):
 
   elif argv[0] == "remove" and len(argv) == 3:
     removeMedia(mtype=argv[1], libraryid=int(argv[2]))
+
+  elif argv[0] in ["purge", "purgetest"] and len(argv) >= 3:
+    if argv[1] not in ["hashed", "unhashed"]: usage(1)
+    _dryrun   = (argv[0] == "purgetest")
+    _withHash = (argv[1] == "hashed")
+    purgeArtwork(argv[2:], withHash=_withHash, dryRun=_dryrun)
 
   elif argv[0] == "vscan":
     EXIT_CODE = doLibraryScan("video", path=argv[1] if len(argv) == 2 else None)
