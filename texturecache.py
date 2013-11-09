@@ -4159,17 +4159,17 @@ def removeMedia(mtype, libraryid):
   else:
     gLogger.out("ERROR: Does not exist - media type [%s] libraryid [%d]" % (mtype, libraryid), newLine=True)
 
-# Remove artwork that matches specific site urls, with or without lasthaschcheck
-def purgeArtwork(sites, withHash=False, dryRun=True):
+# Remove artwork urls containing specified patterns, with or without lasthaschcheck
+def purgeArtwork(patterns, withHash=False, dryRun=True):
   database = MyDB(gConfig, gLogger)
 
   hashcheck = "lasthashcheck != ''" if withHash else "lasthashcheck = ''"
 
   with database:
-    for site in [x for x in sites if x != ""]:
-      SQL = "WHERE %s and url like '%%%s%%'" % (hashcheck, site)
+    for pattern in [x for x in patterns if x != ""]:
+      gLogger.progress("Querying database for pattern: %s" % pattern)
 
-      gLogger.progress("Querying database for site: %s" % site)
+      SQL = "WHERE %s and url like '%%%s%%'" % (hashcheck, pattern)
       rows = database.getRows(filter=SQL, order="ORDER BY t.id ASC", allfields=True)
 
       # Filter out hashed/unhashed rows if JSON API ignores null values on the filter...
@@ -4182,7 +4182,7 @@ def purgeArtwork(sites, withHash=False, dryRun=True):
         rows = newrows
         newrows = None
 
-      gLogger.out("Purging %d %s items for site %s" % (len(rows), ("hashed" if withHash else "unhashed"), site), newLine=True)
+      gLogger.out("Purging %d %s items for pattern: %s" % (len(rows), ("hashed" if withHash else "unhashed"), pattern), newLine=True)
 
       for r in rows:
         if dryRun:
@@ -4397,8 +4397,8 @@ def usage(EXIT_CODE):
   pprint("[s, S] <string> | [x, X, f] [sql-filter] | Xd | d <id[id id]>] | \
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
-          purge hashed;unhashed site [site [site]] | \
-          purgetest hashed;unhashed site [site [site]] | \
+          purge hashed;unhashed pattern [pattern [pattern ]] | \
+          purgetest hashed;unhashed pattern [pattern [pattern]] | \
           remove mediatype libraryid | watched class backup <filename> | \
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
@@ -4429,7 +4429,7 @@ def usage(EXIT_CODE):
   print("  P          Prune (automatically remove) cached items that don't exist in the media library")
   print("  r          Reverse search to identify \"orphaned\" Thumbnail files that are not present in the texture cache database")
   print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
-  print("  purge      Remove cached artwork for specified sites, with or without hash")
+  print("  purge      Remove cached artwork with urls containing specified patterns, with or without hash")
   print("  purgetest  Dry-run version of purge")
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
   print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")

@@ -35,7 +35,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
-**[purge hashed|unhashed]** Delete cached artwork for specific sites, depending on presence of lasthashcheck eg. `purge unhashed youtube iplayer imdb.com`
+**[purge hashed|unhashed]** Delete cached artwork containing specified patterns, with or without lasthashcheck eg. `purge unhashed youtube iplayer imdb.com`
 
 **[purgetest hashed|unhashed]** Dry-run version of `purge` - will show what would be removed during a real `purge`
 
