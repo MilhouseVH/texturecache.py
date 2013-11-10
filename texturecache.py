@@ -4718,7 +4718,7 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "version", "update", "fupdate", "config",
-                   "duplicates", "set", "testset"]:
+                   "duplicates", "set", "testset", "purge", "purgetest"]:
     USAGE  = argv[0]
 
   HEADERS = []
