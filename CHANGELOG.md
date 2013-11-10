@@ -1,5 +1,15 @@
 #Changelog
 
+##Version 1.0.6 (10/11/2013)
+* Revert: Removed all attempts at fixing slashes on-the-fly, utterly pointless given the current front-end/back-end disconnect
+* Add: Option `fixurls` to identify media library urls with mixed forward and backward slashes. Output can be piped into `texturecache.py set` to apply corrective changes to the media library, eg:
+
+  `./texturecache.py fixurls | ./texturecache.py set`
+  
+Once corrective changes have been applied, pruning (to remove old mangled artwork from cache) and caching of new, unmangled artwork may be required. Subsequent execution of troublesome addons may re-apply mangled urls to the media library - contact the add-on author/maintainer to notify them of the problem.
+
+Applying corrective changes for movie sets will require a recently nightly build of Gotham (requires JSON API v6.12.0+).
+
 ##Version 1.0.5 (09/11/2013)
 * Add: Augment movie set dump (`j sets`, `J sets` etc.) with list of member movies. Movie entries will be ordered by `sorttitle` if present in media library. Suppress this behaviour with `@setmembers=no`. When using `J`, `Jd` and `Jr` options, specify additional *movie* fields with `@extrajson.movies`, otherwise default movie fields will be returned (`movieid`, `file`, `title` and `sorttile`).
 * Add: `purge hashed site [site]` and `purge unhashed site [site]` options to remove artwork associated with sites, with or without hashes. Use `purgetest` in place of `purge` to see which artwork items would be selected for removal.

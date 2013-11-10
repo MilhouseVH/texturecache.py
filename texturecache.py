@@ -63,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.5"
+    self.VERSION="1.0.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -2690,17 +2690,6 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     if not dbrow:
       dbrow = dbfiles.get(item.filename[:-1], None)
 
-      # If the path has swapped a "/" for a "\" (or vice versa) then we won't
-      # match against the cache - unmangle, and try again.
-      if not dbrow:
-        fixedFilename = MyUtility.fixSlashes(item.decoded_filename)
-        dbrow = dbfiles.get(fixedFilename, None)
-        # Need to fix original filename now too, so re-quote fixed url...
-        if dbrow:
-          gLogger.log("Unmangled filename: [%s] -> [%s]" % (item.decoded_filename, fixedFilename))
-          item.filename = MyUtility.fixSlashesQuoted(item.filename)
-          item.decoded_filename = fixedFilename
-
     # Don't need to cache file if it's already in the cache, unless forced...
     # Assign the texture cache database id and cachedurl so that removal will avoid having
     # to retrieve these items from the database.
@@ -3729,9 +3718,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
           R[field] = pairs[pair]
         else:
           R[field] = None
-
       R = R[field]
-    R = pairs[pair]
 
   if dryRun:
     gLogger.out("### DRY RUN ###", newLine=True)
@@ -3976,8 +3963,7 @@ def getKeyFromHash(filename):
 
 def getKeyFromFilename(filename):
   if not filename: return filename
-  url = MyUtility.normalise(filename, strip=True)
-  return MyUtility.fixSlashes(url)
+  return MyUtility.normalise(filename, strip=True)
 
 def getAllFiles(keyFunction):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -4048,7 +4034,7 @@ def getAllFiles(keyFunction):
         title = ""
         for i in data["result"][items]:
           title = i.get("title", i.get("artist", i.get("name", None)))
-          gLogger.progress("Parsing: %s [%s]..." % (mediatype, title), every=interval)
+          gLogger.progress("Loading: %s [%s]..." % (mediatype, title), every=interval)
           if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
           if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
           if "art" in i:
@@ -4070,7 +4056,7 @@ def getAllFiles(keyFunction):
 
   if "result" in tvdata and "tvshows" in tvdata["result"]:
     for tvshow in tvdata["result"]["tvshows"]:
-      gLogger.progress("Parsing: TVShows [%s]..." % tvshow["title"])
+      gLogger.progress("Loading: TVShows [%s]..." % tvshow["title"])
       tvshowid = tvshow["tvshowid"]
       for a in tvshow["art"]:
         files[keyFunction(tvshow["art"][a])] = a
@@ -4090,7 +4076,7 @@ def getAllFiles(keyFunction):
         SEASON_ALL = True
         for season in seasondata["result"]["seasons"]:
           seasonid = season["season"]
-          gLogger.progress("Parsing: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
+          gLogger.progress("Loading: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
           for a in season["art"]:
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
               SEASON_ALL = False
@@ -4192,6 +4178,129 @@ def purgeArtwork(patterns, withHash=False, dryRun=True):
           database.deleteItem(r["textureid"], r["cachedurl"], warnmissing=False)
 
       gLogger.progress("")
+
+def fix_mangled_artwork_urls():
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  files = get_mangled_artwork(jcomms)
+
+  workitems = {}
+  for f in files:
+    key = "%s[%d]" % (f["idname"], f["id"])
+    item = workitems.get(key, {})
+    if item == {}:
+      item["libraryid"] = f["id"]
+      item["type"] = f["type"]
+      item["title"] = f["title"]
+      item["items"] = {}
+    item["items"][f["art"]] = f["fixedurl"]
+    workitems[key] = item
+
+  worklist = []
+  for item in workitems:
+    worklist.append(workitems[item])
+
+  jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
+
+def get_mangled_artwork(jcomms):
+  def addItems(item, mediatype, idname):
+    title = item["label"]
+    id = item[idname]
+    if "fanart" in item:
+      allfiles.append({"type": mediatype, "idname": idname, "id": id, "art": "fanart", "url": item["fanart"], "title": title})
+    if "thumbnail" in i:
+      allfiles.append({"type": mediatype, "idname": idname, "id": id, "art": "thumbnail", "url": item["thumbnail"], "title": title})
+    if "art" in item:
+      for a in item["art"]:
+        # ignore artwork such as "tvshow.banner" which is a tvshow banner at the episode or season level
+        if a.find(".") == -1:
+          allfiles.append({"type": mediatype, "idname": idname, "id": item[idname], "art": "art.%s" % a, "url": item["art"][a], "title": title})
+
+  allfiles = []
+  idnames = {"Movies": "movieid", "MovieSets": "setid"}
+  types   = {"Movies": "movie",   "MovieSets": "set"}
+
+  REQUEST = [
+              {"method":"VideoLibrary.GetMovies",
+               "params":{"sort": {"order": "ascending", "method": "title"},
+                         "properties":["title", "art"]}},
+
+              {"method":"VideoLibrary.GetMovieSets",
+               "params":{"sort": {"order": "ascending", "method": "title"},
+                         "properties":["title", "art"]}}
+             ]
+
+  for r in REQUEST:
+    mediatype = re.sub(".*\.Get(.*)","\\1",r["method"])
+    idname = idnames[mediatype]
+    mtype = types[mediatype]
+
+    gLogger.progress("Loading: %s..." % mediatype)
+    data = jcomms.sendJSON(r, "libFiles")
+
+    for items in data.get("result", []):
+      if items != "limits":
+        if mediatype == "set":
+          interval = 0
+        else:
+          interval = int(int(data["result"]["limits"]["total"])/10)
+          interval = 50 if interval > 50 else interval
+        title = ""
+        for i in data["result"][items]:
+          title = i.get("title", i.get("artist", i.get("name", None)))
+          gLogger.progress("Parsing: %s [%s]..." % (mediatype, title), every=interval)
+          addItems(i, mtype, idname)
+        if title != "": gLogger.progress("Parsing: %s [%s]..." % (mediatype, title))
+
+  gLogger.progress("Loading: TVShows...")
+
+  REQUEST = {"method":"VideoLibrary.GetTVShows",
+             "params": {"sort": {"order": "ascending", "method": "title"},
+                        "properties":["title", "art"]}}
+
+  tvdata = jcomms.sendJSON(REQUEST, "libTV")
+
+  if "result" in tvdata and "tvshows" in tvdata["result"]:
+    for tvshow in tvdata["result"]["tvshows"]:
+      gLogger.progress("Loading: TVShows [%s]..." % tvshow["title"])
+
+      tvshowid = tvshow["tvshowid"]
+      addItems(tvshow, "tvshow", "tvshowid")
+
+      REQUEST = {"method":"VideoLibrary.GetSeasons",
+                 "params":{"tvshowid": tvshowid,
+                           "sort": {"order": "ascending", "method": "season"},
+                           "properties":["season", "art"]}}
+
+      seasondata = jcomms.sendJSON(REQUEST, "libTV")
+
+      if "seasons" in seasondata["result"]:
+        for season in seasondata["result"]["seasons"]:
+          seasonid = season["season"]
+          gLogger.progress("Loading: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
+
+          # Can't set items on season unless seasonid is present...
+          if "seasonid" in season:
+            addItems(season, "season", "seasonid")
+
+          REQUEST = {"method":"VideoLibrary.GetEpisodes",
+                     "params":{"tvshowid": tvshowid, "season": seasonid,
+                               "properties":["art"]}}
+
+          episodedata = jcomms.sendJSON(REQUEST, "libTV")
+
+          for episode in episodedata["result"]["episodes"]:
+            addItems(episode, "episode", "episodeid")
+
+  files = []
+  for f in allfiles:
+    original = MyUtility.normalise(f["url"], strip=True)
+    fixed = MyUtility.fixSlashes(original)
+    if original != fixed:
+      f["fixedurl"] = fixed
+      files.append(f)
+
+  return files
 
 def doLibraryScan(media, path):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -4399,6 +4508,7 @@ def usage(EXIT_CODE):
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
           purge hashed;unhashed pattern [pattern [pattern ]] | \
           purgetest hashed;unhashed pattern [pattern [pattern]] | \
+          fixurls | \
           remove mediatype libraryid | watched class backup <filename> | \
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
@@ -4431,6 +4541,7 @@ def usage(EXIT_CODE):
   print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
   print("  purge      Remove cached artwork with urls containing specified patterns, with or without hash")
   print("  purgetest  Dry-run version of purge")
+  print("  fixurls    Output new urls for Movies, Sets and TVShows that have urls containing both forward and backward slashes. Output suitable as stdin for set option")
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
   print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
   print("  duplicates List movies with multiple versions as determined by imdb number")
@@ -4498,7 +4609,7 @@ def checkConfig(option):
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw", "missing", "watched", "duplicates", "set", "testset"]
+                "exec", "execw", "missing", "watched", "duplicates", "set", "testset", "fixurls"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
   optDb = ["s","S","x","X","Xd","f","c","C","nc","lc","lnc","d","r","R","p","P", "purge", "purgetest"]
@@ -4718,7 +4829,8 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "version", "update", "fupdate", "config",
-                   "duplicates", "set", "testset", "purge", "purgetest"]:
+                   "duplicates", "set", "testset", "purge", "purgetest",
+                   "fixurls"]:
     USAGE  = argv[0]
 
   HEADERS = []
@@ -4938,6 +5050,9 @@ def main(argv):
     _dryrun   = (argv[0] == "purgetest")
     _withHash = (argv[1] == "hashed")
     purgeArtwork(argv[2:], withHash=_withHash, dryRun=_dryrun)
+
+  elif argv[0] == "fixurls":
+    fix_mangled_artwork_urls()
 
   elif argv[0] == "vscan":
     EXIT_CODE = doLibraryScan("video", path=argv[1] if len(argv) == 2 else None)
