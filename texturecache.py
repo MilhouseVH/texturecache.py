@@ -3609,10 +3609,6 @@ def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
   # Fix unicode bacsklash mangling from the command line...
   ukvpairs = []
   for kv in kvpairs:
-    try:
-      kv = kv.encode("iso-8859-1").decode("unicode_escape")
-    except UnicodeDecodeError:
-      pass
     ukvpairs.append(MyUtility.toUnicode(kv))
 
   jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
