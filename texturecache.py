@@ -4975,6 +4975,8 @@ def downloadLatestVersion(argv, force=False, autoupdate=False):
 #
 def autoUpdate(argv):
   if downloadLatestVersion(argv, force=False, autoupdate=True):
+    args = sys.argv
+    args.append("@checkupdate=no")
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 def main(argv):
