@@ -35,9 +35,9 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
-**[purge hashed|unhashed]** Delete cached artwork containing specified patterns, with or without lasthashcheck eg. `purge unhashed youtube iplayer imdb.com`
+**[purge hashed|unhashed|all]** Delete cached artwork containing specified patterns, with or without lasthashcheck, or if it doesn't matter `all` eg. `purge unhashed youtube iplayer imdb.com`
 
-**[purgetest hashed|unhashed]** Dry-run version of `purge` - will show what would be removed during a real `purge`
+**[purgetest hashed|unhashed|all]** Dry-run version of `purge` - will show what would be removed during an actual `purge`
 
 **[watched]** Backup and restore movie and tvshow watched lists to a text file. Watched list will be restored keeping more recent playcount, lastplayed and resume points unless  `@watched.overwrite=yes` is specified, in which case the watched list will be restored exactly as per the backup.
 

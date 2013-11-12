@@ -63,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.6"
+    self.VERSION="1.0.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -76,7 +76,7 @@ class MyConfiguration(object):
 
     self.HAS_PVR = False
 
-    # These features only enabled by the respective API version
+    # These features become available with the respective API version
     self.JSON_VER_CAPABILITIES = {"setresume":    (6,  2, 0),
                                   "texturedb":    (6,  9, 0),
                                   "removeart":    (6,  9, 1),
@@ -291,6 +291,7 @@ class MyConfiguration(object):
 
     self.RECACHEALL = self.getBoolean(config, "allow.recacheall","no")
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
+    self.AUTOUPDATE = self.getBoolean(config, "autoupdate", "yes")
 
     self.LASTRUNFILE = self.getValue(config, "lastrunfile", "")
     self.LASTRUNFILE_DATETIME = None
@@ -527,6 +528,7 @@ class MyConfiguration(object):
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
     print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
+    print("  autoupdate = %s" % self.BooleanIsYesNo(self.AUTOUPDATE))
     if self.RECACHEALL:
       print("  allow.recacheall = yes")
     temp = " (%s)" % self.LASTRUNFILE_DATETIME if self.LASTRUNFILE and self.LASTRUNFILE_DATETIME else ""
@@ -892,13 +894,13 @@ class MyDB(object):
   def _getAllColumns(self, filter=None, order=None):
     if self.DBVERSION >= 13:
       SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, s.height, s.width, s.usecount, s.lastusetime, s.size, t.imagehash " \
-            "FROM texture t JOIN sizes s ON (t.id = s.idtexture) "
+            "FROM texture t JOIN sizes s ON (t.id = s.idtexture)"
     else:
       SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, 0 as height, 0 as width, t.usecount, t.lastusetime, 0 as size, t.imagehash " \
-            "FROM texture t "
+            "FROM texture t"
 
-    if filter: SQL += filter
-    if order: SQL += order
+    if filter: SQL = "%s %s" % (SQL, filter)
+    if order: SQL = "%s %s" % (SQL, order)
 
     return self.execute(SQL).fetchall()
 
@@ -1424,6 +1426,9 @@ class MyJSONComms(object):
     directory = MyUtility.normalise(filename, strip=True)
 
     # Remove filename, leaving just directory...
+    # Could use dirname() here but need to know
+    # which slash is being used so that it can be
+    # appended, before filename is added by caller.
     ADD_BACK=""
     if directory.rfind("/") != -1:
       directory = directory[:directory.rfind("/")]
@@ -1882,22 +1887,25 @@ class MyJSONComms(object):
   def parseSQLFilter(self, filter):
     if type(filter) is dict: return filter
 
+    filter = filter.strip()
+
+    if not filter: return []
+
     if filter.lower().startswith("where "):
       filter = filter[6:]
 
-    data = []
-
     PATTERN = re.compile(r'''((?:[^ "']|"[^"]*"|'[^']*')+)''')
 
-    condition = None
+    data = []
     fields = []
+    condition = None
     f = 0
-    for word in PATTERN.split(filter)[1::2]:
-      if word in ["and", "or"]:
-        condition = word
+    for token in PATTERN.split(filter)[1::2]:
+      if token in ["and", "or"]:
+        condition = token
         continue
 
-      fields.append(word)
+      fields.append(token)
       f += 1
 
       if f == 3:
@@ -1908,46 +1916,61 @@ class MyJSONComms(object):
            (fields[2].startswith('"') and fields[2].endswith('"')):
           fields[2] = fields[2][1:-1]
 
-        if fields[1] == "=": fields[1] = "is"
-        if fields[1] == "!=": fields[1] = "isnot"
-        if fields[1] == ">": fields[1] = "greaterthan"
-        if fields[1] == "<": fields[1] = "lessthan"
-        if fields[1] == ">=": fields[1] = "=greaterthan"
-        if fields[1] == "<=": fields[1] = "=lessthan"
-        if fields[1].lower() == "like":
-          if re.match("%.*%", fields[2]):
+        if   fields[1] in ["=", "=="]:
+          fields[1] = "is"
+        elif fields[1] == "!=":
+          fields[1] = "isnot"
+        elif fields[1] == ">":
+          fields[1] = "greaterthan"
+        elif fields[1] == "<":
+          fields[1] = "lessthan"
+        elif fields[1] == ">=":
+          fields[1] = "=greaterthan"
+        elif fields[1] == "<=":
+          fields[1] = "=lessthan"
+        elif fields[1].lower() == "like":
+          if re.match("^%.*%", fields[2]):
             fields[1] = "contains"
-          elif re.match("%.*", fields[2]):
+          elif re.match("^%.*", fields[2]):
             fields[1] = "endswith"
-          elif re.match(".*%", fields[2]):
+          elif re.match("^.*%", fields[2]):
             fields[1] = "startswith"
           else:
             fields[1] = "is"
           fields[2] = fields[2].replace("%","")
+        else:
+          fields[1] = "is"
 
         if fields[1].startswith("="):
           data.append({"or": [{"field": fields[0], "operator": "is", "value": fields[2]},
                               {"field": fields[0], "operator": fields[1][1:], "value": fields[2]}]})
         else:
           data.append({"field": fields[0], "operator": fields[1], "value": fields[2]})
+
         fields = []
         f = 0
 
-    if condition:
-      return { condition: data }
+    if data:
+      if condition:
+        return { condition: data }
+      else:
+        return data[0]
     else:
-      return data[0]
+      return data
 
   def parseSQLOrder(self, order):
     if type(order) is dict: return order
 
+    order = order.strip()
+
+    if not order: return []
+
     if order.lower().startswith("order by "):
       order = order[9:]
 
-    data = []
-
     PATTERN = re.compile(r'''((?:[^ "']|"[^"]*"|'[^']*')+)''')
 
+    data = []
     fields = []
     f = 0
     for word in PATTERN.split(order)[1::2]:
@@ -1964,7 +1987,8 @@ class MyJSONComms(object):
 
         data.append({"method": fields[0], "order": fields[1]})
         break
-    return data[0]
+
+    return data[0] if data else data
 
   def getTextures(self, filter=None, order=None, allfields=False):
     REQUEST = {"method": "Textures.GetTextures",
@@ -1973,8 +1997,15 @@ class MyJSONComms(object):
     if allfields:
       REQUEST["params"]["properties"].extend(["lasthashcheck", "imagehash", "sizes"])
 
-    if filter: REQUEST["params"]["filter"] = self.parseSQLFilter(filter)
-#    if order: REQUEST["params"]["sort"] = self.parseSQLOrder(order)
+    if filter:
+        param = self.parseSQLFilter(filter)
+        if param:
+          REQUEST["params"]["filter"] = param
+
+#    if order:
+#        param = self.parseSQLOrder(order)
+#        if param:
+#          REQUEST["params"]["sort"] = param
 
     return self.sendJSON(REQUEST, "libTextures", checkResult=False)
 
@@ -3024,7 +3055,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       if artwork == "":
         missing["Missing %s" % j] = not i.startswith("?")
       else:
-        decoded_url = MyUtility.normalise(artwork)
+        decoded_url = MyUtility.normalise(artwork, strip=True)
         FAILED = False
         if gConfig.QA_FAIL_TYPES:
           for qafailtype in gConfig.QA_FAIL_TYPES:
@@ -4142,29 +4173,39 @@ def removeMedia(mtype, libraryid):
     gLogger.out("ERROR: Does not exist - media type [%s] libraryid [%d]" % (mtype, libraryid), newLine=True)
 
 # Remove artwork urls containing specified patterns, with or without lasthaschcheck
-def purgeArtwork(patterns, withHash=False, dryRun=True):
+def purgeArtwork(patterns, hashType="all", dryRun=True):
   database = MyDB(gConfig, gLogger)
 
-  hashcheck = "lasthashcheck != ''" if withHash else "lasthashcheck = ''"
+  SQL = "WHERE"
+  if not gConfig.USEJSONDB or gConfig.JSON_HAS_FILTERNULLVALUE:
+    if hashType == "hashed":
+      SQL = "%s lasthashcheck != '' and" % SQL
+    elif hashType == "unhashed":
+      SQL = "%s lasthashcheck == '' and" % SQL
+  SQL = "%s url like '%%s'" % SQL
 
   with database:
     for pattern in [x for x in patterns if x != ""]:
       gLogger.progress("Querying database for pattern: %s" % pattern)
 
-      SQL = "WHERE %s and url like '%%%s%%'" % (hashcheck, pattern)
-      rows = database.getRows(filter=SQL, order="ORDER BY t.id ASC", allfields=True)
+      sqlpattern = pattern
+      if sqlpattern.find("%") == -1:
+        sqlpattern = "%%%s%%" % sqlpattern
+
+      rows = database.getRows(filter=(SQL % sqlpattern), order="ORDER BY t.id ASC", allfields=True)
 
       # Filter out hashed/unhashed rows if JSON API ignores null values on the filter...
       if gConfig.USEJSONDB and not gConfig.JSON_HAS_FILTERNULLVALUE:
         newrows = []
         for r in rows:
-          if (withHash and r["lasthashcheck"]) or \
-             (not withHash and not r["lasthashcheck"]):
+          if (hashType == "all") or \
+             (hashType == "hashed" and r["lasthashcheck"]) or \
+             (hashType == "unhashed" and not r["lasthashcheck"]):
             newrows.append(r)
         rows = newrows
         newrows = None
 
-      gLogger.out("Purging %d %s items for pattern: %s" % (len(rows), ("hashed" if withHash else "unhashed"), pattern), newLine=True)
+      gLogger.out("Purging %d (%s) items for pattern: %s" % (len(rows), hashType, pattern), newLine=True)
 
       for r in rows:
         if dryRun:
@@ -4502,8 +4543,8 @@ def usage(EXIT_CODE):
   pprint("[s, S] <string> | [x, X, f] [sql-filter] | Xd | d <id[id id]>] | \
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
-          purge hashed;unhashed pattern [pattern [pattern ]] | \
-          purgetest hashed;unhashed pattern [pattern [pattern]] | \
+          purge hashed;unhashed;all pattern [pattern [pattern ]] | \
+          purgetest hashed;unhashed;all pattern [pattern [pattern]] | \
           fixurls | \
           remove mediatype libraryid | watched class backup <filename> | \
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
@@ -4873,15 +4914,18 @@ def getLatestVersion_ex(url, headers=None):
   socket.setdefaulttimeout(GLOBAL_TIMEOUT)
   return ITEMS
 
-def downloadLatestVersion(argv, force=False):
+def downloadLatestVersion(argv, force=False, autoupdate=False):
   (remoteVersion, remoteHash) = getLatestVersion(argv)
 
+  if autoupdate and (not remoteVersion or remoteVersion <= gConfig.VERSION):
+    return False
+
   if not remoteVersion:
-    print("FATAL: Unable to determine version of the latest file, check internet and github.com are available.")
+    gLogger.err("FATAL: Unable to determine version of the latest file, check internet and github.com are available.", newLine=True)
     sys.exit(2)
 
   if not force and remoteVersion <= gConfig.VERSION:
-    print("Current version is already up to date - no update required.")
+    gLogger.err("Current version is already up to date - no update required.", newLine=True)
     sys.exit(2)
 
   try:
@@ -4889,21 +4933,23 @@ def downloadLatestVersion(argv, force=False):
     data = response.read()
   except Exception as e:
     gLogger.log("Exception in downloadLatestVersion(): %s" % e)
-    print("FATAL: Unable to download latest file, check internet and github.com are available.")
+    if autoupdate: return False
+    gLogger.err("FATAL: Unable to download latest file, check internet and github.com are available.", newLine=True)
     sys.exit(2)
 
   digest = hashlib.md5()
   digest.update(data)
 
   if (digest.hexdigest() != remoteHash):
-    print("FATAL: Checksum of new version is incorrect, possibly corrupt download - abandoning update.")
+    if autoupdate: return False
+    gLogger.err("FATAL: Checksum of new version is incorrect, possibly corrupt download - abandoning update.", newLine=True)
     sys.exit(2)
 
   path = os.path.realpath(__file__)
   dir = os.path.dirname(path)
 
   if os.path.exists("%s%s.git" % (dir, os.sep)):
-    print("FATAL: Might be updating version in git repository... Abandoning update!")
+    gLogger.err("FATAL: Might be updating version in git repository... Abandoning update!", newLine=True)
     sys.exit(2)
 
   try:
@@ -4911,10 +4957,25 @@ def downloadLatestVersion(argv, force=False):
     THISFILE.write(data)
     THISFILE.close()
   except:
-    print("FATAL: Unable to update current file, check you have write access")
-    sys.exit(2)
+    if autoupdate:
+      return False
+    else:
+      gLogger.err("FATAL: Unable to update current file, check you have write access", newLine=True)
+      sys.exit(2)
 
-  print("Successfully updated from v%s to v%s" % (gConfig.VERSION, remoteVersion))
+  gLogger.err("Successfully updated from v%s to v%s" % (gConfig.VERSION, remoteVersion), newLine=True)
+
+  return True
+
+#
+# Download new version if available, then replace current
+# process - os.execl() doesn't return.
+#
+# Do nothing if newer version not available.
+#
+def autoUpdate(argv):
+  if downloadLatestVersion(argv, force=False, autoupdate=True):
+    os.execl(sys.executable, sys.executable, *sys.argv)
 
 def main(argv):
 
@@ -4924,13 +4985,17 @@ def main(argv):
 
   if not checkConfig(argv[0]): sys.exit(2)
 
+  if gConfig.CHECKUPDATE and argv[0] not in ["version", "update", "fupdate"]:
+    if gConfig.AUTOUPDATE:
+      autoUpdate(argv)
+    else:
+      checkUpdate(argv)
+
   EXIT_CODE = 0
 
   multi_call_a = ["albums", "artists", "songs"]
   multi_call_v = ["movies", "sets", "tvshows"]
   multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_a + multi_call_v
-
-  if gConfig.CHECKUPDATE and not argv[0] in ["version", "update", "fupdate"]: checkUpdate(argv)
 
   if argv[0] == "s" and len(argv) == 2:
     sqlExtract("NONE", argv[1], "")
@@ -5042,10 +5107,8 @@ def main(argv):
     removeMedia(mtype=argv[1], libraryid=int(argv[2]))
 
   elif argv[0] in ["purge", "purgetest"] and len(argv) >= 3:
-    if argv[1] not in ["hashed", "unhashed"]: usage(1)
-    _dryrun   = (argv[0] == "purgetest")
-    _withHash = (argv[1] == "hashed")
-    purgeArtwork(argv[2:], withHash=_withHash, dryRun=_dryrun)
+    if argv[1] not in ["hashed", "unhashed", "all"]: usage(1)
+    purgeArtwork(argv[2:], hashType=argv[1], dryRun=(argv[0] == "purgetest"))
 
   elif argv[0] == "fixurls":
     fix_mangled_artwork_urls()

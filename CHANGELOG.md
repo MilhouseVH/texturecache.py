@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 1.0.7 (12/11/2013)
+* Add: Auto-update facility, rather than run `update` manually each time to update. If `@checkupdate=yes` and `@autoupdate=yes` (both being the defaults), at the beginning of each script execution the latest github version will be checked and, if a newer version is available, the script automatically updated before execution commences with the latest version. Disable by setting `@autoupdate=no`. If `@checkupdate` (which simply warns when the version is out of date) is disabled, auto-updating will also be disabled.
+* Add: In addition to `hashed` and `unhashed` on `purge`/`purgetest`, added new filter `all`, being either `hashed` or `unhashed`.
+* Fix: Not stripping leading "image://" from artwork in `qa`/`qax`.
+
 ##Version 1.0.6 (10/11/2013)
 * Revert: Removed all attempts at fixing slashes on-the-fly, utterly pointless given the current front-end/back-end disconnect
 * Add: Option `fixurls` to identify media library urls with mixed forward and backward slashes. Output can be piped into `texturecache.py set` to apply corrective changes to the media library, eg:
