@@ -4861,13 +4861,18 @@ def getLatestVersion(argv):
     USAGE  = "db"
   elif argv[0] in ["exec", "execw"]:
     USAGE  = "exec"
-  elif argv[0] in ["qa", "qax", "query", "missing", "watched",
+  elif argv[0] in ["set", "testset"]:
+    USAGE  = "set"
+  elif argv[0] in ["purge", "purgetest"]:
+    USAGE  = "purge"
+  elif argv[0] in ["qa", "qax"]:
+    USAGE  = "qa"
+  elif argv[0] in ["query", "missing", "watched",
                    "power", "wake", "status", "monitor",
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
-                   "version", "update", "fupdate", "config",
-                   "duplicates", "set", "testset", "purge", "purgetest",
-                   "fixurls"]:
+                   "duplicates", "fixurls",
+                   "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
   HEADERS = []
