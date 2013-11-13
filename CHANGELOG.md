@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.0.8 (13/11/2013)
+* Fix: Avoid using urllib2.quote() in getSeasonAll processing, which could fail with foreign codings ([forum post](http://forum.xbmc.org/showthread.php?tid=158373&pid=1549752#pid1549752)).
+
 ##Version 1.0.7 (12/11/2013)
 * Add: Auto-update facility, rather than run `update` manually each time to update. If `@checkupdate=yes` and `@autoupdate=yes` (both being the defaults), at the beginning of each script execution the latest github version will be checked and, if a newer version is available, the script automatically updated before execution commences with the latest version. Disable by setting `@autoupdate=no`. If `@checkupdate` (which simply warns when the version is out of date) is disabled, auto-updating will also be disabled.
 * Add: In addition to `hashed` and `unhashed` on `purge`/`purgetest`, added new filter `all`, being either `hashed` or `unhashed`.

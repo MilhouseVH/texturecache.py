@@ -63,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.7"
+    self.VERSION="1.0.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -1429,13 +1429,13 @@ class MyJSONComms(object):
     # Could use dirname() here but need to know
     # which slash is being used so that it can be
     # appended, before filename is added by caller.
-    ADD_BACK=""
-    if directory.rfind("/") != -1:
-      directory = directory[:directory.rfind("/")]
-      ADD_BACK="/"
-    if directory.rfind("\\") != -1:
-      directory = directory[:directory.rfind("\\")]
-      ADD_BACK="\\"
+    for slash in ["/", "\\"]:
+      pos = directory.rfind(slash)
+      if pos != -1:
+        directory = directory[:pos]
+        break
+    else:
+      return (None, None, None)
 
     REQUEST = {"method":"Files.GetDirectory", "params":{"directory": directory}}
 
@@ -1446,10 +1446,10 @@ class MyJSONComms(object):
       for f in data["result"]["files"]:
         if f["filetype"] == "file":
           fname = os.path.split(f["label"])[1].lower()
-          if fname.startswith("season-all-poster."): poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif not poster_url and fname.startswith("season-all."): poster_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif fname.startswith("season-all-banner."): banner_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
-          elif fname.startswith("season-all-fanart."): fanart_url = "image://%s%s" % (urllib2.quote(f["file"], "()"),ADD_BACK)
+          if fname.startswith("season-all-poster."): poster_url = MyUtility.joinQuotedPath(filename, f["file"])
+          elif not poster_url and fname.startswith("season-all."): poster_url = MyUtility.joinQuotedPath(filename, f["file"])
+          elif fname.startswith("season-all-banner."): banner_url = MyUtility.joinQuotedPath(filename, f["file"])
+          elif fname.startswith("season-all-fanart."): fanart_url = MyUtility.joinQuotedPath(filename, f["file"])
       return (poster_url, fanart_url, banner_url)
 
     return (None, None, None)
@@ -2424,7 +2424,10 @@ class MyUtility(object):
       v = v[8:-1]
 
     if not MyUtility.isPython3:
-      v = bytes(v.encode("iso-8859-1")).decode("utf-8")
+      try:
+        v = bytes(v.encode("iso-8859-1")).decode("utf-8")
+      except UnicodeDecodeError:
+        pass
 
     return v
 
@@ -2440,6 +2443,34 @@ class MyUtility(object):
           pass
 
     return data
+
+  # Join an unquoted filename to a quoted path,
+  # returning a quoted result.
+  #
+  # Running urllib2.quote() on a path that contains
+  # foreign characters would often fail with a unicode error
+  # so avoid the quote() call entirely (except on the filename
+  # which should be safe (as this is only called from getSeasonAll()
+  # so the only filenames are season-all-poster etc.).
+  #
+  @staticmethod
+  def joinQuotedPath(qpath, filename):
+
+    # Remove filename, leaving just directory.
+    # Could use dirname() here but the path is quoted
+    # and we need to know which slash is being used so
+    # that it can be re-appended
+    for qslash in ["%2f", "%5c"]:
+      pos = qpath.rfind(qslash)
+      if pos != -1:
+        directory = "%s%s" % (qpath[:pos], qslash)
+        break
+    else:
+      return None
+
+    fname = urllib2.quote(os.path.basename(filename))
+
+    return "%s%s/" % (directory, fname)
 
   #
   # Some JSON paths may have incorrect path seperators.
