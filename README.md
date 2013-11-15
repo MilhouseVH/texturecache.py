@@ -421,6 +421,7 @@ logfile.verbose = no
 checkupdate = yes
 lastrunfile =
 orphan.limit.check = yes
+purge.minlen = 5
 nonmedia.filetypes =
 watched.overwrite = no
 network.mac =
