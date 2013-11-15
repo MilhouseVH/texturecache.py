@@ -63,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION="1.0.8"
+    self.VERSION = "1.0.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -147,16 +147,25 @@ class MyConfiguration(object):
     self.FSEP = self.getValue(config, "sep", "|")
 
     _atv2_path = "/User/Library/Preferences/XBMC/userdata"
+    _macosx_path = "~/Library/Application Support/XBMC/userdata"
+    _android1_path = "Android/data/org.xbmc.xbmc/files/.xbmc/userdata"
+    _android2_path = "/sdcard/%s" % _android1_path
 
-    #Windows
+    UD_SYS_DEFAULT = "~/.xbmc/userdata"
+
     if sys.platform == "win32":
-      _USER_DEFAULT = "%s\\XBMC\\userdata" % os.environ["appdata"]
+      UD_SYS_DEFAULT = "%s\\XBMC\\userdata" % os.environ["appdata"]
     elif sys.platform == "darwin" and os.path.exists(_atv2_path):
-      _USER_DEFAULT = _atv2_path
+      UD_SYS_DEFAULT = _atv2_path
+    elif sys.platform == "darwin" and os.path.exists(os.path.expanduser(_macosx_path)):
+      UD_SYS_DEFAULT = _macosx_path
     else:
-      _USER_DEFAULT = "~/.xbmc/userdata"
+      if os.path.exists(_android2_path):
+        UD_SYS_DEFAULT = _android2_path
+      elif os.path.exists(_android1_path):
+        UD_SYS_DEFAULT = _android1_path
 
-    self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", _USER_DEFAULT))
+    self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", UD_SYS_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
@@ -310,6 +319,8 @@ class MyConfiguration(object):
     self.MAC_ADDRESS = self.getValue(config, "network.mac", "")
 
     self.ADD_SET_MEMBERS = self.getBoolean(config, "setmembers", "yes")
+
+    self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
@@ -534,6 +545,7 @@ class MyConfiguration(object):
     temp = " (%s)" % self.LASTRUNFILE_DATETIME if self.LASTRUNFILE and self.LASTRUNFILE_DATETIME else ""
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
+    print("  purge.minlen = %s" % self.PURGE_MIN_LEN)
     print("  nonmedia.filetypes = %s" % self.NoneIsBlank(",".join(self.NONMEDIA_FILETYPES)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
@@ -4217,6 +4229,12 @@ def purgeArtwork(patterns, hashType="all", dryRun=True):
 
   with database:
     for pattern in [x for x in patterns if x != ""]:
+      if len(pattern.replace("%", "")) < gConfig.PURGE_MIN_LEN:
+        gLogger.err("Ignoring [%s] as pattern length (excluding wildcards) is less than " \
+                    "%d characters configured by purge.minlen property" % \
+                    (pattern, gConfig.PURGE_MIN_LEN), newLine=True)
+        continue
+
       gLogger.progress("Querying database for pattern: %s" % pattern)
 
       sqlpattern = pattern

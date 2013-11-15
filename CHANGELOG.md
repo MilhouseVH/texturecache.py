@@ -1,5 +1,11 @@
 #Changelog
 
+##Version 1.0.9 (15/11/2013)
+* Add: Mac OS X and Android `userdata` defaults
+* Chg: Restrict pattern length (excluding wildcards) on `purge`/`purgetest` to minimum length of 5 characters (override with @purge.minlen=n, value of zero will disable).
+
+Specify `purge`/`purgetest` wildcards using %, ie. `pattern%` for startswith, or `%pattern` for endswith, otherwise `pattern` will be interpreted as `%pattern%` (contains).
+
 ##Version 1.0.8 (13/11/2013)
 * Fix: Avoid using urllib2.quote() in getSeasonAll processing, which could fail with foreign codings ([forum post](http://forum.xbmc.org/showthread.php?tid=158373&pid=1549752#pid1549752)).
 
