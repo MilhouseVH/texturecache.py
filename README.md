@@ -65,7 +65,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[version]** View current installed version
 
-**[update]** Manually update to latest available version if not already installed. Only required if `checkupdate' or `autoupdate` properties are set to `no` as by default the script will automatically update itself (if required) to the latest version whenever it is executed.
+**[update]** Manually update to latest available version if not already installed. Only required if `checkupdate` or `autoupdate` properties are set to `no` as by default the script will automatically update itself (if required) to the latest version whenever it is executed.
 
 ##Installation instructions
 
