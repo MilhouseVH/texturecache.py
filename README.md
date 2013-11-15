@@ -63,6 +63,10 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[exec, execw]** Execute the specified addon, with optional parameters. eg. `exec script.artwork.downloader silent=true mediatype=tvshow`. Use `execw` to wait, but this rarely has any effect (possibly not implemented by JSON?)
 
+**[version]** View current installed version
+
+**[update]** Manually update to latest available version if not already installed. Only required if `checkupdate' or `autoupdate` properties are set to `no` as by default the script will automatically update itself (if required) to the latest version whenever it is executed.
+
 ##Installation instructions
 
 Download the single Python file required from github. A default properties file is available on github, rename this to texturecache.cfg in order to use it.
@@ -419,6 +423,7 @@ prune.retain.types =
 logfile =
 logfile.verbose = no
 checkupdate = yes
+autoupdate = yes
 lastrunfile =
 orphan.limit.check = yes
 purge.minlen = 5
