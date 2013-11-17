@@ -35,6 +35,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
+**[imdb]** Update imdb fields on movies. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest imdb details based on `imdbnumber`. Movies without `imdbnumber` will not be updated. Specify fields to be updated with the property `@imdb.fields` from the following: `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. The default value is `rating, votes`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields=+year,genre` to update ratings, votes, year and genre. See log for old/new values.
+
 **[purge hashed|unhashed|all]** Delete cached artwork containing specified patterns, with or without lasthashcheck, or if it doesn't matter `all` eg. `purge unhashed youtube iplayer imdb.com`
 
 **[purgetest hashed|unhashed|all]** Dry-run version of `purge` - will show what would be removed during an actual `purge`
@@ -430,6 +432,7 @@ purge.minlen = 5
 nonmedia.filetypes =
 watched.overwrite = no
 network.mac =
+imdb.fields = ratings, votes
 
 ```
 

@@ -1,5 +1,14 @@
 #Changelog
 
+##Version 1.1.0 (17/11/2013)
+* Add: `imdb movies [filter]` option to update a subset of imdb related fields on movies, all or filtered. Uses `imdbnumber` from the media library to query http://www.omdbapi.com. Specify the fields to be updated using the property `@imdb.fields`, the default fields being `ratings` and `votes`. Available fields are: `title`, `year`, `runtime`, `genre`, `plot`, `plotoutline`, `rating`, `votes`.
+
+Output should be piped into `set` for changes to be applied to the media library. For example, to update ratings, votes and also year on Avatar:
+
+  `./texturecache.py imdb movies avatar @imdb.fields=+year | ./texturecache.py set`
+  
+Only if one or more fields requires updating will a work item be output for each movie. Old and new values will be written to the logfile for each workitem.
+
 ##Version 1.0.9 (15/11/2013)
 * Add: Mac OS X and Android `userdata` defaults
 * Chg: Restrict pattern length (excluding wildcards) on `purge`/`purgetest` to minimum length of 5 characters (override with @purge.minlen=n, value of zero will disable).

@@ -63,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.0.9"
+    self.VERSION = "1.1.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -322,6 +322,16 @@ class MyConfiguration(object):
 
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
+    self.IMDB_FIELDS = "rating, votes"
+    temp = self.getValue(config, "imdb.fields", "")
+    if temp:
+      if temp.startswith("+"):
+        temp = temp[1:]
+        temp2 = self.IMDB_FIELDS
+        if temp2 != "": temp2 = "%s, " % temp2
+        temp = "%s%s " % (temp2, temp.strip())
+      self.IMDB_FIELDS = temp
+
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
     self.JSON_VER_STR = "v%d.%d.%d" % (major, minor, patch)
@@ -549,6 +559,7 @@ class MyConfiguration(object):
     print("  nonmedia.filetypes = %s" % self.NoneIsBlank(",".join(self.NONMEDIA_FILETYPES)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
+    print("  imdb.fields = %s" % self.NoneIsBlank(self.IMDB_FIELDS))
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -1846,6 +1857,8 @@ class MyJSONComms(object):
       if lastRun and self.config.LASTRUNFILE_DATETIME:
         self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATETIME })
 
+    # Add extra required fields/propreties based on action to be performed
+
     if action == "duplicates":
       if "art" in REQUEST["params"]["properties"]:
         REQUEST["params"]["properties"].remove("art")
@@ -1855,21 +1868,25 @@ class MyJSONComms(object):
       self.addProperties(REQUEST, "lastplayed")
       self.addProperties(REQUEST, "dateadded")
 
-    if action == "missing":
+    elif action == "imdb":
+      self.addProperties(REQUEST, "imdbnumber")
+      self.addProperties(REQUEST, self.config.IMDB_FIELDS)
+
+    elif action == "missing":
       for unwanted in ["artist", "art", "fanart", "thumbnail"]:
         if unwanted in REQUEST["params"]["properties"]:
           REQUEST["params"]["properties"].remove(unwanted)
       if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
 
-    if action == "watched" and mediatype in ["movies", "episodes"]:
+    elif action == "watched" and mediatype in ["movies", "episodes"]:
         if "art" in REQUEST["params"]["properties"]:
           REQUEST["params"]["properties"].remove("art")
         if mediatype == "movies":
           self.addProperties(REQUEST, "year")
         self.addProperties(REQUEST, "playcount, lastplayed, resume")
 
-    if action == "qa":
+    elif action == "qa":
       qaSinceDate = self.config.QADATE
       if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
           self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate})
@@ -1879,6 +1896,7 @@ class MyJSONComms(object):
 
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("zero", EXTRA)))
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", EXTRA)))
+
     elif action == "dump":
       if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
@@ -1887,9 +1905,11 @@ class MyJSONComms(object):
         self.addProperties(REQUEST, extraFields)
       if secondaryFields:
         self.addProperties(REQUEST, secondaryFields)
+
     elif action == "query" and not mediatype in ["tvshows", "seasons", "pvr.tv", "pvr.radio"]:
       if secondaryFields:
         self.addProperties(REQUEST, secondaryFields)
+
     elif action == "cache":
       if mediatype in ["movies", "tags", "tvshows", "episodes"] and self.config.CACHE_CAST_THUMB:
         self.addProperties(REQUEST, "cast")
@@ -2533,6 +2553,56 @@ class MyUtility(object):
     else: #fslash < bslash:
       return url.replace("%5c", "%2f")
 
+  @staticmethod
+  def getIMDBInfo(imdbnumber, plotFull=False, plotOutline=False):
+    try:
+      base_url = "http://www.omdbapi.com"
+
+      if plotOutline or not plotFull:
+        f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber))
+        data = json.loads(f.read().decode("utf-8"))
+        outline = data.get("Plot", None)
+      else:
+        outline=None
+
+      if plotFull:
+        f = urllib2.urlopen("%s?i=%s&plot=full" % (base_url, imdbnumber))
+        data = json.loads(f.read().decode("utf-8"))
+
+      # Convert omdbapi.com fields to xbmc fields - mostly just a case
+      # of converting to lowercase, and removing "imdb" prefix
+      newdata = {}
+      for key in data:
+        newkey = key.replace("imdb", "").lower()
+
+        # Convert rating from str to float
+        if newkey == "rating":
+          newdata[newkey] = float(data[key])
+        # Munge plot/plotoutline together as required
+        elif newkey == "plot":
+          if plotOutline and outline:
+            newdata["plotoutline"] = outline
+          if plotFull:
+            newdata["plot"] = data[key]
+        # Convert genre to a list
+        elif newkey == "genre":
+          newdata[newkey] = [g.strip() for g in data[key].split(",")]
+        # Year to an int
+        elif newkey == "year":
+          newdata[newkey] = int(data[key])
+        # Runtime from "2 h", "36 min" or "2 h 22 min" to seconds
+        elif newkey == "runtime":
+          t = data[key]
+          if t.find(" h") == -1: t = "0 h %s" % t
+          if t.find(" min") == -1: t = "%s 0 min" % t
+          (h, m) = t.replace(" h","").replace(" min","").split(" ")
+          newdata[newkey] = (int(h)*3600) + int(m)*60
+        else:
+          newdata[newkey] = data[key]
+      return newdata
+    except urllib2.URLError:
+      return None
+
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons
 # and Episodes into a single data structure.
@@ -2543,7 +2613,8 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
                       decode=False, ensure_ascii=True, nodownload=False, lastRun=False, \
                       labels=None, query="", filename=None, wlBackup=True):
 
-  if not mediatype in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
+  if not mediatype in ["addons", "agenres", "vgenres", "albums", "artists", "songs",
+                       "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
 
@@ -2560,6 +2631,11 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   # Only movies and tvshows for "watched"...
   if action in "watched" and not mediatype in ["movies", "tvshows"]:
     gLogger.out("Error: media class [%s] is not currently supported by watched" % mediatype, newLine=True)
+    sys.exit(2)
+
+  # Only movies "imdb"...
+  if action in "ratings" and not mediatype in ["movies"]:
+    gLogger.out("Error: media class [%s] is not currently supported by imdb" % mediatype, newLine=True)
     sys.exit(2)
 
   TOTALS.TimeStart(mediatype, "Total")
@@ -2708,6 +2784,10 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       watchedRestore(mediatype, jcomms, filename, data, title_name, id_name)
     elif action == "duplicates":
       duplicatesList(mediatype, jcomms, data)
+    elif action == "imdb":
+      updateIMDb(mediatype, jcomms, data)
+    else:
+      raise ValueError("Unknown action [%s]" % action)
 
   gLogger.progress("")
 
@@ -3643,10 +3723,64 @@ def duplicatesList(mediatype, jcomms, data):
       gLogger.out("         File: %s" % movie["file"], newLine=True)
       gLogger.out("", newLine=True)
 
+def updateIMDb(mediatype, jcomms, data):
+  worklist = []
+
+  imdbfields = [f.strip() for f in gConfig.IMDB_FIELDS.split(",")]
+
+  plotFull    = ("plot" in imdbfields)
+  plotOutline = ("plotoutline" in imdbfields)
+
+  for item in data:
+    title = item["title"]
+    libid = item["movieid"]
+    imdbnumber = item.get("imdbnumber", "")
+
+    gLogger.progress("Querying IMDb: %s..." % title)
+
+    newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline) if imdbnumber else None
+
+    if not newimdb or newimdb.get("response", "False") != "True":
+      gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
+      continue
+
+    # Truncate rating to 1 decimal place
+    if "rating" in imdbfields:
+      item["rating"] = float("%.1f" % item.get("rating", 0.0))
+
+    # Sort genre lists for comparison purposes
+    if "genre" in imdbfields:
+      item["genre"] = sorted(item.get("genre", []))
+      newimdb["genre"] = sorted(newimdb.get("genre", []))
+
+    olditems = {"items": {}}
+    workitem = {"type": "movie",
+                "libraryid": libid,
+                "title": title,
+                "items": {}}
+
+    for field in imdbfields:
+      if field in newimdb:
+        if field not in item or item[field] != newimdb[field]:
+          workitem["items"][field] = newimdb[field]
+          olditems["items"][field] = item.get(field, None)
+
+    if workitem["items"]:
+      worklist.append(workitem)
+      gLogger.log("Workitem for id: %d, type: %s, title: %s" %
+                  (workitem["libraryid"], workitem["type"], workitem["title"]))
+      gLogger.log("  Old items: %s" % olditems["items"])
+      gLogger.log("  New items: %s" % workitem["items"])
+
+  gLogger.progress("")
+
+  jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
+
 def getIntFloatStr(aValue):
-  if (aValue.startswith('"') and aValue.endswith('"')) or \
-     (aValue.startswith("'") and aValue.endswith("'")):
-    return aValue[1:-1]
+  if type(aValue) is str:
+    if (aValue.startswith('"') and aValue.endswith('"')) or \
+       (aValue.startswith("'") and aValue.endswith("'")):
+      return aValue[1:-1]
 
   if aValue == "null":
     return None
@@ -3654,6 +3788,8 @@ def getIntFloatStr(aValue):
   try:
     if int(aValue) == float(aValue):
       return int(aValue)
+    else:
+      return float(aValue)
   except:
     try:
       return float(aValue)
@@ -3756,7 +3892,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
         pairs[KEY] = []
         for item in pair:
           if item: pairs[KEY].append(getIntFloatStr(item))
-      elif pair.startswith("[") and pair.endswith("]"):
+      elif type(pair) is str and pair.startswith("[") and pair.endswith("]"):
         pairs[KEY] = []
         for item in [x.strip() for x in pair[1:-1].split(",")]:
           if item: pairs[KEY].append(getIntFloatStr(item))
@@ -4592,6 +4728,7 @@ def usage(EXIT_CODE):
   pprint("[s, S] <string> | [x, X, f] [sql-filter] | Xd | d <id[id id]>] | \
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
+          imdb movies [filter] | \
           purge hashed;unhashed;all pattern [pattern [pattern ]] | \
           purgetest hashed;unhashed;all pattern [pattern [pattern]] | \
           fixurls | \
@@ -4625,6 +4762,7 @@ def usage(EXIT_CODE):
   print("  P          Prune (automatically remove) cached items that don't exist in the media library")
   print("  r          Reverse search to identify \"orphaned\" Thumbnail files that are not present in the texture cache database")
   print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
+  print("  imdb       Update imdb fields (default: ratings and votes) on movies - pipe output into set to apply changes to media library. Specify alternate fields with @imdb.fields")
   print("  purge      Remove cached artwork with urls containing specified patterns, with or without hash")
   print("  purgetest  Dry-run version of purge")
   print("  fixurls    Output new urls for Movies, Sets and TVShows that have urls containing both forward and backward slashes. Output suitable as stdin for set option")
@@ -4695,7 +4833,8 @@ def checkConfig(option):
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power",
-                "exec", "execw", "missing", "watched", "duplicates", "set", "testset", "fixurls"]
+                "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
+                "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
   optDb = ["s","S","x","X","Xd","f","c","C","nc","lc","lnc","d","r","R","p","P", "purge", "purgetest"]
@@ -4921,7 +5060,7 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls",
-                   "version", "update", "fupdate", "config"]:
+                   "version", "update", "fupdate", "config", "imdb"]:
     USAGE  = argv[0]
 
   HEADERS = []
@@ -5078,15 +5217,15 @@ def main(argv):
 
   elif argv[0] in ["c", "C", "nc", "lc", "lnc",
                    "j", "J", "jd", "Jd", "jr", "Jr",
-                   "qa", "qax", "query"]:
+                   "qa", "qax", "query", "imdb"]:
     _stats  = False
 
     if argv[0] in ["j", "J", "jd", "Jd", "jr", "Jr"]:
       _action = "dump"
     elif argv[0] in ["qa", "qax"]:
       _action = "qa"
-    elif argv[0] in ["query"]:
-      _action = "query"
+    elif argv[0] in ["query", "imdb"]:
+      _action = argv[0]
     else:
       _action = "cache"
       _stats  = True
