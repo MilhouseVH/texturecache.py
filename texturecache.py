@@ -63,7 +63,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.0"
+    self.VERSION = "1.1.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -2590,13 +2590,16 @@ class MyUtility(object):
         # Year to an int
         elif newkey == "year":
           newdata[newkey] = int(data[key])
-        # Runtime from "2 h", "36 min" or "2 h 22 min" to seconds
+        # Runtime from "2 h", "36 min", "2 h 22 min" or "N/A" to seconds
         elif newkey == "runtime":
           t = data[key]
-          if t.find(" h") == -1: t = "0 h %s" % t
-          if t.find(" min") == -1: t = "%s 0 min" % t
-          (h, m) = t.replace(" h","").replace(" min","").split(" ")
-          newdata[newkey] = (int(h)*3600) + int(m)*60
+          h = re.search("([0-9]+) h", t)
+          m = re.search("([0-9]+) min", t)
+          r = 0
+          r += (int(h.group(1))*3600) if h else 0
+          r += (int(m.group(1))*60) if m else 0
+          if r > 0:
+            newdata[newkey] = r
         else:
           newdata[newkey] = data[key]
       return newdata
@@ -5059,8 +5062,8 @@ def getLatestVersion(argv):
                    "power", "wake", "status", "monitor",
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
-                   "duplicates", "fixurls",
-                   "version", "update", "fupdate", "config", "imdb"]:
+                   "duplicates", "fixurls", "imdb",
+                   "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
   HEADERS = []

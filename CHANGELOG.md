@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.1.1 (18/11/2013)
+* Fix: Handle "N/A" runtime value from omdbapi.com
+
 ##Version 1.1.0 (17/11/2013)
 * Add: `imdb movies [filter]` option to update a subset of imdb related fields on movies, all or filtered. Uses `imdbnumber` from the media library to query http://www.omdbapi.com. Specify the fields to be updated using the property `@imdb.fields`, the default fields being `ratings` and `votes`. Available fields are: `title`, `year`, `runtime`, `genre`, `plot`, `plotoutline`, `rating`, `votes`.
 
