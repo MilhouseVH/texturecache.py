@@ -40,13 +40,6 @@ try:
 except:
   import simplejson as json
 
-# We can use JSON API for Textures.db access, so if sqlite3 module
-# is not available, it's not terminal
-try:
-  import sqlite3 as lite
-except ImportError:
-  lite = None
-
 if sys.version_info >= (3, 0):
   import configparser as ConfigParser
   import io as StringIO
@@ -169,14 +162,8 @@ class MyConfiguration(object):
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
-    # If there is no SQLite3 module available, force JSON API usage instead
-    if not lite:
-      self.DBJSON = "yes"
-      self.USEJSONDB = True
-    else:
-      # if dbjson not specified, auto-detect otherwise should be yes/no
-      self.DBJSON = self.getValue(config, "dbjson", "auto")
-      self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
+    self.DBJSON = self.getValue(config, "dbjson", "auto")
+    self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
 
     if self.XBMC_BASE[-1:] not in ["/", "\\"]: self.XBMC_BASE += "/"
     if self.THUMBNAILS[-1:] not in ["/", "\\"]: self.THUMBNAILS += "/"
@@ -4950,22 +4937,26 @@ def checkConfig(option):
     # Don't access file system either
     needDb = needFS2 = False
 
-  if needDb and lite:
+  # If db access required, import SQLite3 module
+  if needDb:
+    global lite
     try:
-      database = MyDB(gConfig, gLogger)
-      con = database.getDB()
-      if database.DBVERSION < 13:
-        MSG = "WARNING: The sqlite3 database pre-dates Frodo (v12), some problems may be encountered!\n"
-        gLogger.out(MSG)
-        gLogger.log(MSG)
-      gotDb = True
-    except lite.OperationalError:
-      pass
+      import sqlite3 as lite
+      try:
+        database = MyDB(gConfig, gLogger)
+        con = database.getDB()
+        if database.DBVERSION < 13:
+          MSG = "WARNING: The sqlite3 database pre-dates Frodo (v12), some problems may be encountered!"
+          gLogger.err(MSG, newLine=True)
+          gLogger.log(MSG)
+        gotDb = True
+      except lite.OperationalError:
+        pass
+    except ImportError:
+      gLogger.log("ERROR: SQLite3 module not imported")
+      lite = None
 
   if needDb and not gotDb:
-    if not lite:
-      gLogger.log("ERROR: SQLite3 module not imported")
-
     MSG = "FATAL: The task you wish to perform requires read/write file\n" \
           "       access to the XBMC sqlite3 Texture Cache database.\n\n" \
           "       The following sqlite3 database could not be opened:\n" \
