@@ -32,4 +32,4 @@
 #cache.castthumb = no
 #logfile =
 #logfile.verbose = no
-#network.mac =
+#network.mac = aa:bb:cc:dd:ee:ff
