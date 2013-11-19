@@ -56,7 +56,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.1"
+    self.VERSION = "1.1.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -3939,16 +3939,21 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
     FCOUNT = 0
     ROWS = []
 
+    gLogger.progress("Loading database items...")
     for row in database.getRows(filter=SQL, order="ORDER BY t.id ASC", allfields=True):
       if ACTION == "NONE":
         ROWS.append(row)
-      elif ACTION == "EXISTS":
-        if not os.path.exists(gConfig.getFilePath(row["cachedurl"])):
-          ROWS.append(row)
-      elif ACTION == "STATS":
-        if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
-          FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
-          ROWS.append(row)
+      else:
+        gLogger.progress("Parsing [%s]..." % row["cachedurl"], every = 50)
+        if ACTION == "EXISTS":
+          if not os.path.exists(gConfig.getFilePath(row["cachedurl"])):
+            ROWS.append(row)
+        elif ACTION == "STATS":
+          if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
+            FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
+            ROWS.append(row)
+
+    gLogger.progress("")
 
     FCOUNT=len(ROWS)
 

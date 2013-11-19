@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.1.2 (19/11/2013)
+* Add: Progress information to database extract options (`x`, `X`, `Xd`, `f` etc.)
+
 ##Version 1.1.1 (18/11/2013)
 * Fix: Handle "N/A" runtime value from omdbapi.com
 * Chg: Delay import of sqlite3 module until determined that sqlite access is required (@dbjson=no)
