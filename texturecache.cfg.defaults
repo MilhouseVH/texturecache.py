@@ -1,22 +1,35 @@
-sep = |
-userdata = ~/.xbmc/userdata/
-dbfile = Database/Textures13.db
-thumbnails = Thumbnails/
-xbmc.host = localhost
-webserver.port = 8080
-rpc.port = 9090
-download.threads = 2
-extrajson.albums  =
-extrajson.artists =
-extrajson.songs   =
-extrajson.movies  =
-extrajson.sets    =
-extrajson.tvshows.tvshow =
-extrajson.tvshows.season =
-extrajson.tvshows.episode=
-qaperiod = 30
-qa.file = no
-cache.castthumb = no
-logfile =
-logfile.verbose = no
-network.mac =
+##
+## THIS IS JUST A SAMPLE CONFIGURATION FILE
+##
+## All of the following lines are comments.
+##
+## Remove the # at the beginning of a line
+## to make that property "active".
+##
+## Add extra properties to the end of the file.
+##
+## Don't specify propreties unless you want or
+## need to override the default value.
+##
+
+#userdata = ~/.xbmc/userdata/
+#dbfile = Database/Textures13.db
+#thumbnails = Thumbnails/
+#xbmc.host = localhost
+#webserver.port = 8080
+#rpc.port = 9090
+#download.threads = 2
+#extrajson.albums  =
+#extrajson.artists =
+#extrajson.songs   =
+#extrajson.movies  =
+#extrajson.sets    =
+#extrajson.tvshows.tvshow =
+#extrajson.tvshows.season =
+#extrajson.tvshows.episode=
+#qaperiod = 30
+#qa.file = no
+#cache.castthumb = no
+#logfile =
+#logfile.verbose = no
+#network.mac =
