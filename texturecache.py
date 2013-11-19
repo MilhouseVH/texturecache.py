@@ -5145,6 +5145,8 @@ def downloadLatestVersion(argv, force=False, autoupdate=False):
     THISFILE.close()
   except:
     if autoupdate:
+      gLogger.err("NOTICE: A new version (v%s) of this script is available." % remoteVersion, newLine=True)
+      gLogger.err("NOTICE: Use the \"--update\" option to apply update.", newLine=True)
       return False
     else:
       gLogger.err("FATAL: Unable to update current file, check you have write access", newLine=True)
