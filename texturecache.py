@@ -56,7 +56,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.2"
+    self.VERSION = "1.1.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -273,15 +273,14 @@ class MyConfiguration(object):
     self.LOGFILE = self.getValue(config, "logfile", "")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
 
+    self.CACHE_ARTWORK = self.getSimpleList(config, "cache.artwork", "")
     self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls)
+    self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", "")
 
     # Fix patterns as we now strip image:// from the urls, so we need to remove
     # this prefix from any legacy patterns that may be specified by the user
     for index, r in enumerate(self.CACHE_IGNORE_TYPES):
       self.CACHE_IGNORE_TYPES[index] = re.compile(re.sub("^\^image://", "^", r.pattern))
-
-    self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", "")
-    # Same fix as above
     for index, r in enumerate(self.PRUNE_RETAIN_TYPES):
       self.PRUNE_RETAIN_TYPES[index] = re.compile(re.sub("^\^image://", "^", r.pattern))
 
@@ -399,7 +398,7 @@ class MyConfiguration(object):
     newlist = []
 
     if aStr:
-      for item in aStr.split(","):
+      for item in [x.strip() for x in aStr.split(",") if x]:
         newlist.append(item)
 
     return newlist
@@ -531,6 +530,7 @@ class MyConfiguration(object):
 
     print("  cache.castthumb = %s" % self.BooleanIsYesNo(self.CACHE_CAST_THUMB))
     print("  cache.hideallitems = %s" % self.BooleanIsYesNo(self.CACHE_HIDEALLITEMS))
+    print("  cache.artwork = %s" % self.NoneIsBlank(", ".join(self.CACHE_ARTWORK)))
     print("  cache.ignore.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.CACHE_IGNORE_TYPES)))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
@@ -543,7 +543,7 @@ class MyConfiguration(object):
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
     print("  purge.minlen = %s" % self.PURGE_MIN_LEN)
-    print("  nonmedia.filetypes = %s" % self.NoneIsBlank(",".join(self.NONMEDIA_FILETYPES)))
+    print("  nonmedia.filetypes = %s" % self.NoneIsBlank(", ".join(self.NONMEDIA_FILETYPES)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("  imdb.fields = %s" % self.NoneIsBlank(self.IMDB_FIELDS))
@@ -3070,6 +3070,14 @@ def evaluateURL(imgtype, url, imagecache):
   if not url or url == "":
     TOTALS.bump("Undefined", imgtype)
     imagecache[""] += 1
+    return False
+
+  if gConfig.CACHE_ARTWORK and imgtype not in gConfig.CACHE_ARTWORK:
+    if gLogger.LOGGING:
+      decoded_url = MyUtility.normalise(url, strip=True)
+      gLogger.log("Ignored [%-12s] for [%s] as image type not in cache.artwork list" % (imgtype, decoded_url))
+    TOTALS.bump("Ignored", imgtype)
+    imagecache[url] = 1
     return False
 
   if url in imagecache:
