@@ -420,6 +420,7 @@ qa.zero.tvshows.season =
 qa.zero.tvshows.tvshow =
 cache.castthumb = no
 cache.hideallitems = no
+cache.artwork =
 cache.ignore.types = ^video, ^music
 prune.retain.types =
 logfile =
@@ -445,6 +446,8 @@ The `extrajson.*` properties allow the specification of additional JSON audio/vi
 The `qa.art.*`, `qa.blank.*` and `qa.zero.*` files can be used to replace or add additional fields for qa (not zero, not blank, and present in art list). Add to default fields by prefixing with +, so `qa.blank.movies = +director` will QA mpaa, plot and director for movies (failing QA if any are blank).
 
 Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes` if you require cast artwork to be re-cached, or considered when pruning.
+
+Cache specific artwork types by specifying a comma-delimited list of artwork types for `cache.artwork`, eg. `cache.artwork=poster, fanart` to cache only posters and fanart. By default this list is empty, which will ensure that all artwork types are cached.
 
 Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `^video` and `^music` (not that these patterns are applied after the image:// prefix has been removed from the url). Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
 
