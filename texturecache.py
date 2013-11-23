@@ -56,7 +56,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.3"
+    self.VERSION = "1.1.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -2562,33 +2562,37 @@ class MyUtility(object):
       for key in data:
         newkey = key.replace("imdb", "").lower()
 
-        # Convert rating from str to float
-        if newkey == "rating":
-          newdata[newkey] = float(data[key])
-        # Munge plot/plotoutline together as required
-        elif newkey == "plot":
-          if plotOutline and outline:
-            newdata["plotoutline"] = outline
-          if plotFull:
-            newdata["plot"] = data[key]
-        # Convert genre to a list
-        elif newkey == "genre":
-          newdata[newkey] = [g.strip() for g in data[key].split(",")]
-        # Year to an int
-        elif newkey == "year":
-          newdata[newkey] = int(data[key])
-        # Runtime from "2 h", "36 min", "2 h 22 min" or "N/A" to seconds
-        elif newkey == "runtime":
-          t = data[key]
-          h = re.search("([0-9]+) h", t)
-          m = re.search("([0-9]+) min", t)
-          r = 0
-          r += (int(h.group(1))*3600) if h else 0
-          r += (int(m.group(1))*60) if m else 0
-          if r > 0:
-            newdata[newkey] = r
-        else:
-          newdata[newkey] = data[key]
+        try:
+          # Convert rating from str to float
+          if newkey == "rating":
+            newdata[newkey] = float(data[key])
+          # Munge plot/plotoutline together as required
+          elif newkey == "plot":
+            if plotOutline and outline:
+              newdata["plotoutline"] = outline
+            if plotFull:
+              newdata["plot"] = data[key]
+          # Convert genre to a list
+          elif newkey == "genre":
+            newdata[newkey] = [g.strip() for g in data[key].split(",")]
+          # Year to an int
+          elif newkey == "year":
+            newdata[newkey] = int(data[key])
+          # Runtime from "2 h", "36 min", "2 h 22 min" or "N/A" to seconds
+          elif newkey == "runtime":
+            t = data[key]
+            h = re.search("([0-9]+) h", t)
+            m = re.search("([0-9]+) min", t)
+            r = 0
+            r += (int(h.group(1))*3600) if h else 0
+            r += (int(m.group(1))*60) if m else 0
+            if r > 0:
+              newdata[newkey] = r
+          else:
+            newdata[newkey] = data[key]
+        except:
+          pass
+
       return newdata
     except urllib2.URLError:
       return None

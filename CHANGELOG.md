@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.1.4 (23/11/2013)
+* Fix: IMDb rating may sometimes be "N/A"
+
 ##Version 1.1.3 (22/11/2013)
 * Add: `cache.artwork` property (comma-delimited list) to restrict caching of specific artwork types, eg. `@cache.artwork=poster,fanart` to cache only posters and fanart. Default is an empty list, which will cache all artwork types.
 
