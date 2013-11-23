@@ -56,7 +56,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.4"
+    self.VERSION = "1.1.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -269,6 +269,11 @@ class MyConfiguration(object):
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
+
+    yn = "yes" if self.getBoolean(config, "cache.extra", "no") else "no"
+    self.CACHE_EXTRA_FANART = self.getBoolean(config, "cache.extrafanart", yn)
+    self.CACHE_EXTRA_THUMBS = self.getBoolean(config, "cache.extrathumbs", yn)
+    self.CACHE_EXTRA = (self.CACHE_EXTRA_FANART or self.CACHE_EXTRA_THUMBS)
 
     self.LOGFILE = self.getValue(config, "logfile", "")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
@@ -532,6 +537,8 @@ class MyConfiguration(object):
     print("  cache.hideallitems = %s" % self.BooleanIsYesNo(self.CACHE_HIDEALLITEMS))
     print("  cache.artwork = %s" % self.NoneIsBlank(", ".join(self.CACHE_ARTWORK)))
     print("  cache.ignore.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.CACHE_IGNORE_TYPES)))
+    print("  cache.extrafanart = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_FANART))
+    print("  cache.extrathumbs = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_THUMBS))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
@@ -1037,6 +1044,8 @@ class MyJSONComms(object):
     self.aUpdateCount = self.vUpdateCount = 0
     self.jcomms2 = None
 
+    self.EXTRA_ART_DIR_CACHE = {}
+
   def __enter__(self):
     return self
 
@@ -1426,6 +1435,84 @@ class MyJSONComms(object):
                "properties": ["file", "art", "fanart", "thumb", "size", "dateadded", "lastmodified", "mimetype"]}
     return self.sendJSON(REQUEST, "libDirectory", checkResult=False)
 
+  def getExtraArt(self, item):
+    if not (item and self.config.CACHE_EXTRA): return []
+
+    # Movies, Tags and TVShows have a file property which can be used as the media root.
+    # Artists and Albums do not, so try and find a usable local path from the
+    # fanart/thumbnail artwork.
+    directory = None
+    if "file" in item:
+      directory = item["file"]
+    else:
+      for a in ["fanart", "thumbnail"]:
+        if a in item:
+          tmp = MyUtility.normalise(item[a], strip=True)
+          hostname = re.search("^.*@", tmp)
+          if hostname and hostname.end() < 10:
+            directory = tmp[hostname.end():]
+            break
+          elif not tmp.startswith("http:"):
+            directory = tmp
+            break
+
+    if not directory: return []
+
+    # Remove filename, leaving just parent directory.
+    # Could use os.path.dirname() here but we need
+    # to know which slash is being used so that it
+    # can be appended before the relevant subdir is added.
+    for slash in ["/", "\\"]:
+      pos = directory.rfind(slash)
+      if pos != -1:
+        directory = "%s" % directory[:pos+1]
+        SLASH = directory[pos:pos+1]
+        break
+    else:
+      return []
+
+    # This cache of previous GetDirectory lookups avoids
+    # repeated lookups on the same path
+    if directory in self.EXTRA_ART_DIR_CACHE:
+      return self.EXTRA_ART_DIR_CACHE[directory]
+
+    self.EXTRA_ART_DIR_CACHE[directory] = []
+
+    REQUEST = {"method":"Files.GetDirectory", "params":{"directory": directory}}
+    data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+
+    if "result" not in data: return []
+    if "files" not in data["result"]: return []
+
+    artitems = []
+    if self.config.CACHE_EXTRA_FANART:
+      artitems.append("%sextrafanart%s" % (SLASH, SLASH))
+    if self.config.CACHE_EXTRA_THUMBS:
+      artitems.append("%sextrathumbs%s" % (SLASH, SLASH))
+
+    dirs = []
+    for file in data["result"]["files"]:
+      if file["filetype"] == "directory" and file["file"]:
+        for a in artitems:
+          if file["file"].endswith(a):
+            dirs.append({"file": file["file"], "type": a[1:-1]})
+            break
+
+    files = []
+    for dir in dirs:
+      REQUEST = {"method":"Files.GetDirectory", "params":{"directory": dir["file"]}}
+      data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+      if "result" in data and "files" in data["result"]:
+        for file in data["result"]["files"]:
+          if file["filetype"] == "file" and \
+             file["file"] and \
+             file["file"].endswith(".jpg"):
+            files.append({"file": MyUtility.denormalise(file["file"], prefix=True), "type": dir["type"]})
+
+    self.EXTRA_ART_DIR_CACHE[directory] = files
+
+    return files
+
   def getSeasonAll(self, filename):
     # If "Season All" items are not being cached, return no results
     if self.config.CACHE_HIDEALLITEMS: return (None, None, None)
@@ -1435,10 +1522,10 @@ class MyJSONComms(object):
 
     directory = MyUtility.normalise(filename, strip=True)
 
-    # Remove filename, leaving just directory...
-    # Could use dirname() here but need to know
+    # Remove filename, leaving just parent directory.
+    # Could use os.path.dirname() here but we need to know
     # which slash is being used so that it can be
-    # appended, before filename is added by caller.
+    # appended before the filename is added by the caller.
     for slash in ["/", "\\"]:
       pos = directory.rfind(slash)
       if pos != -1:
@@ -1475,7 +1562,7 @@ class MyJSONComms(object):
     else:
 #      if filename[8:12].lower() != "http":
 #        self.logger.log("Files.PrepareDownload failed. It's a local file, what the heck... trying anyway.")
-#        return "/image/%s" % urllib2.quote(filename, "()")
+#        return "/image/%s" % urllib2.quote(filename, "")
       return None
 
   def getFileDetails(self, filename):
@@ -1900,6 +1987,12 @@ class MyJSONComms(object):
     elif action == "cache":
       if mediatype in ["movies", "tags", "tvshows", "episodes"] and self.config.CACHE_CAST_THUMB:
         self.addProperties(REQUEST, "cast")
+      if self.config.CACHE_EXTRA:
+        if mediatype in ["movies", "tags", "tvshows"]:
+          self.addProperties(REQUEST, "file")
+        elif mediatype in ["artists", "albums"]:
+          self.addProperties(REQUEST, "fanart")
+          self.addProperties(REQUEST, "thumbnail")
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
 
@@ -2450,6 +2543,22 @@ class MyUtility(object):
 
     return v
 
+  # Quote unquoted filename
+  @staticmethod
+  def denormalise(value, prefix=True):
+    v = value
+
+    if not MyUtility.isPython3:
+      try:
+        v = bytes(v.encode("utf-8"))
+      except UnicodeDecodeError:
+        pass
+
+    v = urllib2.quote(v, "")
+    if prefix: v = "image://%s/" % v
+
+    return (v)
+
   @staticmethod
   def toUnicode(data):
     if MyUtility.isPython3: return data
@@ -2487,7 +2596,7 @@ class MyUtility(object):
     else:
       return None
 
-    fname = urllib2.quote(os.path.basename(filename))
+    fname = urllib2.quote(os.path.basename(filename), "")
 
     return "%s%s/" % (directory, fname)
 
@@ -2561,7 +2670,6 @@ class MyUtility(object):
       newdata = {}
       for key in data:
         newkey = key.replace("imdb", "").lower()
-
         try:
           # Convert rating from str to float
           if newkey == "rating":
@@ -2592,7 +2700,6 @@ class MyUtility(object):
             newdata[newkey] = data[key]
         except:
           pass
-
       return newdata
     except urllib2.URLError:
       return None
@@ -3053,14 +3160,19 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
         if "thumbnail" in a and evaluateURL("cast.thumb", a["thumbnail"], imagecache):
           mediaitems.append(MyMediaItem(mediatype, "cast.thumb", a["name"], name, None, a["thumbnail"], 0, None, item[id_name], False))
 
+    if mediatype in ["artists", "albums", "movies", "tags", "tvshows"]:
+      for file in jcomms.getExtraArt(item):
+        if evaluateURL(file["type"], file["file"], imagecache):
+          mediaitems.append(MyMediaItem(mediatype, file["type"], name, season, episode, file["file"], 0, None, item[id_name], False))
+
     if "seasons" in item:
       parseURLData(jcomms, "seasons", mediaitems, imagecache, item["seasons"], "label", "season", showName=title)
-    if "episodes" in item:
+    elif "episodes" in item:
       parseURLData(jcomms, "episodes", mediaitems, imagecache, item["episodes"], "label", "episodeid", showName=showName, season=title)
       season = None
-    if "channels" in item:
+    elif "channels" in item:
       parseURLData(jcomms, "%s.channel" % mediatype, mediaitems, imagecache, item["channels"], "channel", "channelid", pvrGroup=title)
-    if "genres" in item:
+    elif "genres" in item:
       parseURLData(jcomms, "genres", mediaitems, imagecache, item["genres"], "label", "genreid", showName=title)
 
 # Include or exclude url depending on basic properties - has it
@@ -3938,7 +4050,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
       data = jcomms.sendJSON(REQUEST, "libSetDetails")
 
 # Extract data, using optional simple search, or complex SQL filter.
-def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
+def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
   database = MyDB(gConfig, gLogger)
 
   with database:
@@ -3952,11 +4064,16 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
     ROWS = []
 
     gLogger.progress("Loading database items...")
-    for row in database.getRows(filter=SQL, order="ORDER BY t.id ASC", allfields=True):
+    dbrows = database.getRows(filter=SQL, order="ORDER BY t.cachedurl ASC", allfields=True)
+    rpcnt = 100.0 / len(dbrows)
+
+    i = 0
+    for row in dbrows:
       if ACTION == "NONE":
         ROWS.append(row)
       else:
-        gLogger.progress("Parsing [%s]..." % row["cachedurl"], every = 50)
+        i += 1
+        gLogger.progress("Parsing [%s] %2.0f%%..." % (row["cachedurl"], rpcnt * i), every = 50)
         if ACTION == "EXISTS":
           if not os.path.exists(gConfig.getFilePath(row["cachedurl"])):
             ROWS.append(row)
@@ -3976,13 +4093,13 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False):
         gLogger.progress("Deleting row %d (%d of %d)..." % (row["textureid"], i, FCOUNT))
         database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
         gLogger.progress("")
-    else:
+    elif not silent:
       for row in ROWS: database.dumpRow(row)
 
     if ACTION == "STATS":
       gLogger.out("\nFile Summary: %s files; Total size: %s KB\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
 
-    if (search != "" or filter != "") and not delete:
+    if (search != "" or filter != "") and not delete and not silent:
       gLogger.progress("Matching row ids: %s\n" % " ".join("%d" % r["textureid"] for r in ROWS))
 
 # Delete row by id, and corresponding file item
@@ -4076,7 +4193,7 @@ def orphanCheck(removeOrphans=False):
   gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
                   % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
 
-def pruneCache(purge_nonlibrary_artwork):
+def pruneCache(remove_nonlibrary_artwork=False):
   dbfiles = {}
   localfiles = []
   libraryFiles = getAllFiles(keyFunction=getKeyFromFilename)
@@ -4125,7 +4242,7 @@ def pruneCache(purge_nonlibrary_artwork):
 
   # Prune, with optional remove...
   if localfiles != []:
-    if purge_nonlibrary_artwork:
+    if remove_nonlibrary_artwork:
       gLogger.out("Pruning cached images from texture cache...", newLine=True)
     else:
       gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
@@ -4141,7 +4258,7 @@ def pruneCache(purge_nonlibrary_artwork):
       if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
           GOTSIZE = True
           FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
-      if purge_nonlibrary_artwork:
+      if remove_nonlibrary_artwork:
         database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
 
   if GOTSIZE:
@@ -4234,6 +4351,9 @@ def getAllFiles(keyFunction):
   for r in REQUEST:
     mediatype = re.sub(".*\.Get(.*)","\\1",r["method"])
 
+    if gConfig.CACHE_EXTRA and mediatype == "Movies":
+      jcomms.addProperties(r, "file")
+
     gLogger.progress("Loading: %s..." % mediatype)
     data = jcomms.sendJSON(r, "libFiles")
 
@@ -4250,13 +4370,18 @@ def getAllFiles(keyFunction):
           gLogger.progress("Loading: %s [%s]..." % (mediatype, title), every=interval)
           if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
           if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
-          if "art" in i:
-            for a in i["art"]:
-              files[keyFunction(i["art"][a])] = a
-          if "cast" in i:
-            for c in i["cast"]:
-              if "thumbnail" in c:
-                files[keyFunction(c["thumbnail"])] = "cast.thumb"
+
+          for a in i.get("art", []):
+            files[keyFunction(i["art"][a])] = a
+
+          for c in i.get("cast", []):
+            if "thumbnail" in c:
+              files[keyFunction(c["thumbnail"])] = "cast.thumb"
+
+          if mediatype in ["Artists", "Albums", "Movies"]:
+            for file in jcomms.getExtraArt(i):
+              files[keyFunction(file["file"])] = file["type"]
+
         if title != "": gLogger.progress("Parsing: %s [%s]..." % (mediatype, title))
 
   gLogger.progress("Loading: TVShows...")
@@ -4265,18 +4390,25 @@ def getAllFiles(keyFunction):
              "params": {"sort": {"order": "ascending", "method": "title"},
                         "properties":["title", "cast", "art"]}}
 
+  if gConfig.CACHE_EXTRA:
+    jcomms.addProperties(REQUEST, "file")
+
   tvdata = jcomms.sendJSON(REQUEST, "libTV")
 
   if "result" in tvdata and "tvshows" in tvdata["result"]:
     for tvshow in tvdata["result"]["tvshows"]:
       gLogger.progress("Loading: TVShows [%s]..." % tvshow["title"])
       tvshowid = tvshow["tvshowid"]
-      for a in tvshow["art"]:
+
+      for a in tvshow.get("art", []):
         files[keyFunction(tvshow["art"][a])] = a
-      if "cast" in tvshow:
-        for c in tvshow["cast"]:
-          if "thumbnail" in c:
-            files[keyFunction(c["thumbnail"])] = "cast.thumb"
+
+      for c in tvshow.get("cast", []):
+        if "thumbnail" in c:
+          files[keyFunction(c["thumbnail"])] = "cast.thumb"
+
+      for file in jcomms.getExtraArt(tvshow):
+        files[keyFunction(file["file"])] = file["type"]
 
       REQUEST = {"method":"VideoLibrary.GetSeasons",
                  "params":{"tvshowid": tvshowid,
@@ -4290,7 +4422,8 @@ def getAllFiles(keyFunction):
         for season in seasondata["result"]["seasons"]:
           seasonid = season["season"]
           gLogger.progress("Loading: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
-          for a in season["art"]:
+
+          for a in season.get("art", []):
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
               SEASON_ALL = False
               (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(season["art"][a])
@@ -4307,12 +4440,13 @@ def getAllFiles(keyFunction):
 
           for episode in episodedata["result"]["episodes"]:
             episodeid = episode["episodeid"]
-            for a in episode["art"]:
+
+            for a in episode.get("art", []):
               files[keyFunction(episode["art"][a])] = a
-            if "cast" in episode:
-              for c in episode["cast"]:
-                if "thumbnail" in c:
-                  files[keyFunction(c["thumbnail"])] = "cast.thumb"
+
+            for c in episode.get("cast", []):
+              if "thumbnail" in c:
+                files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
   # PVR Channels
   if gConfig.HAS_PVR:
@@ -4732,7 +4866,7 @@ def pprint(msg):
 def usage(EXIT_CODE):
   print("Version: %s" % gConfig.VERSION)
   print("")
-  pprint("[s, S] <string> | [x, X, f] [sql-filter] | Xd | d <id[id id]>] | \
+  pprint("[s, S] <string> | [x, X, f, F] [sql-filter] | Xd | d <id[id id]>] | \
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
           imdb movies [filter] | \
@@ -4751,7 +4885,8 @@ def usage(EXIT_CODE):
   print("  x          Extract details, using optional SQL filter")
   print("  X          Same as \"x\" (extract) but will validate cachedurl file exists, displaying only those that fail validation")
   print("  Xd         Same as \"x\" (extract) but will DELETE those rows for which no cachedurl file exists")
-  print("  f          Same as x, but include file summary (file count, accumulated file size)")
+  print("  f          Same as x, but includes file summary (file count, accumulated file size)")
+  print("  F          Same as f, but doesn't include database rows")
   print("  d          Delete rows with matching ids, along with associated cached images")
   print("  c          Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
   print("  C          Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
@@ -4844,13 +4979,17 @@ def checkConfig(option):
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
-  optDb = ["s","S","x","X","Xd","f","c","C","nc","lc","lnc","d","r","R","p","P", "purge", "purgetest"]
+  optDb = ["s", "S", "x", "X", "Xd", "f", "F",
+           "c", "C", "nc", "lc", "lnc", "d",
+           "r", "R", "p", "P", "purge", "purgetest"]
 
   # These options require direct filesystem access
-  optFS1 = ["f", "r", "R", "S", "X", "Xd"]
+  # Dependency: os.remove(), os.path.exists(), os.path.getsize()
+  optFS1 = ["f", "F", "r", "R", "S", "X", "Xd"]
 
-  # These options may require direct filesystem access, depending on JSON Texture API availability
-  optFS2 = ["P", "purge", "C"]
+  # These options require direct filesystem access unless JSON Texture API is available.
+  # Dependency: os.remove()
+  optFS2 = ["d", "P", "C", "purge"]
 
   # Network MAC
   optMAC = ["wake"]
@@ -5056,7 +5195,7 @@ def getLatestVersion(argv):
     USAGE  = "prune"
   elif argv[0] in ["r", "R"]:
     USAGE  = "orphan"
-  elif argv[0] in ["s", "S", "d", "f", "x", "X", "Xd"]:
+  elif argv[0] in ["s", "S", "d", "f", "F", "x", "X", "Xd"]:
     USAGE  = "db"
   elif argv[0] in ["exec", "execw"]:
     USAGE  = "exec"
@@ -5206,27 +5345,31 @@ def main(argv):
   multi_call   = ["addons", "agenres", "vgenres", "pvr.tv", "pvr.radio"] + multi_call_a + multi_call_v
 
   if argv[0] == "s" and len(argv) == 2:
-    sqlExtract("NONE", argv[1], "")
+    sqlExtract("NONE", search=argv[1])
   elif argv[0] == "S" and len(argv) == 2:
-    sqlExtract("EXISTS", argv[1], "")
+    sqlExtract("EXISTS", search=argv[1])
 
   elif argv[0] == "x" and len(argv) == 1:
     sqlExtract("NONE")
   elif argv[0] == "x" and len(argv) == 2:
-    sqlExtract("NONE", "", argv[1])
+    sqlExtract("NONE", filter=argv[1])
   elif argv[0] == "X" and len(argv) == 1:
     sqlExtract("EXISTS")
   elif argv[0] == "X" and len(argv) == 2:
-    sqlExtract("EXISTS", "", argv[1])
+    sqlExtract("EXISTS", filter=argv[1])
   elif argv[0] == "Xd" and len(argv) == 1:
     sqlExtract("EXISTS", delete=True)
   elif argv[0] == "Xd" and len(argv) == 2:
-    sqlExtract("EXISTS", "", argv[1], delete=True)
+    sqlExtract("EXISTS", filter=argv[1], delete=True)
 
   elif argv[0] == "f" and len(argv) == 1:
     sqlExtract("STATS")
   elif argv[0] == "f" and len(argv) == 2:
-    sqlExtract("STATS", "", argv[1])
+    sqlExtract("STATS", filter=argv[1])
+  elif argv[0] == "F" and len(argv) == 1:
+    sqlExtract("STATS", silent=True)
+  elif argv[0] == "F" and len(argv) == 2:
+    sqlExtract("STATS", filter=argv[1], silent=True)
 
   elif argv[0] in ["c", "C", "nc", "lc", "lnc",
                    "j", "J", "jd", "Jd", "jr", "Jr",
@@ -5306,10 +5449,10 @@ def main(argv):
     orphanCheck(removeOrphans=True)
 
   elif argv[0] == "p" and len(argv) == 1:
-    pruneCache(purge_nonlibrary_artwork=False)
+    pruneCache(remove_nonlibrary_artwork=False)
 
   elif argv[0] == "P" and len(argv) == 1:
-    pruneCache(purge_nonlibrary_artwork=True)
+    pruneCache(remove_nonlibrary_artwork=True)
 
   elif argv[0] == "remove" and len(argv) == 3:
     removeMedia(mtype=argv[1], libraryid=int(argv[2]))
