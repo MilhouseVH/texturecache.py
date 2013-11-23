@@ -449,6 +449,8 @@ The `qa.art.*`, `qa.blank.*` and `qa.zero.*` files can be used to replace or add
 
 Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes` if you require cast artwork to be re-cached, or considered when pruning.
 
+Extrafanart and extrathumbs will not be cached by default or considered when pruning. Specify `cache.extra = yes` to cache/prune both extrafanart and extrathumbs, or `cache.extrafanart = yes` or `cache.extrathumbs = yes` to enable just extrafanart or just extrathumbs.
+
 Cache specific artwork types by specifying a comma-delimited list of artwork types for `cache.artwork`, eg. `cache.artwork=poster, fanart` to cache only posters and fanart. By default this list is empty, which will ensure that all artwork types are cached.
 
 Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `^video` and `^music` (not that these patterns are applied after the image:// prefix has been removed from the url). Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
