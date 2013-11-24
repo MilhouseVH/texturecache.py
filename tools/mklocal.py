@@ -204,8 +204,13 @@ def findMostFrequentSetParent(setname, members, level=0, counts=None):
 
     return "%s%s" % (sorted_counts[0], getSlash(sorted_counts[0]))
 
-def formatArtworkFilename(mediatype, filename, suffix, season):
-  if mediatype in ["movie", "episode"]:
+def formatArtworkFilename(args, mediatype, filename, suffix, season):
+  if mediatype == "movie":
+    if args.singlefolders:
+      return suffix
+    else:
+      return "%s-%s" % (filename, suffix)
+  if mediatype == "episode":
     return "%s-%s" % (filename, suffix)
   elif mediatype == "season":
     if season == 0:
@@ -260,7 +265,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
     oldname = art.get(artitem["type"], None)
     if oldname: oldname = oldname[8:-1]
 
-    artpath = formatArtworkFilename(mediatype, filename, artitem["suffix"], media.get("season", None))
+    artpath = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None))
 
     label = "art.%s" % artitem["type"]
 
@@ -349,7 +354,7 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
     if LOCAL_ALT and not found_file:
       currentsource = newsource
 
-      newsource = formatArtworkFilename(mediatype, pathToAltLocal(os.path.splitext(filename)[0]), atype, media.get("season", None))
+      newsource = formatArtworkFilename(args, mediatype, pathToAltLocal(os.path.splitext(filename)[0]), atype, media.get("season", None))
       newsource = "%s%s" % (newsource, os.path.splitext(source)[1])
 
       if newsource != currentsource:
@@ -443,24 +448,25 @@ def showConfig(args, download_items, season_items, episode_items):
 
   def _blank(value):
     return (value if value else "Not specified")
-
+  print(args)
   printerr("Current configuration:")
   printerr("")
-  printerr("  Local Path : %s" % _blank(LOCAL_DIR))
-  printerr("  Alt Local  : %s" % _blank(LOCAL_ALT))
-  printerr("  XBMC Path  : %s" % _blank(XBMC_PATH))
-  printerr("  Read Only  : %s" % ("Yes" if args.readonly else "No"))
-  printerr("  Dry Run    : %s" % ("Yes" if args.dryrun else "No"))
+  printerr("  Local Path    : %s" % _blank(LOCAL_DIR))
+  printerr("  Alt Local     : %s" % _blank(LOCAL_ALT))
+  printerr("  XBMC Path     : %s" % _blank(XBMC_PATH))
+  printerr("  Read Only     : %s" % ("Yes" if args.readonly else "No"))
+  printerr("  Dry Run       : %s" % ("Yes" if args.dryrun else "No"))
+  printerr("  Single Folder : %s" % ("Yes" if args.singlefolders else "No"))
   printerr("")
-  printerr("  Artwork:     %s" % listToString(download_items, translate=True))
+  printerr("  Artwork       : %s" % listToString(download_items, translate=True))
   if args.season:
     printerr("")
-    printerr("  TV Seasons : %s" % listToString(season_items, translate=True))
+    printerr("  TV Seasons    : %s" % listToString(season_items, translate=True))
   if args.episode:
     printerr("")
-    printerr("  TV Episodes: %s" % listToString(episode_items, translate=True))
+    printerr("  TV Episodes   : %s" % listToString(episode_items, translate=True))
   printerr("")
-  printerr("  Checking   : %s" % listToString(args.check))
+  printerr("  Checking      : %s" % listToString(args.check))
   printerr("")
 
 def listToString(aList, translate=False):
@@ -469,7 +475,7 @@ def listToString(aList, translate=False):
   tmpStr = ""
 
   for artitem in aList:
-    if tmpStr != "": tmpStr = "%s\n%s" % (tmpStr, " " * 15)
+    if tmpStr != "": tmpStr = "%s\n%s" % (tmpStr, " " * 18)
 
     if "type" in artitem:
       atype = artitem["type"]
@@ -552,6 +558,9 @@ def init():
 
   parser.add_argument("-e", "--episode", nargs="*", metavar="TYPE", \
                       help="For TV Shows, process episode items (default: thumb)")
+
+  parser.add_argument("-1", "--singlefolders", action="store_true", \
+                      help="Movies are in individual folders so don't use the movie-name as a prefix")
 
   group = parser.add_mutually_exclusive_group()
   group.add_argument("-q", "--quiet", action="store_true", \
