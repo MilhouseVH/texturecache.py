@@ -588,13 +588,13 @@ def init():
   if args.episode == []: args.episode = ["thumb"]
 
   LOCAL_DIR = args.local
-  if LOCAL_DIR and LOCAL_DIR[-1] not in ["/", "\\"]: LOCAL_DIR += "/"
+  if LOCAL_DIR and LOCAL_DIR[-1] not in ["/", "\\"]: LOCAL_DIR += getSlash(LOCAL_DIR)
 
   LOCAL_ALT = args.altlocal
-  if LOCAL_ALT and LOCAL_ALT[-1] not in ["/", "\\"]: LOCAL_ALT += "/"
+  if LOCAL_ALT and LOCAL_ALT[-1] not in ["/", "\\"]: LOCAL_ALT += getSlash(LOCAL_ALT)
 
   XBMC_PATH = args.prefix
-  if XBMC_PATH and XBMC_PATH[-1] not in ["/", "\\"]: XBMC_PATH += "/"
+  if XBMC_PATH and XBMC_PATH[-1] not in ["/", "\\"]: XBMC_PATH += getSlash(XBMC_PATH)
 
   # Disable downloading if output path not set, or prefix not known
   # as then impossible to create valid output filenames
