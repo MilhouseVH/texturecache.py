@@ -93,7 +93,11 @@ def pathToLocal(infile):
   if not infile: return infile
   if not XBMC_PATH: return infile
   if not LOCAL_DIR: return infile
-  return re.sub('^%s' % XBMC_PATH, LOCAL_DIR, infile)
+
+  if infile.startswith(XBMC_PATH):
+    return "%s%s" % (LOCAL_DIR, infile[len(XBMC_PATH):])
+  else:
+    return infile
 
 def pathToAltLocal(infile):
   global LOCAL_ALT, XBMC_PATH
@@ -101,7 +105,11 @@ def pathToAltLocal(infile):
   if not infile: return infile
   if not XBMC_PATH: return infile
   if not LOCAL_ALT: return infile
-  return re.sub('^%s' % XBMC_PATH, LOCAL_ALT, infile)
+
+  if infile.startswith(XBMC_PATH):
+    return "%s%s" % (LOCAL_ALT, infile[len(XBMC_PATH):])
+  else:
+    return infile
 
 def pathToXBMC(infile):
   global LOCAL_DIR, XBMC_PATH
@@ -109,7 +117,11 @@ def pathToXBMC(infile):
   if not infile: return infile
   if not LOCAL_DIR: return infile
   if not XBMC_PATH: return infile
-  return re.sub('^%s' % LOCAL_DIR, XBMC_PATH, infile)
+
+  if infile.startswith(LOCAL_DIR):
+    return "%s%s" % (XBMC_PATH, infile[len(LOCAL_DIR):])
+  else:
+    return infile
 
 def itemList(aList):
   newList = []
