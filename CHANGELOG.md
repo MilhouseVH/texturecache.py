@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.1.6 (23/11/2013)
+* Add: Ignore IOError on output due to broken pipe
+
 ##Version 1.1.5 (23/11/2013)
 * Add: extrafanart and extrathumbs support when caching `artists`, `albums`, `movies`, `tags` and `tvshows`, and when pruning. Enable with `@cache.extra=yes` to cache and prune both extrafanart and extrathumbs, or `@cache.extrafanart=yes`/`@cache.extrathumbs=yes` to enable specific cache & prune support for fanart or thumbs. By default all three options are disabled (ie. `no`).
 

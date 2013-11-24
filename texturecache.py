@@ -56,7 +56,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.5"
+    self.VERSION = "1.1.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -643,7 +643,14 @@ class MyLogger():
       if newLine:
         sys.stdout.write("\n")
         self.lastlen = 0
-      sys.stdout.flush()
+      try:
+        sys.stdout.flush()
+      except IOError as e:
+        if e.errno == errno.EPIPE:
+          pass
+        else:
+          raise
+
     if log: self.log(data)
 
   def debug(self, data, jsonrequest=None, every=0, newLine=False, newLineBefore=False):
