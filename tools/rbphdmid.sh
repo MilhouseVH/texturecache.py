@@ -46,16 +46,12 @@ done
 
 logmsg ()
 {
-  echo "[$(basename $0)] $1"
+  logger -t $(basename $0) "$1"
 }
 
 logdbg ()
 {
-  if [ $PPID != 1 ]; then
-    echo "$(date +"%F %T"): $1"
-  elif [ $DEBUG = Y ]; then
-    logmsg "$1"
-  fi
+  [ $DEBUG = Y ] && logmsg "$1"
 }
 
 enable_hdmi()
