@@ -132,6 +132,14 @@ def itemList(aList):
       newList.append({"type": aname, "suffix": value})
   return newList
 
+def unstack(filename):
+  if not filename: return filename
+
+  if filename.startswith("stack://"):
+    return filename[8:].split(" , ")[0]
+  else:
+    return filename
+
 def getSlash(filename):
   # Share (eg. "smb://", "nfs://" etc.)
   if re.search("^.*://.*", filename):
@@ -155,7 +163,7 @@ def findSetParent(setname, members, level=0):
 
 def findTitleSetParent(setname, members):
   for member in members:
-    file = os.path.dirname(member["file"])
+    file = os.path.dirname(unstack(member["file"]))
     pos = file.rfind(setname)
     if pos != -1:
       return "%s%s" % (file[:pos + len(setname)], getSlash(file))
@@ -165,14 +173,14 @@ def findTitleSetParent(setname, members):
 # Use this method if unable to find parent based on title, will
 # try to match based on a common parent
 def findCommonSetParent(setname, members, level=0):
-  commonparent = os.path.dirname(members[0]["file"])
+  commonparent = os.path.dirname(unstack(members[0]["file"]))
   for i in range(0, level):
     commonparent = os.path.dirname(commonparent)
     if commonparent == "": return ""
 
   sameparent = True
   for member in members:
-    file = member["file"]
+    file = unstack(member["file"])
     if not file.startswith(commonparent):
       sameparent = False
       break
@@ -196,7 +204,7 @@ def findMostFrequentSetParent(setname, members, level=0, counts=None):
 
   # Walk "back" up the path for each level, counting frequency
   for member in members:
-    parent = os.path.dirname(member["file"])
+    parent = os.path.dirname(unstack(member["file"]))
     for i in range(0, level):
       parent = os.path.dirname(parent)
       if not parent: break
@@ -216,9 +224,9 @@ def findMostFrequentSetParent(setname, members, level=0, counts=None):
 
     return "%s%s" % (sorted_counts[0], getSlash(sorted_counts[0]))
 
-def formatArtworkFilename(args, mediatype, filename, suffix, season):
+def formatArtworkFilename(args, mediatype, filename, suffix, season, singleFolder=False):
   if mediatype == "movie":
-    if args.singlefolders:
+    if singleFolder:
       parent = os.path.dirname(filename)
       bslash = filename.find("\\")
       fslash = filename.find("/")
@@ -254,7 +262,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
   if mediatype == "set":
     mediafile = findSetParent(media["title"], media["tc.members"])
   else:
-    mediafile = media.get("file", showPath)
+    mediafile = unstack(media.get("file", showPath))
 
   mediatitle = "%s %s" % (showTitle, media["label"]) if showTitle else media["label"]
 
@@ -283,15 +291,16 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
     oldname = art.get(artitem["type"], None)
     if oldname: oldname = oldname[8:-1]
 
-    artpath = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None))
-
     label = "art.%s" % artitem["type"]
 
     if label in keepitem["items"]:
       debug(1, "already found a value for artwork type [%s] - ignoring" % artitem["type"])
       continue
 
-    newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath)
+    artpath_m = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None), singleFolder=False)
+    artpath_s = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None), singleFolder=True)
+
+    newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath_m, artpath_s)
 
     if not newname and oldname:
       debug2(artitem["type"], "Assigning null value to library item")
@@ -315,13 +324,25 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   return workitem
 
-def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname):
+def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname_multi, pathname_single):
   debug(1, "artwork type [%s] known by XBMC as [%s]" % (atype, currentname))
 
   # See if we already have a file of the desired artwork type, either in
   # jpg or png format. If found, use it as the source for this artwork type.
+
+  # First, check folder using single-file naming convention (if enabled)
+  if args.singlefolders:
+    for source_type in [".png", ".jpg"]:
+      target = "%s%s" % (pathname_single, source_type)
+      if os.path.exists(target):
+        debug2(atype, "Found pre-existing local file:", target)
+        target = pathToXBMC(target)
+        debug2(atype, "Converting local filename to XBMC path:", target)
+        return target
+
+  # Next, check folder using multi-file naming convention
   for source_type in [".png", ".jpg"]:
-    target = "%s%s" % (pathname, source_type)
+    target = "%s%s" % (pathname_multi, source_type)
     if os.path.exists(target):
       debug2(atype, "Found pre-existing local file:", target)
       target = pathToXBMC(target)
@@ -339,6 +360,7 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
   # We're going to create a new file.
   # We have a remote source (currentname) and a partial
   # name for the target - need to append the file format type.
+  pathname = pathname_single if args.singlefolders else pathname_multi
   target = "%s%s" % (pathname, os.path.splitext(currentname)[1].lower())
 
   # Download the new artwork and convert the name of the new file
@@ -374,7 +396,8 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
     if LOCAL_ALT and not found_file:
       currentsource = newsource
 
-      newsource = formatArtworkFilename(args, mediatype, pathToAltLocal(os.path.splitext(filename)[0]), atype, media.get("season", None))
+      newsource = formatArtworkFilename(mediatype, pathToAltLocal(os.path.splitext(filename)[0]),
+                                        atype, media.get("season", None), singleFolder=args.singlefolders)
       newsource = "%s%s" % (newsource, os.path.splitext(source)[1])
 
       if newsource != currentsource:
@@ -657,7 +680,7 @@ def main(args):
       workitem = processItem(args, "tvshow", media, download_items)
       if args.output and workitem["items"]: workitems.append(workitem)
 
-      mediafile = media["file"]
+      mediafile = unstack(media["file"])
 
       for season in media.get("seasons",[]):
         if args.season:
