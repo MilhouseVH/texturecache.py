@@ -1261,6 +1261,12 @@ class MyJSONComms(object):
           self.logger.log("SOCKET IO TIMEOUT EXCEEDED")
           raise socket.error("Socket IO timeout exceeded")
 
+      # Hack to exit monitor mode when socket dies
+      if id == "libListen" and len(newdata) == 0:
+        jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}
+        if self.handleResponse(id, jdata, callback):
+          break
+
     if checkResult and not "result" in jdata:
       self.logger.out("%s.ERROR: JSON response has no result!\n%s\n" % (id, jdata))
 
