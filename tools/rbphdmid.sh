@@ -60,14 +60,18 @@ disable_hdmi()
 
 start_timer()
 {
-  logdbg "HDMI power off in $1 seconds unless cancelled"
-  (sleep $1 && disable_hdmi) & 
-  TIMERPID=$!
+  if [ -n "$(${TEXTURECACHE} @xbmc.host=localhost @logfile= status | grep "^Player *: None$")" ]; then
+    logdbg "HDMI power off in $1 seconds unless cancelled"
+    (sleep $1 && disable_hdmi) & 
+    TIMERPID=$!
+  else
+    logdbg "Not starting timer while a player is active"
+  fi
 }
 
 stop_timer()
 {
-  # Check TIMERPID pid is still our scheduled disable_hdmi()...
+  # Check TIMERPID is still our scheduled call to disable_hdmi()...
   if [ ${TIMERPID} != 0 ]; then
     PIDS=" $(pidof $(basename $0)) "
     if [ -n "$(echo "${PIDS}" | grep " ${TIMERPID} ")" ]; then
