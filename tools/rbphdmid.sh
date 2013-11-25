@@ -71,12 +71,16 @@ disable_hdmi()
 
 start_timer()
 {
-  if [ -n "$(${TEXTURECACHE} ${TEXTURECACHE_ARGS} status | grep "^Player *: None$")" ]; then
-    logdbg "HDMI power off in $1 seconds unless screensaver deactivated"
-    (sleep $1 && disable_hdmi) & 
-    TIMERPID=$!
+  if [ ${TIMERPID} = 0 ]; then
+    if [ -n "$(${TEXTURECACHE} ${TEXTURECACHE_ARGS} status | grep "^Player *: None$")" ]; then
+      logdbg "HDMI power off in $1 seconds unless screensaver deactivated"
+      (sleep $1 && disable_hdmi) & 
+      TIMERPID=$!
+    else
+      logdbg "Not starting power off timer while a player is active"
+    fi
   else
-    logdbg "Not starting power off timer while a player is active"
+    logdbg "Power off timer already active - ignored"
   fi
 }
 
@@ -112,19 +116,25 @@ logmsg "Starting HDMI Power daemon for Raspberry Pi"
 logmsg "HDMI Power off delay: ${DELAY} seconds"
 
 while [ : ]; do
+  SS_STATE=OFF
+
   logdbg "Establishing connection with XBMC..."
 
   ${TEXTURECACHE} ${TEXTURECACHE_ARGS} monitor 2>/dev/null | 
     while IFS= read -r line; do
-      METHOD="$(echo "${line}" | sed "s/.*: \(.*\..*\).*: {.*/\1/")"
+      METHOD="$(echo "${line}" | awk '{x=$3; sub(":","",x); print x}')"
 
       if [ "${METHOD}" = "GUI.OnScreensaverActivated" ]; then
         logdbg "Screensaver activated"
         start_timer ${DELAY}
+        SS_STATE=ON
       elif [ "${METHOD}" = "GUI.OnScreensaverDeactivated" ]; then
         logdbg "Screensaver deactivated"
         stop_timer
         enable_hdmi
+        SS_STATE=OFF
+      elif [ "${METHOD}" = "Player.OnStop" -a ${SS_STATE}=ON ]; then
+        start_timer ${DELAY}
       fi
     done
 
