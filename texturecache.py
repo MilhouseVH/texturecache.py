@@ -5044,7 +5044,7 @@ def checkConfig(option):
           "       A connection cannot be established to the following webserver:\n" \
           "       %s:%s\n\n" \
           "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.WEB_PORT, gConfig.CONFIG_NAME)
-    gLogger.out(MSG)
+    gLogger.err(MSG)
     return False
 
   if needSocket or trySocket:
@@ -5081,7 +5081,7 @@ def checkConfig(option):
           "       A connection cannot be established to the following JSON-RPC server:\n" \
           "       %s:%s\n\n" \
           "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
-    gLogger.out(MSG)
+    gLogger.err(MSG)
     return False
 
   if needSocket and jsonGotVersion  < jsonNeedVersion :
@@ -5089,7 +5089,7 @@ def checkConfig(option):
           "       version %d or above of the XBMC JSON-RPC API is provided.\n\n" \
           "       The JSON-RPC API version of the connected server is: %d (0 means unknown)\n\n" \
           "       Check settings in properties file %s\n" % (jsonNeedVersion, jsonGotVersion, gConfig.CONFIG_NAME)
-    gLogger.out(MSG)
+    gLogger.err(MSG)
     return False
 
   # If auto detection enabled, when API level insufficient to read Textures DB
@@ -5136,7 +5136,7 @@ def checkConfig(option):
           "       or upgrade your XBMC client to use a more recent\n" \
           "       version that supports Textures JSON API.\n" \
                   % (gConfig.getDBPath(), gConfig.CONFIG_NAME)
-    gLogger.out(MSG)
+    gLogger.err(MSG)
     return False
 
   if needFS1 or needFS2:
@@ -5150,7 +5150,7 @@ def checkConfig(option):
           "       The currently configured Thumbnails path is:\n" \
           "       %s\n\n" \
           "       Check userdata and thumbnails settings in properties file %s\n" % (gConfig.getFilePath(), gConfig.CONFIG_NAME)
-    gLogger.out(MSG)
+    gLogger.err(MSG)
     return False
 
   if needMAC:
@@ -5160,7 +5160,7 @@ def checkConfig(option):
     MSG = "FATAL: The task you wish to perform requires a valid MAC address\n" \
           "       specified in the property \"network.mac\".\n\n" \
           "       Check settings in properties file %s\n" % gConfig.CONFIG_NAME
-    gLogger.out(MSG)
+    gLogger.err(MSG)
     return False
 
   gConfig.postConfig()
