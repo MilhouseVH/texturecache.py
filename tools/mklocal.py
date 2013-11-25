@@ -219,7 +219,13 @@ def findMostFrequentSetParent(setname, members, level=0, counts=None):
 def formatArtworkFilename(args, mediatype, filename, suffix, season):
   if mediatype == "movie":
     if args.singlefolders:
-      return suffix
+      parent = os.path.dirname(filename)
+      bslash = filename.find("\\")
+      fslash = filename.find("/")
+      if bslash > fslash:
+        return "%s\\%s" % (parent, suffix)
+      else:
+        return "%s/%s" % (parent, suffix)
     else:
       return "%s-%s" % (filename, suffix)
   if mediatype == "episode":
@@ -344,6 +350,8 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
 def getImage(args, mediatype, media, title, atype, filename, source, target):
   global NOT_AVAILABLE_CACHE, LOCAL_ALT
 
+  orig_source = source
+
   # If it's not a remote file, maybe we just need to copy it from
   # the alt local folder to our output folder?
   if LOCAL_ALT and not source.startswith("http://"):
@@ -359,7 +367,7 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
   if not source.startswith("http://"):
     newsource = source
     found_file = os.path.exists(newsource)
-    debug2(atype, "Lookup non-HTTP file using altlocal path:", newsource, (" [%s]" % ("SUCCESS" if found_file else "FAIL")))
+    debug2(atype, "Lookup non-HTTP file using current url:", newsource, (" [%s]" % ("SUCCESS" if found_file else "FAIL")))
 
     # Try using name of file plus artwork type and same extension as
     # alternative source
@@ -391,8 +399,9 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
 
     # Couldn't copy anything and don't have an alternative source, so stay with current local file
     if not LOCAL_ALT:
-      debug2(atype, "No alternate source for non-HTTP files, using:", target)
-      return target
+      result = pathToLocal(orig_source)
+      debug2(atype, "No alt source for non-HTTP files, using:", result)
+      return result
 
     warning(args, "**UNAVAILABLE**", atype, title, "Source not available", source)
     NOT_AVAILABLE_CACHE[source] = 0
