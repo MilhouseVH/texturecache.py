@@ -132,11 +132,24 @@ def itemList(aList):
       newList.append({"type": aname, "suffix": value})
   return newList
 
-def unstack(filename):
+def unstack(filename, remove_discpart=False):
   if not filename: return filename
 
   if filename.startswith("stack://"):
-    return filename[8:].split(" , ")[0]
+    fname = filename[8:].split(" , ")[0]
+
+    if remove_discpart:
+      # <cd/dvd/part/pt/disk/disc/d> <0-N>
+      parts = re.search(r"(.*[\\/])(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck]|d)[ _.-]*[0-9]+)(.*?)(\.[^.]+)$", fname)
+      if parts and parts.lastindex == 5:
+        return "%s%s%s" % (parts.group(1), parts.group(2), parts.group(5))
+
+      # <cd/dvd/part/pt/disk/disc/d> <a-d>
+      parts = re.search(r"(.*[\\/])(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck]|d)[ _.-]*[a-d])(.*?)(\.[^.]+)$", fname)
+      if parts and parts.lastindex == 5:
+        return "%s%s%s" % (parts.group(1), parts.group(2), parts.group(5))
+
+    return fname
   else:
     return filename
 
@@ -262,7 +275,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
   if mediatype == "set":
     mediafile = findSetParent(media["title"], media["tc.members"])
   else:
-    mediafile = unstack(media.get("file", showPath))
+    mediafile = unstack(media.get("file", showPath), remove_discpart=True)
 
   mediatitle = "%s %s" % (showTitle, media["label"]) if showTitle else media["label"]
 
@@ -680,7 +693,7 @@ def main(args):
       workitem = processItem(args, "tvshow", media, download_items)
       if args.output and workitem["items"]: workitems.append(workitem)
 
-      mediafile = unstack(media["file"])
+      mediafile = media["file"]
 
       for season in media.get("seasons",[]):
         if args.season:
