@@ -2,6 +2,7 @@
 
 ##Version 1.1.7 (25/11/2013)
 * Add: Exit `monitor` mode cleanly when the socket dies, exiting with System.OnQuit() and exit status -1
+* Add: "exit" as power option, quits application
 
 ##Version 1.1.6 (23/11/2013)
 * Add: Ignore IOError on output due to broken pipe

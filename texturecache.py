@@ -1811,7 +1811,10 @@ class MyJSONComms(object):
         fileList.append(fname)
 
   def setPower(self, state):
-    REQUEST = {"method": "System.%s" % state.capitalize()}
+    if state == "exit":
+      REQUEST = {"method": "Application.Quit"}
+    else:
+      REQUEST = {"method": "System.%s" % state.capitalize()}
     data = self.sendJSON(REQUEST, "libPower")
 
   def getData(self, action, mediatype,
@@ -4733,7 +4736,7 @@ def showSources(media=None, withLabel=None):
       gLogger.out("%s: %s" % (m, s), newLine=True)
 
 def setPower(state):
-  if state in ["hibernate", "reboot", "shutdown", "suspend"]:
+  if state in ["hibernate", "reboot", "shutdown", "suspend", "exit"]:
     MyJSONComms(gConfig, gLogger).setPower(state)
   else:
     gLogger.out("Invalid power state: %s" % state, newLine=True)
@@ -4938,7 +4941,7 @@ def usage(EXIT_CODE):
   print("  rdirectory Recursive version of directory")
   print("  status     Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor    Display client event notifications as they occur")
-  print("  power      Control power state of client, where state is one of suspend, hibernate, shutdown and reboot")
+  print("  power      Control power state of client, where state is one of suspend, hibernate, shutdown, reboot and exit")
   print("  wake       Wake (over LAN) the client corresponding to the MAC address specified by property network.mac")
   print("  exec       Execute specified addon, with optional parameters")
   print("  execw      Execute specified addon, with optional parameters and wait (although often wait has no effect)")
