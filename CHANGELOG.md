@@ -1,6 +1,6 @@
 #Changelog
 
-##Version 1.1.7 (24/11/2013)
+##Version 1.1.7 (25/11/2013)
 * Add: Exit `monitor` mode cleanly when the socket dies, exiting with System.OnQuit() and exit status -1
 
 ##Version 1.1.6 (23/11/2013)
