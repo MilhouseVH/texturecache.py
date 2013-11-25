@@ -1324,6 +1324,8 @@ class MyJSONComms(object):
       if item:
         title = self.getTitleForLibraryItem(item.get("type", None), item.get("id", None))
 
+    if not pmsg: pmsg = "{}"
+
     if title:
       self.logger.out("%s: %-21s: %s [%s]" % (datetime.datetime.now(), method, pmsg, title), newLine=True)
     else:
