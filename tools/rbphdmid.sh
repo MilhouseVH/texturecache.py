@@ -32,6 +32,7 @@
 
 TVSERVICE=/usr/bin/tvservice
 TEXTURECACHE=/storage/texturecache.py
+TEXTURECACHE_ARGS="@xbmc.host=localhost @checkupdate=no @logfile="
 DELAY=900
 DEBUG=N
 TIMERPID=0
@@ -59,7 +60,7 @@ enable_hdmi()
   if [ -n "$(${TVSERVICE} --status | grep "TV is off")" ]; then
     logdbg "Restoring HDMI power"
     ${TVSERVICE} --preferred >/dev/null
-    ${TEXTURECACHE} @xbmc.host=localhost @logfile= power exit
+    ${TEXTURECACHE} ${TEXTURECACHE_ARGS} power exit
   fi
 }
 
@@ -70,12 +71,12 @@ disable_hdmi()
 
 start_timer()
 {
-  if [ -n "$(${TEXTURECACHE} @xbmc.host=localhost @logfile= status | grep "^Player *: None$")" ]; then
-    logdbg "HDMI power off in $1 seconds unless cancelled"
+  if [ -n "$(${TEXTURECACHE} ${TEXTURECACHE_ARGS} status | grep "^Player *: None$")" ]; then
+    logdbg "HDMI power off in $1 seconds unless screensaver deactivated"
     (sleep $1 && disable_hdmi) & 
     TIMERPID=$!
   else
-    logdbg "Not starting timer while a player is active"
+    logdbg "Not starting power off timer while a player is active"
   fi
 }
 
@@ -113,7 +114,7 @@ logmsg "HDMI Power off delay: ${DELAY} seconds"
 while [ : ]; do
   logdbg "Establishing connection with XBMC..."
 
-  ${TEXTURECACHE} @xbmc.host=localhost @logfile= monitor 2>/dev/null | 
+  ${TEXTURECACHE} ${TEXTURECACHE_ARGS} monitor 2>/dev/null | 
     while IFS= read -r line; do
       METHOD="$(echo "${line}" | sed "s/.*: \(.*\..*\).*: {.*/\1/")"
 
