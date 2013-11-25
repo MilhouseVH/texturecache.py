@@ -16,6 +16,7 @@
 #
 # Arguments:
 #  #1: Power off interval in seconds (after screensaver activated)
+#  #2: Optional, enable debug with "-d"
 #
 # In OpenELEC, add the following line to the end of /storage/.config/autostart.sh:
 #
@@ -31,17 +32,30 @@
 
 TVSERVICE=/usr/bin/tvservice
 TEXTURECACHE=/storage/texturecache.py
-DELAY=${1:-900}
+DELAY=900
+DEBUG=N
 TIMERPID=0
 
-logdbg ()
-{
-  [ $PPID != 1 ] && echo "$(date +"%F %T"): $1"
-}
+while [ $1 ]; do
+  case "$1" in
+    -d|--debug) DEBUG=Y;;
+    *) DELAY=$1;;
+  esac
+  shift
+done
 
 logmsg ()
 {
   echo "[$(basename $0)] $1"
+}
+
+logdbg ()
+{
+  if [ $PPID != 1 ]; then
+    echo "$(date +"%F %T"): $1"
+  elif [ $DEBUG = Y ]; then
+    logmsg "$1"
+  fi
 }
 
 enable_hdmi()
