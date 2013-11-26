@@ -976,10 +976,10 @@ class MyPiHDMIManager(threading.Thread):
         # if nothing is scheduled
         if timestamp_onstop != 0:
           nextevent = (self.onstopdelay - stopdelta)
-          qtimeout = nextevent if nextevent > 0 else qtimeout
+          qtimeout = nextevent if nextevent >= 0 else qtimeout
         if timestamp_poweroff != 0:
           nextevent = (self.powerdelay - powerdelta)
-          qtimeout = nextevent if nextevent > 0 and (not qtimeout or nextevent < qtimeout) else qtimeout
+          qtimeout = nextevent if nextevent >= 0 and (not qtimeout or nextevent < qtimeout) else qtimeout
 
   def sendXBMCExit(self):
     REQUEST = {"method": "Application.Quit"}
