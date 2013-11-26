@@ -879,13 +879,16 @@ class MyPiHDMIManager(threading.Thread):
     power_off_pending = False
     power_off_reached = False
 
+    qtimeout = None
+
     while not stopped.is_set():
       try:
-        method = self.cmdqueue.get(block=True, timeout=5.0)
+        method = self.cmdqueue.get(block=True, timeout=qtimeout)
         self.cmdqueue.task_done()
+        qtimeout = None
 
         if method == "pong":
-          self.logger.debug("HDMI power management thread startup, initialising XBMC and HDMI state")
+          self.logger.debug("HDMI power management thread - initialising XBMC and HDMI state")
 
           clientState = self.getXBMCStatus()
           hdmi_active = self.getHDMIState()
@@ -968,6 +971,15 @@ class MyPiHDMIManager(threading.Thread):
             power_off_pending = False
             timestamp_poweroff = 0
           power_off_reached = True
+
+        # Block until the next scheduled onstop/power event, or indefinitely
+        # if nothing is scheduled
+        if timestamp_onstop != 0:
+          nextevent = (self.onstopdelay - stopdelta)
+          qtimeout = nextevent if nextevent > 0 else qtimeout
+        if timestamp_poweroff != 0:
+          nextevent = (self.powerdelay - powerdelta)
+          qtimeout = nextevent if nextevent > 0 and (not qtimeout or nextevent < qtimeout) else qtimeout
 
   def sendXBMCExit(self):
     REQUEST = {"method": "Application.Quit"}
