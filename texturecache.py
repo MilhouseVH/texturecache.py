@@ -584,6 +584,8 @@ class MyLogger():
     self.DEBUG = False
     self.VERBOSE = False
 
+    self.ISATTY = sys.stdout.isatty()
+
     #Ensure stdout/stderr use utf-8 encoding...
     if sys.version_info >= (3, 1):
       sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
@@ -664,7 +666,10 @@ class MyLogger():
   def debug(self, data, jsonrequest=None):
     if self.DEBUG:
       with threading.Lock():
-        self.out("[%s] %s: %s" % (self.OPTION, datetime.datetime.now(), data), newLine=True)
+        if self.ISATTY:
+          self.out("[%s] %s: %s" % (self.OPTION, datetime.datetime.now(), data), newLine=True)
+        else:
+          self.out("[%s] %s" % (self.OPTION, data), newLine=True)
     if self.LOGGING:
       self.log("[DEBUG] %s" % data, jsonrequest=jsonrequest)
 
