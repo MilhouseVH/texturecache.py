@@ -34,6 +34,7 @@ import os, sys, platform, re, datetime, time
 import socket, base64, hashlib
 import threading, random
 import errno, codecs
+import subprocess
 
 try:
   import json
@@ -56,12 +57,12 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.7"
+    self.VERSION = "1.1.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
 
-    self.DEBUG = True if "PYTHONDEBUG" in os.environ and os.environ["PYTHONDEBUG"].lower()=="y" else False
+    self.DEBUG = True if os.environ.get("PYTHONDEBUG", "n").lower()=="y" else False
 
     self.GLOBAL_SECTION = "global"
     self.THIS_SECTION = self.GLOBAL_SECTION
@@ -135,6 +136,9 @@ class MyConfiguration(object):
         key_value = arg[1:].split("=", 1)
         config.set(self.THIS_SECTION, key_value[0].strip(), key_value[1].strip())
         argv.remove(arg)
+
+    if not self.DEBUG and self.getBoolean(config, "debug", ""):
+      self.DEBUG = self.getBoolean(config, "debug", "no")
 
     self.IDFORMAT = self.getValue(config, "format", "%06d")
     self.FSEP = self.getValue(config, "sep", "|")
@@ -322,6 +326,8 @@ class MyConfiguration(object):
         if temp2 != "": temp2 = "%s, " % temp2
         temp = "%s%s " % (temp2, temp.strip())
       self.IMDB_FIELDS = temp
+
+    self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
 
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
@@ -554,6 +560,8 @@ class MyConfiguration(object):
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("  imdb.fields = %s" % self.NoneIsBlank(self.IMDB_FIELDS))
+    print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
+
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
 
@@ -653,12 +661,12 @@ class MyLogger():
 
     if log: self.log(data)
 
-  def debug(self, data, jsonrequest=None, every=0, newLine=False, newLineBefore=False):
+  def debug(self, data, jsonrequest=None):
     if self.DEBUG:
       with threading.Lock():
-        if newLineBefore: sys.stderr.write("\n")
-        self.progress("%s: %s" % (datetime.datetime.now(), data), every, newLine)
-    self.log(data, jsonrequest=jsonrequest)
+        self.out("[%s] %s: %s" % (self.OPTION, datetime.datetime.now(), data), newLine=True)
+    if self.LOGGING:
+      self.log("[DEBUG] %s" % data, jsonrequest=jsonrequest)
 
   def log(self, data, jsonrequest = None, maxLen=0):
     if self.LOGGING:
@@ -831,6 +839,177 @@ class MyImageLoader(threading.Thread):
     self.totals.finish(item.mtype, item.itype)
 
     return ATTEMPT != 0
+
+#
+# Simple thread class to manage Raspberry Pi HDMI power state
+#
+class MyPiHDMIManager(threading.Thread):
+  def __init__(self, config, logger, cmdqueue, powerdelay, onstopdelay, binpath):
+    threading.Thread.__init__(self)
+
+    self.cmdqueue = cmdqueue
+    self.config = config
+    self.logger = logger
+    self.powerdelay = powerdelay
+    self.onstopdelay = onstopdelay
+    self.binpath = binpath
+
+  def run(self):
+    try:
+      self.MonitorXBMC()
+    except:
+      pass
+
+  def MonitorXBMC(self):
+    timestamp_poweroff = 0
+    timestamp_onstop = 0
+
+    clientState = {}
+
+    hdmi_active = True
+    screensaver_active = False
+    player_active = False
+    library_active = False
+
+    power_off_pending = False
+    power_off_reached = False
+
+    while not stopped.is_set():
+      try:
+        method = self.cmdqueue.get(block=True, timeout=5.0)
+        self.cmdqueue.task_done()
+
+        if method == "pong":
+          self.logger.debug("HDMI power management thread startup, initialising XBMC and HDMI state")
+
+          clientState = self.getXBMCStatus()
+          hdmi_active = self.getHDMIState()
+
+          screensaver_active = clientState["screensaver.active"]
+          player_active = clientState["players.active"]
+          library_active = (clientState["scanning.music"] or clientState["scanning.video"])
+          power_off_pending = (screensaver_active and hdmi_active)
+
+          self.logger.debug("HDMI is [%s], Screensaver is [%s], Player is [%s], Library scan [%s]" %
+                            (("on" if hdmi_active else "off"),
+                             ("active" if screensaver_active else "inactive"),
+                             ("active" if player_active else "inactive"),
+                             ("active" if library_active else "inactive")))
+
+        elif method == "GUI.OnScreensaverActivated":
+          self.logger.debug("Screensaver has activated")
+          screensaver_active = True
+          power_off_pending = hdmi_active
+
+        elif method == "GUI.OnScreensaverDeactivated":
+          self.logger.debug("Screensaver has deactivated")
+          timestamp_poweroff = 0
+          screensaver_active = False
+          power_off_pending = False
+          if not hdmi_active:
+            self.enable_hdmi()
+            self.sendXBMCExit()
+            hdmi_active = True
+          else:
+            self.logger.debug("HDMI power-off cancelled")
+
+        elif method == "Player.OnStop":
+          timestamp_onstop = time.time()
+
+        elif method == "Player.OnPlay":
+          if not player_active:
+            self.logger.debug("Player has started")
+          timestamp_onstop = 0
+          player_active = True
+
+        elif method.endswith(".OnScanStarted") or method.endswith(".OnCleanStarted"):
+          self.logger.debug("Library scan has started")
+          library_active = True
+
+        elif method.endswith(".OnScanFinished") or method.endswith(".OnCleanFinished"):
+          self.logger.debug("Library scan has finished")
+          library_active = False
+
+        elif method == "System.OnQuit":
+          pass
+
+      except Queue.Empty as e:
+        pass
+
+      if self.cmdqueue.empty():
+        if power_off_pending and timestamp_poweroff == 0:
+          power_off_reached = False
+          timestamp_poweroff = time.time()
+          self.logger.debug("HDMI power off in %d seconds unless cancelled" % self.powerdelay)
+          if player_active or library_active:
+            self.logger.debug("However, a player and/or library scan is active, so HDMI power-off will not occur until both become inactive")
+
+        t = time.time()
+        powerdelta = int(t - timestamp_poweroff) if timestamp_poweroff != 0 else 0
+        stopdelta = int(t - timestamp_onstop) if timestamp_onstop != 0 else 0
+
+        if stopdelta >= self.onstopdelay:
+          self.logger.debug("Player has stopped")
+          player_active = False
+          timestamp_onstop = 0
+
+        if powerdelta >= self.powerdelay:
+          if player_active or library_active:
+            if not power_off_reached:
+              self.logger.debug("HDMI power-off timeout reached - now waiting for player and/or library scan to become inactive")
+          else:
+            self.disable_hdmi()
+            hdmi_active = False
+            power_off_pending = False
+            timestamp_poweroff = 0
+          power_off_reached = True
+
+  def sendXBMCExit(self):
+    REQUEST = {"method": "Application.Quit"}
+    MyJSONComms(self.config, self.logger).sendJSON(REQUEST, "libExit", checkResult=False)
+    self.logger.debug("Sending Application.Quit() to XBMC")
+
+  def getXBMCStatus(self):
+    jcomms = MyJSONComms(self.config, self.logger)
+
+    statuses = {}
+
+    REQUEST = {"method": "XBMC.GetInfoBooleans",
+               "params": {"booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo"]}}
+
+    data = jcomms.sendJSON(REQUEST, "libBooleans", checkResult=False)
+    values = data.get("result", {})
+    statuses["screensaver.active"] = values.get("System.ScreenSaverActive", False)
+    statuses["scanning.music"] = values.get("Library.IsScanningMusic", False)
+    statuses["scanning.video"] = values.get("Library.IsScanningVideo", False)
+
+    REQUEST = {"method": "Player.GetActivePlayers"}
+    data = jcomms.sendJSON(REQUEST, "libPlayers", checkResult=False)
+    values = data.get("result", [])
+    statuses["players.active"] = (values != [])
+
+    return statuses
+
+  # True = ON, False = OFF
+  def getHDMIState(self):
+    response = subprocess.check_output([self.binpath, "--status"], stderr=subprocess.STDOUT).decode("utf-8")
+    return response.find("TV is off") == -1
+
+  def setHDMIState(self, state):
+    if state:
+      option = "--preferred"
+    else:
+      option = "--off"
+
+    response = subprocess.check_output([self.binpath, option], stderr=subprocess.STDOUT).decode("utf-8")
+
+  def disable_hdmi(self):
+    self.setHDMIState(False)
+    self.logger.debug("HDMI has been powered off")
+
+  def enable_hdmi(self):
+    self.setHDMIState(True)
+    self.logger.debug("HDMI has been powered on")
 
 #
 # Simple database wrapper class.
@@ -4862,6 +5041,33 @@ def getHMS(seconds):
 def showNotifications():
   MyJSONComms(gConfig, gLogger).listen()
 
+def rbphdmi(delay):
+
+  def rbphdmi_listen(self, method, params):
+    cmdqueue.put(method)
+    return method == "System.OnQuit"
+
+  cmdqueue = Queue.Queue()
+  hdmimgr = MyPiHDMIManager(gConfig, gLogger, cmdqueue, powerdelay=delay, onstopdelay=5, binpath=gConfig.BIN_TVSERVICE)
+  hdmimgr.setDaemon(True)
+  hdmimgr.start()
+
+  RETRIES=12
+  ATTEMPTS=0
+
+  while True:
+    try:
+      gLogger.debug("Connecting to XBMC...")
+      MyJSONComms(gConfig, gLogger).sendJSON({"method": "JSONRPC.Ping"}, "libListen", callback=rbphdmi_listen, checkResult=False)
+      gLogger.debug("Disconnected from XBMC - waiting for restart")
+      time.sleep(15.0)
+      ATTEMPTS = 0
+    except socket.error as e:
+      gLogger.debug("XBMC not responding, retries remaining %d" % (RETRIES - ATTEMPTS))
+      if ATTEMPTS >= RETRIES: raise
+      time.sleep(5.0)
+      ATTEMPTS += 1
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -4896,6 +5102,7 @@ def usage(EXIT_CODE):
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
           sources [media] | sources media [label] | directory path | rdirectory path | \
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
+          rbphdmi [seconds] | \
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -4945,6 +5152,7 @@ def usage(EXIT_CODE):
   print("  wake       Wake (over LAN) the client corresponding to the MAC address specified by property network.mac")
   print("  exec       Execute specified addon, with optional parameters")
   print("  execw      Execute specified addon, with optional parameters and wait (although often wait has no effect)")
+  print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("")
   print("  config     Show current configuration")
   print("  version    Show current version and check for new version")
@@ -4972,6 +5180,8 @@ def loadConfig(argv):
 
   gLogger.DEBUG = gConfig.DEBUG
   gLogger.VERBOSE = gConfig.LOGVERBOSE
+  gLogger.OPTION = argv[0] if len(argv) != 0 else ""
+
   gLogger.setLogFile(gConfig.LOGFILE)
 
   gLogger.log("Command line args: %s" % sys.argv)
@@ -4992,7 +5202,7 @@ def checkConfig(option):
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
-                "status", "monitor", "power",
+                "status", "monitor", "power", "rbphdmi",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "fixurls", "imdb"]
 
@@ -5166,6 +5376,16 @@ def checkConfig(option):
     gLogger.err(MSG)
     return False
 
+  if option == "rbphdmi":
+    if not (gConfig.BIN_TVSERVICE and os.path.exists(gConfig.BIN_TVSERVICE)):
+      MSG = "FATAL: The task you wish to perform requires a valid path specified\n" \
+            "       in the property \"bin.tvservice\".\n\n" \
+            "       The current value [%s]\n" \
+            "       is either not set or cannot be accessed.\n\n" \
+            "       Check settings in properties file %s\n" % (gConfig.BIN_TVSERVICE, gConfig.CONFIG_NAME)
+      gLogger.err(MSG)
+      return False
+
   gConfig.postConfig()
 
   if gLogger.VERBOSE and gLogger.LOGGING:
@@ -5224,7 +5444,7 @@ def getLatestVersion(argv):
   elif argv[0] in ["qa", "qax"]:
     USAGE  = "qa"
   elif argv[0] in ["query", "missing", "watched",
-                   "power", "wake", "status", "monitor",
+                   "power", "wake", "status", "monitor", "rbphdmi",
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb",
@@ -5556,6 +5776,10 @@ def main(argv):
     libraryid = int(argv[2]) + 0 if len(argv) >= 3 else 0
     kvpairs = argv[3:] if len(argv) >= 4 else []
     setDetails_single(mtype, libraryid, kvpairs, dryRun=dryRun)
+
+  elif argv[0] == "rbphdmi":
+    _delay = 900 if len(argv) == 1 else int(argv[1])
+    rbphdmi(delay=_delay)
 
   else:
     usage(1)

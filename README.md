@@ -59,7 +59,9 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[monitor]** Display client event notifications as they occur
 
-**[power]** Set power state of client - `suspend`, `hibernate`, `shutdown` or `reboot`
+**[rbphdmi]** Manage Raspberry Pi HDMI power state. Specify power-off delay in seconds as second argument (default is 900 seconds). Requires `xbmc.host` set to localhost. Specify location of tvservice executable (to turn HDMI on and off) in `bin.tvservice` property (default is `/usr/bin/tvservice`). Activate debug diagnostics with `@debug=yes`, otherwise expect no output.
+
+**[power]** Set power state of client - `suspend`, `hibernate`, `shutdown`, `reboot` or `exit`.
 
 **[wake]** Use Wake Over LAN to wake a suspended/hibernating remote client. Specify the MAC address of the remote client in the `network.mac` property (ie. `network.mac=xx:xx:xx:xx:xx:xx`). When the client is no longer required, suspend or hibernate it with the `power` option.
 
@@ -436,6 +438,7 @@ nonmedia.filetypes =
 watched.overwrite = no
 network.mac =
 imdb.fields = ratings, votes
+bin.tvservice = /usr/bin/tvservice
 
 ```
 

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.1.8 (26/11/2013)
+* Add: `rbphdmi` option to manage Raspberry Pi HDMI power saving. Default delay is 900 seconds after screensaver has activated, specify alternative delay in seconds as second argument. View event activity with `@debug=yes`. Specify location of tvservice binary with `@bin.tvservice` property (default is `/usr/bin/tvservice`). Due to nature of operation, requires `xbmc.host` to be localhost.
+
 ##Version 1.1.7 (25/11/2013)
 * Add: Exit `monitor` mode cleanly when the socket dies, exiting with System.OnQuit() and exit status -1
 * Add: "exit" as power option, quits application
