@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.8"
+    self.VERSION = "1.1.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -328,6 +328,7 @@ class MyConfiguration(object):
       self.IMDB_FIELDS = temp
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
+    self.FORCE_HOTPLUG = self.getBoolean(config, "hdmi.force.hotplug", "no")
 
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
@@ -849,13 +850,13 @@ class MyImageLoader(threading.Thread):
 # Simple thread class to manage Raspberry Pi HDMI power state
 #
 class MyPiHDMIManager(threading.Thread):
-  def __init__(self, config, logger, cmdqueue, powerdelay, onstopdelay, binpath):
+  def __init__(self, config, logger, cmdqueue, hdmidelay, onstopdelay, binpath):
     threading.Thread.__init__(self)
 
     self.cmdqueue = cmdqueue
     self.config = config
     self.logger = logger
-    self.powerdelay = powerdelay
+    self.hdmidelay = hdmidelay
     self.onstopdelay = onstopdelay
     self.binpath = binpath
 
@@ -866,40 +867,42 @@ class MyPiHDMIManager(threading.Thread):
       pass
 
   def MonitorXBMC(self):
-    timestamp_poweroff = 0
+    timestamp_hdmioff = 0
     timestamp_onstop = 0
 
     clientState = {}
-
-    hdmi_active = True
+    hdmi_on = True
     screensaver_active = False
     player_active = False
     library_active = False
 
-    power_off_pending = False
-    power_off_reached = False
+    hdmi_off_pending = False
+    hdmi_off_reached = False
 
     qtimeout = None
 
     while not stopped.is_set():
       try:
-        method = self.cmdqueue.get(block=True, timeout=qtimeout)
+        notification = self.cmdqueue.get(block=True, timeout=qtimeout)
         self.cmdqueue.task_done()
         qtimeout = None
+
+        method = notification["method"]
+        params = notification["params"]
 
         if method == "pong":
           self.logger.debug("HDMI power management thread - initialising XBMC and HDMI state")
 
           clientState = self.getXBMCStatus()
-          hdmi_active = self.getHDMIState()
+          hdmi_on = self.getHDMIStatus()
 
           screensaver_active = clientState["screensaver.active"]
           player_active = clientState["players.active"]
           library_active = (clientState["scanning.music"] or clientState["scanning.video"])
-          power_off_pending = (screensaver_active and hdmi_active)
+          hdmi_off_pending = (screensaver_active and hdmi_on)
 
           self.logger.debug("HDMI is [%s], Screensaver is [%s], Player is [%s], Library scan [%s]" %
-                            (("on" if hdmi_active else "off"),
+                            (("on" if hdmi_on else "off"),
                              ("active" if screensaver_active else "inactive"),
                              ("active" if player_active else "inactive"),
                              ("active" if library_active else "inactive")))
@@ -907,19 +910,19 @@ class MyPiHDMIManager(threading.Thread):
         elif method == "GUI.OnScreensaverActivated":
           self.logger.debug("Screensaver has activated")
           screensaver_active = True
-          power_off_pending = hdmi_active
+          hdmi_off_pending = hdmi_on
 
         elif method == "GUI.OnScreensaverDeactivated":
           self.logger.debug("Screensaver has deactivated")
-          timestamp_poweroff = 0
-          screensaver_active = False
-          power_off_pending = False
-          if not hdmi_active:
-            self.enable_hdmi()
-            self.sendXBMCExit()
-            hdmi_active = True
+          if hdmi_on:
+            if timestamp_hdmioff != 0:
+              self.logger.debug("Scheduled HDMI power-off cancelled")
           else:
-            self.logger.debug("HDMI power-off cancelled")
+            hdmi_on = self.enable_hdmi()
+            self.sendXBMCExit()
+          screensaver_active = False
+          hdmi_off_pending = False
+          timestamp_hdmioff = 0
 
         elif method == "Player.OnStop":
           timestamp_onstop = time.time()
@@ -939,52 +942,55 @@ class MyPiHDMIManager(threading.Thread):
           library_active = False
 
         elif method == "System.OnQuit":
-          pass
+          # We're shutting down if not Application.Quit()...
+          if params["data"] != -1:
+            break
 
       except Queue.Empty as e:
         pass
 
+      # Process events once queue is empty
       if self.cmdqueue.empty():
-        if power_off_pending and timestamp_poweroff == 0:
-          power_off_reached = False
-          timestamp_poweroff = time.time()
-          self.logger.debug("HDMI power off in %d seconds unless cancelled" % self.powerdelay)
+        if hdmi_off_pending and timestamp_hdmioff == 0:
+          hdmi_off_reached = False
+          timestamp_hdmioff = time.time()
+          self.logger.debug("HDMI power off in %d seconds unless cancelled" % self.hdmidelay)
           if player_active or library_active:
-            self.logger.debug("However, a player and/or library scan is active, so HDMI power-off will not occur until both become inactive")
+            self.logger.debug("HDMI power-off will not occur until both player and/or library become inactive")
 
         t = time.time()
-        powerdelta = int(t - timestamp_poweroff) if timestamp_poweroff != 0 else 0
         stopdelta = int(t - timestamp_onstop) if timestamp_onstop != 0 else 0
+        hdmidelta = int(t - timestamp_hdmioff) if timestamp_hdmioff != 0 else 0
 
-        if stopdelta >= self.onstopdelay:
+        if timestamp_onstop != 0 and stopdelta >= self.onstopdelay:
           self.logger.debug("Player has stopped")
           player_active = False
           timestamp_onstop = 0
 
-        if powerdelta >= self.powerdelay:
+        if timestamp_hdmioff != 0 and hdmidelta >= self.hdmidelay:
           if player_active or library_active:
-            if not power_off_reached:
-              self.logger.debug("HDMI power-off timeout reached - now waiting for player and/or library scan to become inactive")
+            if not hdmi_off_reached:
+              self.logger.debug("HDMI power-off timeout reached")
+              self.logger.debug("Waiting for player and/or library to become inactive")
           else:
-            self.disable_hdmi()
-            hdmi_active = False
-            power_off_pending = False
-            timestamp_poweroff = 0
-          power_off_reached = True
+            hdmi_on = self.disable_hdmi()
+            hdmi_off_pending = False
+            timestamp_hdmioff = 0
+          hdmi_off_reached = True
 
-        # Block until the next scheduled onstop/power event, or indefinitely
-        # if nothing is scheduled
+        # Block until the next scheduled onstop/power event, or
+        # indefinitely if no events are currently scheduled.
         if timestamp_onstop != 0:
           nextevent = (self.onstopdelay - stopdelta)
           qtimeout = nextevent if nextevent >= 0 else qtimeout
-        if timestamp_poweroff != 0:
-          nextevent = (self.powerdelay - powerdelta)
+        if timestamp_hdmioff != 0:
+          nextevent = (self.hdmidelay - hdmidelta)
           qtimeout = nextevent if nextevent >= 0 and (not qtimeout or nextevent < qtimeout) else qtimeout
 
   def sendXBMCExit(self):
+    self.logger.debug("Sending Application.Quit() to XBMC")
     REQUEST = {"method": "Application.Quit"}
     MyJSONComms(self.config, self.logger).sendJSON(REQUEST, "libExit", checkResult=False)
-    self.logger.debug("Sending Application.Quit() to XBMC")
 
   def getXBMCStatus(self):
     jcomms = MyJSONComms(self.config, self.logger)
@@ -1007,26 +1013,66 @@ class MyPiHDMIManager(threading.Thread):
 
     return statuses
 
+  # Determine if TV is on or off - if off, no need to disable HDMI
   # True = ON, False = OFF
-  def getHDMIState(self):
+  #
+  # The hotplug shows in state:
+  #   VC_HDMI_UNPLUGGED = (1 << 0), /**<HDMI cable is detached */
+  #   VC_HDMI_ATTACHED = (1 << 1), /**<HDMI cable is attached but not powered on */
+  #   VC_HDMI_DVI = (1 << 2), /**<HDMI is on but in DVI mode (no audio) */
+  #   VC_HDMI_HDMI = (1 << 3), /**<HDMI is on and HDMI mode is active */
+  #   VC_HDMI_HDCP_UNAUTH = (1 << 4), /**<HDCP authentication is broken (e.g. Ri mismatched) or not active */
+  #   VC_HDMI_HDCP_AUTH = (1 << 5), /**<HDCP is active */
+  #   VC_HDMI_HDCP_KEY_DOWNLOAD = (1 << 6), /**<HDCP key download successful/fail */
+  #   VC_HDMI_HDCP_SRM_DOWNLOAD = (1 << 7), /**<HDCP revocation list download successful/fail */
+  #   VC_HDMI_CHANGING_MODE = (1 << 8), /**<HDMI is starting to change mode, clock has not yet been set */
+  #
+  # Typical values: 2 = HDMI off; 9 = HDMI on, TV off/standby; 10 (a) = HDMI+TV on
+  #
+  def getDisplayStatus(self):
+    if self.config.FORCE_HOTPLUG:
+      self.logger.debug("No hotplug support - assuming display is powered on")
+      return True
+
+    response = subprocess.check_output([self.binpath, "--status"], stderr=subprocess.STDOUT).decode("utf-8")
+    state = re.search("state (0x[0-9a-f]*) .*", response)
+    if state:
+      vc_hdmi = int(state.group(1)[-1:], 16)
+      tv_on = (vc_hdmi & (1 << 1) != 0)
+    else:
+      tv_on = True
+    return tv_on
+
+  # HDMI Power: True = ON, False = OFF
+  def getHDMIStatus(self):
     response = subprocess.check_output([self.binpath, "--status"], stderr=subprocess.STDOUT).decode("utf-8")
     return response.find("TV is off") == -1
 
   def setHDMIState(self, state):
-    if state:
-      option = "--preferred"
-    else:
-      option = "--off"
-
+    option = "--preferred" if state else "--off"
     response = subprocess.check_output([self.binpath, option], stderr=subprocess.STDOUT).decode("utf-8")
 
   def disable_hdmi(self):
+    if not self.getDisplayStatus():
+      self.logger.debug("Display device is not turned on, no need to disable HDMI")
+      return True
+
     self.setHDMIState(False)
-    self.logger.debug("HDMI has been powered off")
+    ison = self.getHDMIStatus()
+    if not ison:
+      self.logger.debug("HDMI is now off")
+    else:
+      self.logger.debug("HDMI failed to power off")
+    return ison
 
   def enable_hdmi(self):
     self.setHDMIState(True)
-    self.logger.debug("HDMI has been powered on")
+    ison = self.getHDMIStatus()
+    if ison:
+      self.logger.debug("HDMI is now on")
+    else:
+      self.logger.debug("HDMI failed to power on")
+    return ison
 
 #
 # Simple database wrapper class.
@@ -5059,24 +5105,34 @@ def showNotifications():
   MyJSONComms(gConfig, gLogger).listen()
 
 def rbphdmi(delay):
+  global SHUTDOWN
 
   def rbphdmi_listen(self, method, params):
-    cmdqueue.put(method)
-    return method == "System.OnQuit"
+    cmdqueue.put({"method": method, "params": params})
+    if method == "System.OnQuit":
+      global SHUTDOWN
+      SHUTDOWN = (params.get("data", -1) != -1)
+      return True
+    else:
+      return False
 
-  cmdqueue = Queue.Queue()
-  hdmimgr = MyPiHDMIManager(gConfig, gLogger, cmdqueue, powerdelay=delay, onstopdelay=5, binpath=gConfig.BIN_TVSERVICE)
-  hdmimgr.setDaemon(True)
-  hdmimgr.start()
-
+  SHUTDOWN = False
   RETRIES=12
   ATTEMPTS=0
+
+  cmdqueue = Queue.Queue()
+  hdmimgr = MyPiHDMIManager(gConfig, gLogger, cmdqueue, hdmidelay=delay, onstopdelay=5, binpath=gConfig.BIN_TVSERVICE)
+  hdmimgr.setDaemon(True)
+  hdmimgr.start()
 
   while True:
     try:
       gLogger.debug("Connecting to XBMC...")
       MyJSONComms(gConfig, gLogger).sendJSON({"method": "JSONRPC.Ping"}, "libListen", callback=rbphdmi_listen, checkResult=False)
-      gLogger.debug("Disconnected from XBMC - waiting for restart")
+      if SHUTDOWN:
+        gLogger.debug("XBMC exited - system shutting down")
+        break
+      gLogger.debug("XBMC exited - waiting for restart")
       time.sleep(15.0)
       ATTEMPTS = 0
     except socket.error as e:
