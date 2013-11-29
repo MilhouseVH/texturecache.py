@@ -439,7 +439,7 @@ watched.overwrite = no
 network.mac =
 imdb.fields = ratings, votes
 bin.tvservice = /usr/bin/tvservice
-
+hdmi.force.hotplug = no
 ```
 
 The `dbfile` and `thumbbnails` properties represent folders that are normally relative to the `userdata` property, however full paths can be specified.

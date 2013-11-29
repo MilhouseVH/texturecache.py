@@ -1,7 +1,10 @@
 #Changelog
 
-##Version 1.1.9 (2x/11/2013)
-* Chg: Tweak `rbphdmi` logic slightly: Check HDMI has actually turned on/off; don't turn off HDMI if the TV/monitor has been powered off (if supported by TV/monitor - assume always on if `@hdmi.force.hotplug=yes`).
+##Version 1.2.0 (28/11/2013)
+* Fix: null being returned for files from Files.GetDirectory call on some systems - ensure centralised method used everywhere
+
+##Version 1.1.9 (28/11/2013)
+* Chg: Tweak `rbphdmi` logic slightly: Check HDMI has actually turned on/off; don't turn off HDMI if the TV/monitor has been powered off (if supported by TV/monitor - if not, assume "always on" with `@hdmi.force.hotplug=yes`).
 
 ##Version 1.1.8 (26/11/2013)
 * Add: `rbphdmi` option to manage Raspberry Pi HDMI power saving. Default delay is 900 seconds after screensaver has activated, specify alternative delay in seconds as second argument. View event activity with `@debug=yes`. Specify location of tvservice binary with `@bin.tvservice` property (default is `/usr/bin/tvservice`). Due to nature of operation, requires `xbmc.host` to be localhost.

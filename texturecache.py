@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.1.9"
+    self.VERSION = "1.2.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -562,6 +562,7 @@ class MyConfiguration(object):
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("  imdb.fields = %s" % self.NoneIsBlank(self.IMDB_FIELDS))
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
+    print("  hdmi.force.hotplug = %s" % self.BooleanIsYesNo(self.FORCE_HOTPLUG))
 
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
@@ -1686,11 +1687,21 @@ class MyJSONComms(object):
     REQUEST = {"method": cleanMethod}
     self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
 
-  def getDirectoryList(self, mediatype, path):
+  def getDirectoryList(self, path, mediatype="files", properties=["file"]):
     REQUEST = {"method":"Files.GetDirectory",
-               "params": {"directory": path, "media": mediatype},
-               "properties": ["file", "art", "fanart", "thumb", "size", "dateadded", "lastmodified", "mimetype"]}
-    return self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+               "params": {"directory": path, "media": mediatype}}
+
+    if properties:
+      REQUEST["properties"] = properties
+
+    data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+
+    # Fix null being returned for "files" on some systems...
+    if "result" in data and "files" in data["result"]:
+      if data["result"]["files"] == None:
+        data["result"]["files"] = []
+
+    return data
 
   def getExtraArt(self, item):
     if not (item and self.config.CACHE_EXTRA): return []
@@ -1735,8 +1746,7 @@ class MyJSONComms(object):
 
     self.EXTRA_ART_DIR_CACHE[directory] = []
 
-    REQUEST = {"method":"Files.GetDirectory", "params":{"directory": directory}}
-    data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+    data = self.getDirectoryList(directory)
 
     if "result" not in data: return []
     if "files" not in data["result"]: return []
@@ -1757,8 +1767,7 @@ class MyJSONComms(object):
 
     files = []
     for dir in dirs:
-      REQUEST = {"method":"Files.GetDirectory", "params":{"directory": dir["file"]}}
-      data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+      data = self.getDirectoryList(dir["file"])
       if "result" in data and "files" in data["result"]:
         for file in data["result"]["files"]:
           if file["filetype"] == "file" and \
@@ -1791,9 +1800,7 @@ class MyJSONComms(object):
     else:
       return (None, None, None)
 
-    REQUEST = {"method":"Files.GetDirectory", "params":{"directory": directory}}
-
-    data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+    data = self.getDirectoryList(directory)
 
     if "result" in data and "files" in data["result"]:
       poster_url = fanart_url = banner_url = None
@@ -2035,13 +2042,11 @@ class MyJSONComms(object):
     return fileList
 
   def getFilesForPath_recurse(self, fileList, path):
-    data = self.getDirectoryList("files", path)
+    data = self.getDirectoryList(path)
     if not "result" in data: return
+    if not "files" in data["result"]: return
 
-    files = data["result"].get("files", None)
-    if not files: return
-
-    for file in files:
+    for file in data["result"]["files"]:
       ftype = file["filetype"]
       fname = file["file"]
       fext = os.path.splitext(fname)[1].lower()
@@ -4944,12 +4949,12 @@ def doLibraryClean(media):
 
   jcomms.cleanLibrary(cleanMethod)
 
-def getDirectoryList(path, mediatype = "files", recurse=False):
+def getDirectoryList(path, recurse=False):
   jcomms = MyJSONComms(gConfig, gLogger)
 
-  data = jcomms.getDirectoryList(mediatype, path)
+  data = jcomms.getDirectoryList(path)
 
-  if not "result" in data:
+  if "result" not in data or "files" not in data["result"]:
     gLogger.out("No directory listing available.", newLine=True)
     return
 
@@ -4966,7 +4971,7 @@ def getDirectoryList(path, mediatype = "files", recurse=False):
 
     gLogger.out("%-4s: %s" % (FTYPE, FNAME), newLine=True)
     if recurse and ftype == "directory":
-      getDirectoryList(FNAME, mediatype, recurse)
+      getDirectoryList(FNAME, recurse)
 
 def showSources(media=None, withLabel=None):
   jcomms = MyJSONComms(gConfig, gLogger)
