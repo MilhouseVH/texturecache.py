@@ -505,7 +505,7 @@ def showConfig(args, download_items, season_items, episode_items):
 
   def _blank(value):
     return (value if value else "Not specified")
-  print(args)
+
   printerr("Current configuration:")
   printerr("")
   printerr("  Local Path    : %s" % _blank(LOCAL_DIR))
