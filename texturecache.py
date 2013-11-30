@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.0"
+    self.VERSION = "1.2.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -648,13 +648,17 @@ class MyLogger():
       ulen = len(data)
       spaces = self.lastlen - ulen
       self.lastlen = ulen if udata.rfind("\n") == -1 else 0
+
+      NL = "\n" if newLine else ""
+
       if spaces > 0:
-        sys.stdout.write("%-s%*s" % (udata, spaces, " "))
+        sys.stdout.write("%-s%*s%s" % (udata, spaces, " ", NL))
       else:
-        sys.stdout.write("%-s" % udata)
+        sys.stdout.write("%-s%s" % (udata, NL))
+
       if newLine:
-        sys.stdout.write("\n")
         self.lastlen = 0
+
       try:
         sys.stdout.flush()
       except IOError as e:
@@ -666,14 +670,14 @@ class MyLogger():
     if log: self.log(data)
 
   def debug(self, data, jsonrequest=None):
-    if self.DEBUG:
-      with threading.Lock():
+    with threading.Lock():
+      if self.DEBUG:
         if self.ISATTY:
           self.out("[%s] %s: %s" % (self.OPTION, datetime.datetime.now(), data), newLine=True)
         else:
           self.out("[%s] %s" % (self.OPTION, data), newLine=True)
-    if self.LOGGING:
-      self.log("[DEBUG] %s" % data, jsonrequest=jsonrequest)
+        if self.LOGGING:
+          self.log("[DEBUG] %s" % data, jsonrequest=jsonrequest)
 
   def log(self, data, jsonrequest = None, maxLen=0):
     if self.LOGGING:
@@ -850,16 +854,38 @@ class MyImageLoader(threading.Thread):
 #
 # Simple thread class to manage Raspberry Pi HDMI power state
 #
-class MyPiHDMIManager(threading.Thread):
-  def __init__(self, config, logger, cmdqueue, hdmidelay, onstopdelay, binpath):
+class MyHDMIManager(threading.Thread):
+  def __init__(self, config, logger, cmdqueue, binpath, hdmidelay=900, onstopdelay=5):
     threading.Thread.__init__(self)
 
     self.cmdqueue = cmdqueue
     self.config = config
     self.logger = logger
-    self.hdmidelay = hdmidelay
-    self.onstopdelay = onstopdelay
     self.binpath = binpath
+
+    # Order of event processing is important, as
+    # we want to process the hdmi.off event after
+    # all other events.
+    #
+    # Use [##] to force reliable order, higher numbers
+    # are processed last.
+    #
+    self.EV_PLAY_STOP = "[00]play.stop"
+    self.EV_HDMI_OFF  = "[99]hdmi.off"
+
+    hdmidelay = 0 if hdmidelay < 0 else hdmidelay
+    onstopdelay = 5 if onstopdelay < 5 else onstopdelay
+
+    self.events = {}
+    self.EventAdd(self.EV_HDMI_OFF, hdmidelay)
+    self.EventAdd(self.EV_PLAY_STOP, onstopdelay)
+
+    # This is the order events will be processed...
+    self.EventOrderList = sorted(self.events)
+
+    self.logger.debug("HDMI Power off delay: %d seconds" % self.EventInterval(self.EV_HDMI_OFF))
+    self.logger.debug("Player OnStop delay : %d seconds" % self.EventInterval(self.EV_PLAY_STOP))
+    self.logger.debug("Path to tvservice:    %s" % self.binpath)
 
   def run(self):
     try:
@@ -868,30 +894,24 @@ class MyPiHDMIManager(threading.Thread):
       pass
 
   def MonitorXBMC(self):
-    timestamp_hdmioff = 0
-    timestamp_onstop = 0
-
     clientState = {}
     hdmi_on = True
+
     screensaver_active = False
     player_active = False
     library_active = False
-
-    hdmi_off_pending = False
-    hdmi_off_reached = False
-
     qtimeout = None
 
     while not stopped.is_set():
       try:
         notification = self.cmdqueue.get(block=True, timeout=qtimeout)
         self.cmdqueue.task_done()
-        qtimeout = None
 
         method = notification["method"]
         params = notification["params"]
 
         if method == "pong":
+          self.logger.debug("Connected to XBMC")
           self.logger.debug("HDMI power management thread - initialising XBMC and HDMI state")
 
           clientState = self.getXBMCStatus()
@@ -900,7 +920,6 @@ class MyPiHDMIManager(threading.Thread):
           screensaver_active = clientState["screensaver.active"]
           player_active = clientState["players.active"]
           library_active = (clientState["scanning.music"] or clientState["scanning.video"])
-          hdmi_off_pending = (screensaver_active and hdmi_on)
 
           self.logger.debug("HDMI is [%s], Screensaver is [%s], Player is [%s], Library scan [%s]" %
                             (("on" if hdmi_on else "off"),
@@ -908,31 +927,33 @@ class MyPiHDMIManager(threading.Thread):
                              ("active" if player_active else "inactive"),
                              ("active" if library_active else "inactive")))
 
+          if screensaver_active and hdmi_on:
+            self.EventSet(self.EV_HDMI_OFF)
+
         elif method == "GUI.OnScreensaverActivated":
           self.logger.debug("Screensaver has activated")
           screensaver_active = True
-          hdmi_off_pending = hdmi_on
+          self.EventSet(self.EV_HDMI_OFF)
 
         elif method == "GUI.OnScreensaverDeactivated":
           self.logger.debug("Screensaver has deactivated")
+          screensaver_active = False
           if hdmi_on:
-            if timestamp_hdmioff != 0:
+            if self.EventEnabled(self.EV_HDMI_OFF):
               self.logger.debug("Scheduled HDMI power-off cancelled")
           else:
             hdmi_on = self.enable_hdmi()
             self.sendXBMCExit()
-          screensaver_active = False
-          hdmi_off_pending = False
-          timestamp_hdmioff = 0
+          self.EventStop(self.EV_HDMI_OFF)
 
         elif method == "Player.OnStop":
-          timestamp_onstop = time.time()
+          self.EventSet(self.EV_PLAY_STOP)
 
         elif method == "Player.OnPlay":
           if not player_active:
             self.logger.debug("Player has started")
-          timestamp_onstop = 0
           player_active = True
+          self.EventStop(self.EV_PLAY_STOP)
 
         elif method.endswith(".OnScanStarted") or method.endswith(".OnCleanStarted"):
           self.logger.debug("Library scan has started")
@@ -943,50 +964,93 @@ class MyPiHDMIManager(threading.Thread):
           library_active = False
 
         elif method == "System.OnQuit":
-          # We're shutting down if not Application.Quit()...
-          if params["data"] != -1:
-            break
+          self.EventsStopAll()
 
       except Queue.Empty as e:
         pass
 
-      # Process events once queue is empty
+      qtimeout = None
+
+      # Process events once queue is empty of all notifications
       if self.cmdqueue.empty():
-        if hdmi_off_pending and timestamp_hdmioff == 0:
-          hdmi_off_reached = False
-          timestamp_hdmioff = time.time()
-          self.logger.debug("HDMI power off in %d seconds unless cancelled" % self.hdmidelay)
-          if player_active or library_active:
-            self.logger.debug("HDMI power-off will not occur until both player and/or library become inactive")
+        now = time.time()
+        for event in self.EventOrderList:
+          # Start any pending events
+          if self.EventPending(event):
+            self.EventStart(event, now)
+            if event == self.EV_HDMI_OFF:
+              self.logger.debug("HDMI power off in %d seconds unless cancelled" % int(self.EventInterval(event)))
+              if player_active or library_active:
+                self.logger.debug("HDMI power-off will not occur until both player and library become inactive")
 
-        t = time.time()
-        stopdelta = int(t - timestamp_onstop) if timestamp_onstop != 0 else 0
-        hdmidelta = int(t - timestamp_hdmioff) if timestamp_hdmioff != 0 else 0
+          # Process any expired events
+          if self.EventExpired(event, now):
+            if event == self.EV_PLAY_STOP:
+              self.logger.debug("Player has stopped")
+              player_active = False
+              self.EventStop(event)
+            elif event == self.EV_HDMI_OFF:
+              if player_active or library_active:
+                if not self.EventOverdue(event, now):
+                  self.logger.debug("HDMI power-off timeout reached - waiting for player and library to become inactive")
+              else:
+                hdmi_on = self.disable_hdmi()
+                self.EventStop(self.EV_HDMI_OFF)
 
-        if timestamp_onstop != 0 and stopdelta >= self.onstopdelay:
-          self.logger.debug("Player has stopped")
-          player_active = False
-          timestamp_onstop = 0
+          # Block until the next scheduled event, or block
+          # indefinitely if no events are currently scheduled
+          if self.EventEnabled(event) and not self.EventOverdue(event, now):
+            nextevent = self.EventInterval(event, now)
+            qtimeout = nextevent if nextevent >= 0 and (not qtimeout or nextevent < qtimeout) else qtimeout
 
-        if timestamp_hdmioff != 0 and hdmidelta >= self.hdmidelay:
-          if player_active or library_active:
-            if not hdmi_off_reached:
-              self.logger.debug("HDMI power-off timeout reached")
-              self.logger.debug("Waiting for player and/or library to become inactive")
-          else:
-            hdmi_on = self.disable_hdmi()
-            hdmi_off_pending = False
-            timestamp_hdmioff = 0
-          hdmi_off_reached = True
+  def EventExpired(self, name, currentTime):
+    if self.events[name]["start"] != 0:
+      return (self.EventInterval(name, currentTime) <= 0)
+    else:
+      return False
 
-        # Block until the next scheduled onstop/power event, or
-        # indefinitely if no events are currently scheduled.
-        if timestamp_onstop != 0:
-          nextevent = (self.onstopdelay - stopdelta)
-          qtimeout = nextevent if nextevent >= 0 else qtimeout
-        if timestamp_hdmioff != 0:
-          nextevent = (self.hdmidelay - hdmidelta)
-          qtimeout = nextevent if nextevent >= 0 and (not qtimeout or nextevent < qtimeout) else qtimeout
+  def EventInterval(self, name, currentTime=None):
+    if not currentTime or self.events[name]["start"] == 0:
+      return self.events[name]["timeout"]
+    else:
+      t = self.events[name]["start"] + self.events[name]["timeout"]
+      if currentTime:
+        return t - currentTime
+      else:
+        return t - time.time()
+
+  def EventEnabled(self, name):
+    return self.events[name]["start"] != 0
+
+  def EventPending(self, name):
+    return self.events[name]["pending"]
+
+  def EventOverdue(self, name, currentTime=None):
+    overdue = self.events[name]["overdue"]
+    if not overdue:
+      if self.EventExpired(name, currentTime):
+        self.events[name]["overdue"] = True
+    return overdue
+
+  def EventAdd(self, name, delayTime):
+    self.events[name] = {"timeout": delayTime}
+    self.EventStop(name)
+
+  def EventSet(self, name):
+    self.events[name]["pending"] = True
+
+  def EventStart(self, name, currentTime):
+    self.events[name]["start"] = currentTime
+    self.events[name]["pending"] = False
+
+  def EventStop(self, name):
+    self.events[name]["start"] = 0
+    self.events[name]["overdue"] = False
+    self.events[name]["pending"] = False
+
+  def EventsStopAll(self):
+    for event in self.events:
+      self.EventStop(event)
 
   def sendXBMCExit(self):
     self.logger.debug("Sending Application.Quit() to XBMC")
@@ -1411,7 +1475,19 @@ class MyJSONComms(object):
         data += newdata
         LASTIO = time.time()
         self.logger.log("%s.BUFFER RECEIVED (len %d)" % (id, len(newdata)))
+        if len(newdata) == 0: raise IOError("nodata")
         READ_ERR = False
+
+      except IOError as e:
+        # Hack to exit monitor mode when socket dies
+        if id == "libListen":
+          jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}
+          self.handleResponse(id, jdata, callback)
+          return jdata
+        else:
+          self.logger.err("ERROR: Socket closed prematurely - exiting", newLine=True, log=True)
+          sys.exit(2)
+
       except socket.error as e:
         READ_ERR = True
 
@@ -1503,12 +1579,6 @@ class MyJSONComms(object):
         if (time.time() - LASTIO) > timeout:
           self.logger.log("SOCKET IO TIMEOUT EXCEEDED")
           raise socket.error("Socket IO timeout exceeded")
-
-      # Hack to exit monitor mode when socket dies
-      if id == "libListen" and len(newdata) == 0:
-        jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}
-        if self.handleResponse(id, jdata, callback):
-          break
 
     if checkResult and not "result" in jdata:
       self.logger.out("%s.ERROR: JSON response has no result!\n%s\n" % (id, jdata))
@@ -5110,34 +5180,24 @@ def showNotifications():
   MyJSONComms(gConfig, gLogger).listen()
 
 def rbphdmi(delay):
-  global SHUTDOWN
 
   def rbphdmi_listen(self, method, params):
     cmdqueue.put({"method": method, "params": params})
-    if method == "System.OnQuit":
-      global SHUTDOWN
-      SHUTDOWN = (params.get("data", -1) != -1)
-      return True
-    else:
-      return False
+    return (method == "System.OnQuit")
 
-  SHUTDOWN = False
-  RETRIES=12
-  ATTEMPTS=0
+  RETRIES = 12
+  ATTEMPTS = 0
 
   cmdqueue = Queue.Queue()
-  hdmimgr = MyPiHDMIManager(gConfig, gLogger, cmdqueue, hdmidelay=delay, onstopdelay=5, binpath=gConfig.BIN_TVSERVICE)
+  hdmimgr = MyHDMIManager(gConfig, gLogger, cmdqueue, binpath=gConfig.BIN_TVSERVICE, hdmidelay=delay)
   hdmimgr.setDaemon(True)
   hdmimgr.start()
 
+  gLogger.debug("Connecting to XBMC on %s..." % gConfig.XBMC_HOST)
   while True:
     try:
-      gLogger.debug("Connecting to XBMC...")
       MyJSONComms(gConfig, gLogger).sendJSON({"method": "JSONRPC.Ping"}, "libListen", callback=rbphdmi_listen, checkResult=False)
-      if SHUTDOWN:
-        gLogger.debug("XBMC exited - system shutting down")
-        break
-      gLogger.debug("XBMC exited - waiting for restart")
+      gLogger.debug("XBMC exited - waiting for restart...")
       time.sleep(15.0)
       ATTEMPTS = 0
     except socket.error as e:

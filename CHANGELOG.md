@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.2.1 (29/11/2013)
+* Chg: Abstract `rbphdmi` event/state management
+
 ##Version 1.2.0 (28/11/2013)
 * Fix: null being returned for files from Files.GetDirectory call on some systems - ensure centralised method used everywhere
 
