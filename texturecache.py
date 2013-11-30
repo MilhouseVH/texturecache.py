@@ -2892,7 +2892,7 @@ class MyUtility(object):
     v = urllib2.quote(v, "")
     if prefix: v = "image://%s/" % v
 
-    return (v)
+    return MyUtility.toUnicode(v)
 
   @staticmethod
   def toUnicode(data):
