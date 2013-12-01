@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 1.2.3 (12/12/2013)
+* Add: Add artwork support for [Video Extras addon](http://wiki.xbmc.org/index.php?title=Add-on:VideoExtras). Enable with `@cache.videoextras=yes` or `@cache.extra=yes`. Only artwork in the "extras" subdirectory is supported, not -extras- or any other folder.
+
+* Add: Add "extras" artwork support (see [http://wiki.xbmc.org/index.php?title=Add-on:VideoExtras addon]), enable with `@cache.extravideo=yes` or `@cache.extra=yes`.
+
 ##Version 1.2.2 (12/12/2013)
 * Add: `stats` option to output media library statistics. Optionally filter by class, eg. `stats tvshows episodes` or `stats audio`
 

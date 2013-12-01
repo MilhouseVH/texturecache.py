@@ -428,6 +428,7 @@ cache.artwork =
 cache.ignore.types = ^video, ^music
 cache.extrafanart = no
 cache.extrathumbs = no
+cache.videoextras = no
 prune.retain.types =
 logfile =
 logfile.verbose = yes
