@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.1"
+    self.VERSION = "1.2.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -5206,6 +5206,34 @@ def rbphdmi(delay):
       time.sleep(5.0)
       ATTEMPTS += 1
 
+def MediaLibraryStats(media_list):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  METHODS = ["AudioLibrary.GetAlbums", "AudioLibrary.GetArtists", "AudioLibrary.GetSongs",
+              "VideoLibrary.GetMovies", "VideoLibrary.GetMovieSets",
+              "VideoLibrary.GetTVShows", "VideoLibrary.GetEpisodes",
+              "VideoLibrary.GetMusicVideos",
+              "Addons.GetAddons"]
+
+  lmedia_list = [m.lower() for m in media_list]
+
+  # Add filters for meta-classes
+  if "audio" in lmedia_list:
+    lmedia_list.extend(["albums", "artists", "songs"])
+  if "video" in lmedia_list:
+    lmedia_list.extend(["movies", "moviesets", "tvshows", "episodes", "musicvideos"])
+
+  # Clean up
+  lmedia_list = [m for m in lmedia_list if m not in ["audio", "video"]]
+
+  for m in METHODS:
+    media = re.search(".*Get(.*)", m).group(1)
+    if not lmedia_list or media.lower() in lmedia_list:
+      REQUEST = {"method": m, "params": {"limits": {"start": 0, "end": 1}}}
+      data = jcomms.sendJSON(REQUEST, "libStats")
+      if "result" in data and "limits" in data["result"]:
+        gLogger.out("%-20s: %d" % (media, data["result"]["limits"]["total"]), newLine=True)
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -5240,7 +5268,7 @@ def usage(EXIT_CODE):
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
           sources [media] | sources media [label] | directory path | rdirectory path | \
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
-          rbphdmi [seconds] | \
+          rbphdmi [seconds] | stats [class]* |\
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -5291,6 +5319,7 @@ def usage(EXIT_CODE):
   print("  exec       Execute specified addon, with optional parameters")
   print("  execw      Execute specified addon, with optional parameters and wait (although often wait has no effect)")
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
+  print("  stats      Ouptut media library stats")
   print("")
   print("  config     Show current configuration")
   print("  version    Show current version and check for new version")
@@ -5340,7 +5369,7 @@ def checkConfig(option):
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
-                "status", "monitor", "power", "rbphdmi",
+                "status", "monitor", "power", "rbphdmi", "stats",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "fixurls", "imdb"]
 
@@ -5585,7 +5614,7 @@ def getLatestVersion(argv):
                    "power", "wake", "status", "monitor", "rbphdmi",
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
-                   "duplicates", "fixurls", "imdb",
+                   "duplicates", "fixurls", "imdb", "stats",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -5918,6 +5947,9 @@ def main(argv):
   elif argv[0] == "rbphdmi":
     _delay = 900 if len(argv) == 1 else int(argv[1])
     rbphdmi(delay=_delay)
+
+  elif argv[0] == "stats":
+    MediaLibraryStats(argv[1:])
 
   else:
     usage(1)

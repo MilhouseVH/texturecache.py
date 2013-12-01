@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.2.2 (12/12/2013)
+* Add: `stats` option to output media library statistics. Optionally filter by class, eg. `stats tvshows episodes` or `stats audio`
+
 ##Version 1.2.1 (30/11/2013)
 * Chg: Abstract `rbphdmi` event/state management
 * Fix: Unicode conversion of quoted filenames
