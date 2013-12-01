@@ -1831,6 +1831,7 @@ class MyJSONComms(object):
       artitems.append("%sextrathumbs%s" % (SLASH, SLASH))
     if self.config.CACHE_VIDEO_EXTRAS:
       artitems.append("%sextras%s" % (SLASH, SLASH))
+      artitems.append("%sExtras%s" % (SLASH, SLASH))
 
     dirs = []
     for file in data["result"]["files"]:
@@ -1847,7 +1848,7 @@ class MyJSONComms(object):
         for file in data["result"]["files"]:
           if file["filetype"] == "file" and file["file"]:
             if os.path.splitext(file["file"])[1].lower() in [".jpg", ".png", ".tbn"]:
-              files.append({"file": MyUtility.denormalise(file["file"], prefix=True), "type": dir["type"]})
+              files.append({"file": MyUtility.denormalise(file["file"], prefix=True), "type": dir["type"].lower()})
 
     self.EXTRA_ART_DIR_CACHE[directory] = files
 
