@@ -1,5 +1,7 @@
 #Changelog
 
+##Version 1.2.3 (12/12/2013)
+* Add: Add "extras" artwork support, enable with `@cache.extravideo=yes` or `@cache.extra=yes`.
 ##Version 1.2.2 (12/12/2013)
 * Add: `stats` option to output media library statistics. Optionally filter by class, eg. `stats tvshows episodes` or `stats audio`
 

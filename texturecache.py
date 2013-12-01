@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.2"
+    self.VERSION = "1.2.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -277,7 +277,9 @@ class MyConfiguration(object):
     yn = "yes" if self.getBoolean(config, "cache.extra", "no") else "no"
     self.CACHE_EXTRA_FANART = self.getBoolean(config, "cache.extrafanart", yn)
     self.CACHE_EXTRA_THUMBS = self.getBoolean(config, "cache.extrathumbs", yn)
-    self.CACHE_EXTRA = (self.CACHE_EXTRA_FANART or self.CACHE_EXTRA_THUMBS)
+    # http://wiki.xbmc.org/index.php?title=Add-on:VideoExtras
+    self.CACHE_VIDEO_EXTRAS = self.getBoolean(config, "cache.videoextras", yn)
+    self.CACHE_EXTRA = (self.CACHE_EXTRA_FANART or self.CACHE_EXTRA_THUMBS or self.CACHE_VIDEO_EXTRAS)
 
     self.LOGFILE = self.getValue(config, "logfile", "")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
@@ -546,6 +548,7 @@ class MyConfiguration(object):
     print("  cache.ignore.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.CACHE_IGNORE_TYPES)))
     print("  cache.extrafanart = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_FANART))
     print("  cache.extrathumbs = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_THUMBS))
+    print("  cache.videoextras = %s" % self.BooleanIsYesNo(self.CACHE_VIDEO_EXTRAS))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
@@ -885,7 +888,7 @@ class MyHDMIManager(threading.Thread):
 
     self.logger.debug("HDMI Power off delay: %d seconds" % self.EventInterval(self.EV_HDMI_OFF))
     self.logger.debug("Player OnStop delay : %d seconds" % self.EventInterval(self.EV_PLAY_STOP))
-    self.logger.debug("Path to tvservice:    %s" % self.binpath)
+    self.logger.debug("Path to tvservice   : %s" % self.binpath)
 
   def run(self):
     try:
@@ -1826,6 +1829,8 @@ class MyJSONComms(object):
       artitems.append("%sextrafanart%s" % (SLASH, SLASH))
     if self.config.CACHE_EXTRA_THUMBS:
       artitems.append("%sextrathumbs%s" % (SLASH, SLASH))
+    if self.config.CACHE_VIDEO_EXTRAS:
+      artitems.append("%sextras%s" % (SLASH, SLASH))
 
     dirs = []
     for file in data["result"]["files"]:
@@ -1840,10 +1845,9 @@ class MyJSONComms(object):
       data = self.getDirectoryList(dir["file"])
       if "result" in data and "files" in data["result"]:
         for file in data["result"]["files"]:
-          if file["filetype"] == "file" and \
-             file["file"] and \
-             file["file"].endswith(".jpg"):
-            files.append({"file": MyUtility.denormalise(file["file"], prefix=True), "type": dir["type"]})
+          if file["filetype"] == "file" and file["file"]:
+            if os.path.splitext(file["file"])[1].lower() in [".jpg", ".png", ".tbn"]:
+              files.append({"file": MyUtility.denormalise(file["file"], prefix=True), "type": dir["type"]})
 
     self.EXTRA_ART_DIR_CACHE[directory] = files
 
@@ -4400,7 +4404,9 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
 
     gLogger.progress("Loading database items...")
     dbrows = database.getRows(filter=SQL, order="ORDER BY t.cachedurl ASC", allfields=True)
-    rpcnt = 100.0 / len(dbrows)
+    rpcnt = 100.0
+    if len(dbrows) != 0:
+      rpcnt = rpcnt / len(dbrows)
 
     i = 0
     for row in dbrows:
@@ -5232,7 +5238,7 @@ def MediaLibraryStats(media_list):
       REQUEST = {"method": m, "params": {"limits": {"start": 0, "end": 1}}}
       data = jcomms.sendJSON(REQUEST, "libStats")
       if "result" in data and "limits" in data["result"]:
-        gLogger.out("%-20s: %d" % (media, data["result"]["limits"]["total"]), newLine=True)
+        gLogger.out("%-11s: %d" % (media, data["result"]["limits"]["total"]), newLine=True)
 
 def pprint(msg):
   MAXWIDTH=0
