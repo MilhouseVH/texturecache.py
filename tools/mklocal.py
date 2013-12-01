@@ -26,7 +26,7 @@
 #
 # Usage:
 #
-#  See built-in help (run script without parameters).
+#  See built-in help (run script --help parameter).
 #
 #  For details on artwork naming conventions supported by this script:
 #     http://wiki.xbmc.org/index.php?title=Frodo_FAQ#Local_images
