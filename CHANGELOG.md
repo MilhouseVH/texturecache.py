@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.2.4 (12/12/2013)
+* Add: `input` option, to send keyboard/remote control input via JSON. eg. `input home`, `input back`, `input sendtext zombieland` or combine multiple actions `input home left left select pause 5.5 down select`. See [JSON API](http://wiki.xbmc.org/?title=JSON-RPC_API/v6#Input) for more details. `input executeaction screenshot` is handy if you don't have a keyboard connected and need a screenshot (also added synonym `screenshot` as a shortcut for this option).
+
 ##Version 1.2.3 (12/12/2013)
 * Add: Add artwork support for [Video Extras addon](http://wiki.xbmc.org/index.php?title=Add-on:VideoExtras). Enable with `@cache.videoextras=yes` or `@cache.extra=yes`. Only artwork in the "extras" subdirectory is supported, not -extras- or any other folder.
 

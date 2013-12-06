@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.3"
+    self.VERSION = "1.2.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -5241,6 +5241,63 @@ def MediaLibraryStats(media_list):
       if "result" in data and "limits" in data["result"]:
         gLogger.out("%-11s: %d" % (media, data["result"]["limits"]["total"]), newLine=True)
 
+def ProcessInput(args):
+  ACTIONS = ["Back", "ContextMenu", "Down",
+             "ExecuteAction", "Home", "Info",
+             "Left", "Right", "Select",
+             "SendText", "ShowCodec", "ShowOSD",
+             "Up", "Pause"]
+
+  actionparam = []
+
+  i = 0
+  while i < len(args):
+    _action = args[i].lower()
+    for action in ACTIONS:
+      if action.lower() == _action:
+        break
+    else:
+      gLogger.err("Invalid action [%s]" % args[i], newLine=True)
+      return
+    if action in ["ExecuteAction", "SendText", "Pause"]:
+      i += 1
+      if i >= len(args) or not args[i]:
+        gLogger.err("Insufficient arguments for [%s]" % action, newLine=True)
+        return
+      else:
+        param = args[i]
+    else:
+      param = None
+    i += 1
+    actionparam.append({"action": action, "param": param})
+
+  # If first action is not a Pause or noop, insert a noop in case screensaver
+  # is active otherwise client will ignore the first input
+  if len(actionparam) > 0:
+    if not (actionparam[0]["action"] == "Pause" or \
+            (actionparam[0]["action"] == "ExecuteAction" and actionparam[0]["param"] == "noop")):
+      actionparam.insert(0, {"action": "ExecuteAction", "param": "noop"})
+
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  for ap in actionparam:
+    if ap["action"] == "Pause":
+      time.sleep(float(ap["param"]))
+      continue
+
+    REQUEST = {"method": "Input.%s" % ap["action"]}
+
+    if ap["action"] == "ExecuteAction":
+      REQUEST["params"] = {"action": ap["param"].lower()}
+
+    if ap["action"] == "SendText":
+      REQUEST["params"] = {"text": ap["param"], "done": True}
+
+    data = jcomms.sendJSON(REQUEST, "libInput", checkResult=False)
+    if "result" not in data or data["result"] != "OK":
+      gLogger.err("Unexpected error during [%s] with params [%s]" % (REQUEST["method"], REQUEST["params"]), newLine=True)
+      return
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -5276,6 +5333,7 @@ def usage(EXIT_CODE):
           sources [media] | sources media [label] | directory path | rdirectory path | \
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
           rbphdmi [seconds] | stats [class]* |\
+          input action* [parameter] | screenshot |\
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -5327,6 +5385,8 @@ def usage(EXIT_CODE):
   print("  execw      Execute specified addon, with optional parameters and wait (although often wait has no effect)")
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("  stats      Ouptut media library stats")
+  print("  input      Send keyboard/remote control input to client, where action is back, left, right, up, down, executeaction, sendtext etc.")
+  print("  screenshot Take a screen grab of the current display")
   print("")
   print("  config     Show current configuration")
   print("  version    Show current version and check for new version")
@@ -5376,7 +5436,7 @@ def checkConfig(option):
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
-                "status", "monitor", "power", "rbphdmi", "stats",
+                "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "fixurls", "imdb"]
 
@@ -5622,6 +5682,7 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
+                   "input", "screenshot",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -5957,6 +6018,12 @@ def main(argv):
 
   elif argv[0] == "stats":
     MediaLibraryStats(argv[1:])
+
+  elif argv[0] == "input" and len(argv) > 1:
+    ProcessInput(argv[1:])
+
+  elif argv[0] == "screenshot":
+    ProcessInput(["executeaction", "screenshot"])
 
   else:
     usage(1)

@@ -63,6 +63,10 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[stats]** Output media library stats. Optionally filter by media class, eg. `stats tvshows episodes` or `stats audio`
 
+**[input]** Send keyboard/remote control input to client, eg. `input back left left select`. See [JSON API](http://wiki.xbmc.org/?title=JSON-RPC_API/v6#Input) for more details
+
+**[screenshot]** Take screen grab of the current display
+
 **[power]** Set power state of client - `suspend`, `hibernate`, `shutdown`, `reboot` or `exit`.
 
 **[wake]** Use Wake Over LAN to wake a suspended/hibernating remote client. Specify the MAC address of the remote client in the `network.mac` property (ie. `network.mac=xx:xx:xx:xx:xx:xx`). When the client is no longer required, suspend or hibernate it with the `power` option.
