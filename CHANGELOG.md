@@ -1,17 +1,21 @@
 #Changelog
 
-##Version 1.2.4 (12/12/2013)
+##Version 1.2.5 (13/12/2013)
+* Chg: Use regex when processing `@argument` options on the command line. Terminate if specified `@section` is not valid.
+* Add: tools/clean.py
+
+##Version 1.2.4 (06/12/2013)
 * Add: `input` option, to send keyboard/remote control input via JSON. eg. `input home`, `input back`, `input sendtext zombieland` or combine multiple actions `input home left left select pause 5.5 down select`. See [JSON API](http://wiki.xbmc.org/?title=JSON-RPC_API/v6#Input) for more details. `input executeaction screenshot` is handy if you don't have a keyboard connected and need a screenshot (also added synonym `screenshot` as a shortcut for this option).
 
-##Version 1.2.3 (12/12/2013)
+##Version 1.2.3 (01/12/2013)
 * Add: Add artwork support for [Video Extras addon](http://wiki.xbmc.org/index.php?title=Add-on:VideoExtras). Enable with `@cache.videoextras=yes` or `@cache.extra=yes`. Only artwork in the "extras" subdirectory is supported, not -extras- or any other folder.
 
 * Add: Add "extras" artwork support (see [http://wiki.xbmc.org/index.php?title=Add-on:VideoExtras addon]), enable with `@cache.extravideo=yes` or `@cache.extra=yes`.
 
-##Version 1.2.2 (12/12/2013)
+##Version 1.2.2 (01/12/2013)
 * Add: `stats` option to output media library statistics. Optionally filter by class, eg. `stats tvshows episodes` or `stats audio`
 
-##Version 1.2.1 (30/11/2013)
+##Version 1.2.1 (29/11/2013)
 * Chg: Abstract `rbphdmi` event/state management
 * Fix: Unicode conversion of quoted filenames
 

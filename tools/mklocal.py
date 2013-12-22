@@ -22,7 +22,7 @@
 # Simple utility to download remote artwork to a local folder, and optionally replace
 # remote artwork with the new local urls.
 #
-# https://github.com/MilhouseVH/mklocal.py
+# https://github.com/MilhouseVH/texturecache.py/blob/master/tools/mklocal.py
 #
 # Usage:
 #

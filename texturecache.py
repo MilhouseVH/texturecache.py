@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.4"
+    self.VERSION = "1.2.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -90,14 +90,14 @@ class MyConfiguration(object):
     #Use @section argument if passed on command line
     #Use list(argv) so that a copy of argv is iterated over, making argv.remove() safe to use.
     for arg in list(argv):
-      if arg.startswith("@section") and arg.find("=") != -1:
+      if re.search("^[ ]*@section[ ]*=", arg):
         self.THIS_SECTION = arg.split("=", 1)[1].strip()
         namedSection = True
         argv.remove(arg)
 
     #Use @config if passed on command line
     for arg in list(argv):
-      if arg.startswith("@config") and arg.find("=") != -1:
+      if re.search("^[ ]*@config[ ]*=", arg):
         self.CONFIG_NAME = arg.split("=", 1)[1].strip()
         argv.remove(arg)
 
@@ -126,15 +126,16 @@ class MyConfiguration(object):
     if not namedSection:
       self.THIS_SECTION = self.getValue(config, "section", self.GLOBAL_SECTION)
 
-    # Add the named section if not already present
+    # If the section is not present, bail
     if not config.has_section(self.THIS_SECTION):
-      config.add_section(self.THIS_SECTION)
+      print("Section [%s] is not a valid section in this config file" % self.THIS_SECTION)
+      sys.exit(2)
 
     #Add any command line settings - eg. @xbmc.host=192.168.0.8 - to the named section.
     for arg in list(argv):
-      if arg.startswith("@") and arg.find("=") != -1:
-        key_value = arg[1:].split("=", 1)
-        config.set(self.THIS_SECTION, key_value[0].strip(), key_value[1].strip())
+      arg_match = re.match("^[ ]*@([^ ]+)[ ]*=(.*)", arg)
+      if arg_match and len(arg_match.groups()) == 2:
+        config.set(self.THIS_SECTION, arg_match.group(1).strip(), arg_match.group(2).strip())
         argv.remove(arg)
 
     if not self.DEBUG and self.getBoolean(config, "debug", ""):
@@ -676,7 +677,7 @@ class MyLogger():
     with threading.Lock():
       if self.DEBUG:
         if self.ISATTY:
-          self.out("[%s] %s: %s" % (self.OPTION, datetime.datetime.now(), data), newLine=True)
+          self.out("%s: [%s] %s" % (datetime.datetime.now(), self.OPTION, data), newLine=True)
         else:
           self.out("[%s] %s" % (self.OPTION, data), newLine=True)
         if self.LOGGING:
@@ -861,30 +862,27 @@ class MyHDMIManager(threading.Thread):
   def __init__(self, config, logger, cmdqueue, binpath, hdmidelay=900, onstopdelay=5):
     threading.Thread.__init__(self)
 
-    self.cmdqueue = cmdqueue
+    self.EV_PLAY_STOP = "play.stop"
+    self.EV_HDMI_OFF  = "hdmi.off"
+
+    self.events = {}
+
     self.config = config
     self.logger = logger
+    self.cmdqueue = cmdqueue
     self.binpath = binpath
+
+    hdmidelay = 0 if hdmidelay < 0 else hdmidelay
+    onstopdelay = 5 if onstopdelay < 5 else onstopdelay
 
     # Order of event processing is important, as
     # we want to process the hdmi.off event after
     # all other events.
     #
-    # Use [##] to force reliable order, higher numbers
-    # are processed last.
+    # Higher numbers for order are processed last.
     #
-    self.EV_PLAY_STOP = "[00]play.stop"
-    self.EV_HDMI_OFF  = "[99]hdmi.off"
-
-    hdmidelay = 0 if hdmidelay < 0 else hdmidelay
-    onstopdelay = 5 if onstopdelay < 5 else onstopdelay
-
-    self.events = {}
-    self.EventAdd(self.EV_HDMI_OFF, hdmidelay)
-    self.EventAdd(self.EV_PLAY_STOP, onstopdelay)
-
-    # This is the order events will be processed...
-    self.EventOrderList = sorted(self.events)
+    self.EventAdd(name=self.EV_PLAY_STOP, delayTime=onstopdelay, order=1)
+    self.EventAdd(name=self.EV_HDMI_OFF,  delayTime=hdmidelay,   order=99)
 
     self.logger.debug("HDMI Power off delay: %d seconds" % self.EventInterval(self.EV_HDMI_OFF))
     self.logger.debug("Player OnStop delay : %d seconds" % self.EventInterval(self.EV_PLAY_STOP))
@@ -904,6 +902,9 @@ class MyHDMIManager(threading.Thread):
     player_active = False
     library_active = False
     qtimeout = None
+
+    # This is the order events will be processed...
+    ordered_event_keys = [x[0] for x in sorted(self.events.items(), key=lambda e: e[1]["event.order"])]
 
     while not stopped.is_set():
       try:
@@ -977,7 +978,7 @@ class MyHDMIManager(threading.Thread):
       # Process events once queue is empty of all notifications
       if self.cmdqueue.empty():
         now = time.time()
-        for event in self.EventOrderList:
+        for event in ordered_event_keys:
           # Start any pending events
           if self.EventPending(event):
             self.EventStart(event, now)
@@ -1035,8 +1036,8 @@ class MyHDMIManager(threading.Thread):
         self.events[name]["overdue"] = True
     return overdue
 
-  def EventAdd(self, name, delayTime):
-    self.events[name] = {"timeout": delayTime}
+  def EventAdd(self, name, delayTime, order=None):
+    self.events[name] = {"event.order": order, "timeout": delayTime}
     self.EventStop(name)
 
   def EventSet(self, name):
@@ -1362,6 +1363,7 @@ class MyJSONComms(object):
     self.jcomms2 = None
 
     self.EXTRA_ART_DIR_CACHE = {}
+    self.QUIT_METHOD = self.QUIT_PARAMS = None
 
   def __enter__(self):
     return self
@@ -1483,7 +1485,7 @@ class MyJSONComms(object):
 
       except IOError as e:
         # Hack to exit monitor mode when socket dies
-        if id == "libListen":
+        if callback:
           jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}
           self.handleResponse(id, jdata, callback)
           return jdata
@@ -1517,7 +1519,8 @@ class MyJSONComms(object):
               self.logger.log2("%s.PARSING JSON DATA: " % id, udata, maxLen=256)
             messages.append(m)
 
-          data = udata = None
+          # Discard these buffers which could potentially be very large, as they're no longer required
+          del data, udata
 
           self.logger.log("%s.PARSING COMPLETE, elapsed time: %f seconds" % (id, time.time() - START_PARSE_TIME))
 
@@ -1526,7 +1529,7 @@ class MyJSONComms(object):
           result = False
           jdata = {}
           for m in messages:
-            if not "id" in m:
+            if "id" not in m:
               if callback:
                 if self.handleResponse(id, m, callback):
                   result = True
@@ -1535,7 +1538,8 @@ class MyJSONComms(object):
             elif m["id"] == id:
               jdata = m
 
-          messages = []
+          # Discard - no longer required
+          del messages
 
           if ("result" in jdata and "limits" in jdata["result"]):
             self.logger.log("%s.RECEIVED LIMITS: %s" % (id, jdata["result"]["limits"]))
@@ -1617,8 +1621,11 @@ class MyJSONComms(object):
     if callback:
       cname = callback.__name__
       self.logger.log("%s.PERFORMING CALLBACK: Name [%s], with Id [%s], Method [%s], Params [%s]" % (callingId, cname, id, method, params))
-      result =  callback(id, method, params)
+      result = callback(id, method, params)
       self.logger.log("%s.CALLBACK RESULT: [%s] Name [%s], Id [%s], Method [%s], Params [%s]" % (callingId, result, cname, id, method, params))
+      if result:
+        self.QUIT_METHOD = method
+        self.QUIT_PARAMS = params
       return result
 
     return False
@@ -3257,8 +3264,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   TOTALS.TimeEnd(mediatype, "Parse")
 
   # Don't need this data anymore, make it available for garbage collection
-  del data
-  del imagecache
+  del data, imagecache
 
   TOTALS.TimeStart(mediatype, "Compare")
 
@@ -4260,12 +4266,14 @@ def setDetails_batch(dryRun=True):
   jdata = json.loads("".join(data))
   gLogger.log("Parsed %d items" % len(jdata))
 
+  i = 0
   for item in jdata:
+    i += 1
     kvpairs = []
     for key in item["items"]:
       kvpairs.append(key)
       kvpairs.append(item["items"][key])
-    setDetails_worker(jcomms, item["type"], item["libraryid"], kvpairs, item.get("title", None), dryRun)
+    setDetails_worker(jcomms, item["type"], item["libraryid"], kvpairs, item.get("title", None), dryRun, i, len(jdata))
 
   gLogger.progress("")
 
@@ -4276,10 +4284,10 @@ def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
     ukvpairs.append(MyUtility.toUnicode(kv))
 
   jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
-  setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun)
+  setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun, None, None)
   gLogger.progress("")
 
-def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
+def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum, maxitems):
   if mtype == "movie":
     method = "VideoLibrary.SetMovieDetails"
     idname = "movieid"
@@ -4327,7 +4335,10 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun):
     return
 
   mytitle = title if title else "%s %d" % (idname, libraryid)
-  gLogger.progress("Updating: %s..." % mytitle)
+  if itemnum:
+    gLogger.progress("Updating %d of %d: %s..." % (itemnum, maxitems, mytitle))
+  else:
+    gLogger.progress("Updating: %s..." % mytitle)
 
   REQUEST = {"method": method, "params": {idname: libraryid}}
 
