@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.2.6 (26/12/2013)
+* Fix: Revert SQLite to use iso-8859-1 text factory with speculative conversion to utf-8.
+
 ##Version 1.2.5 (13/12/2013)
 * Chg: Use regex when processing `@argument` options on the command line. Terminate if specified `@section` is not valid.
 * Add: tools/clean.py

@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.5"
+    self.VERSION = "1.2.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -76,7 +76,7 @@ class MyConfiguration(object):
                                   "removeart":    (6,  9, 1),
                                   "setseason":    (6, 10, 0),
                                   "setmovieset":  (6, 12, 0),
-                                  "filternullval":(0,  0, 0)}
+                                  "filternullval":(6, 13, 1)}
 
     self.SetJSONVersion(0, 0, 0)
 
@@ -1179,6 +1179,7 @@ class MyDB(object):
         if not os.path.exists(self.config.getDBPath()):
           raise lite.OperationalError("Database [%s] does not exist" % self.config.getDBPath())
         self.mydb = lite.connect(self.config.getDBPath(), timeout=10)
+        self.mydb.text_factory = lambda x: x.decode("iso-8859-1")
         self.DBVERSION = self.execute("SELECT idVersion FROM version").fetchone()[0]
     return self.mydb
 
@@ -1245,8 +1246,12 @@ class MyDB(object):
     data = []
     if rows:
       for r in rows:
+        try:
+          url = r[3].encode("iso-8859-1").decode("utf-8")
+        except UnicodeDecodeError:
+          url = r[3]
         data.append({u"textureid": r[0], u"cachedurl": r[1],
-                     u"lasthashcheck": r[2], u"url": r[3],
+                     u"lasthashcheck": r[2], u"url": url,
                      u"sizes":[{u"height": r[4], u"width": r[5], u"usecount": r[6],
                                u"lastused": r[7], u"size": r[8]}],
                      u"imagehash": r[9]})
