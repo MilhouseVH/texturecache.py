@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.6"
+    self.VERSION = "1.2.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -3066,30 +3066,30 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
                       decode=False, ensure_ascii=True, nodownload=False, lastRun=False, \
                       labels=None, query="", filename=None, wlBackup=True):
 
-  if not mediatype in ["addons", "agenres", "vgenres", "albums", "artists", "songs",
+  if mediatype not in ["addons", "agenres", "vgenres", "albums", "artists", "songs",
                        "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
-    gLogger.out("Error: %s is not a valid media class" % mediatype, newLine=True)
+    gLogger.err("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
 
   # Only QA movies and tvshows (and sub-types) for now...
-  if action == "qa" and rescan and not mediatype in ["movies", "tags", "sets", "tvshows", "seasons", "episodes"]:
-    gLogger.out("Error: media class [%s] is not currently supported by qax" % mediatype, newLine=True)
+  if action == "qa" and rescan and mediatype not in ["movies", "tags", "sets", "tvshows", "seasons", "episodes"]:
+    gLogger.err("Error: media class [%s] is not currently supported by qax" % mediatype, newLine=True)
     sys.exit(2)
 
   # Only songs, movies and tvshows (and sub-types) valid for missing...
-  if action == "missing" and not mediatype in ["songs", "movies", "tvshows", "seasons", "episodes"]:
-    gLogger.out("Error: media class [%s] is not currently supported by missing" % mediatype, newLine=True)
+  if action == "missing" and mediatype not in ["songs", "movies", "tvshows", "seasons", "episodes"]:
+    gLogger.err("Error: media class [%s] is not currently supported by missing" % mediatype, newLine=True)
     sys.exit(2)
 
   # Only movies and tvshows for "watched"...
-  if action in "watched" and not mediatype in ["movies", "tvshows"]:
-    gLogger.out("Error: media class [%s] is not currently supported by watched" % mediatype, newLine=True)
+  if action == "watched" and mediatype not in ["movies", "tvshows"]:
+    gLogger.err("Error: media class [%s] is not currently supported by watched" % mediatype, newLine=True)
     sys.exit(2)
 
-  # Only movies "imdb"...
-  if action in "ratings" and not mediatype in ["movies"]:
-    gLogger.out("Error: media class [%s] is not currently supported by imdb" % mediatype, newLine=True)
-    sys.exit(2)
+  # Only movies for "imdb"...
+  if action == "imdb" and mediatype not in ["movies"]:
+    gLogger.err("Error: media class [%s] is not currently supported by imdb" % mediatype, newLine=True)
+    return
 
   TOTALS.TimeStart(mediatype, "Total")
 

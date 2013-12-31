@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.2.7 (31/12/2013)
+* Fix: Cosmetics
+
 ##Version 1.2.6 (26/12/2013)
 * Fix: Revert SQLite to use iso-8859-1 text factory with speculative conversion to utf-8.
 
