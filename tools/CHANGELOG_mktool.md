@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 02/01/2014
+* Chg: Verify existence of --local and --altlocal paths even when --readonly is specified.
+
 ## 25/11/2013
 * Add: Support movies in individual folders with `-1`/`--singlefolders` switch. With this switch enabled, artwork will not be created or located using the movie name as a prefix (ie. `poster.jpg` rather than `Zombieland(2009)-poster.jpg`). The default is to create and locate artwork using the movie name as a prefix!
 * Fix: Regex on path mapping functions, re.sub() didn't like Windows backslashes...
