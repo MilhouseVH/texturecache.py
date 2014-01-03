@@ -3,6 +3,7 @@
 
 ## 02/01/2014
 * Chg: Verify existence of --local and --altlocal paths even when --readonly is specified.
+* Fix: Use correct forward slash/backward slash when converting a network or Unix path to local Windows path and vice versa
 
 ## 25/11/2013
 * Add: Support movies in individual folders with `-1`/`--singlefolders` switch. With this switch enabled, artwork will not be created or located using the movie name as a prefix (ie. `poster.jpg` rather than `Zombieland(2009)-poster.jpg`). The default is to create and locate artwork using the movie name as a prefix!

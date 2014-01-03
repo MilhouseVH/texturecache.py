@@ -87,6 +87,13 @@ def addEllipsis(maxlen, aStr):
 
   return "%s...%s" % (aStr[0:ileft], aStr[-iright:])
 
+def fixSlashes(path):
+  # Share (eg. "smb://", "nfs://" etc.)
+  if re.search("^.*://.*", path):
+    return path.replace("\\", "/")
+  else:
+    return path.replace("\\", os.sep).replace("/", os.sep)
+
 def pathToLocal(infile):
   global LOCAL_DIR, XBMC_PATH
 
@@ -95,7 +102,7 @@ def pathToLocal(infile):
   if not LOCAL_DIR: return infile
 
   if infile.startswith(XBMC_PATH):
-    return "%s%s" % (LOCAL_DIR, infile[len(XBMC_PATH):])
+    return fixSlashes("%s%s" % (LOCAL_DIR, infile[len(XBMC_PATH):]))
   else:
     return infile
 
@@ -107,7 +114,7 @@ def pathToAltLocal(infile):
   if not LOCAL_ALT: return infile
 
   if infile.startswith(XBMC_PATH):
-    return "%s%s" % (LOCAL_ALT, infile[len(XBMC_PATH):])
+    return fixSlashes("%s%s" % (LOCAL_ALT, infile[len(XBMC_PATH):]))
   else:
     return infile
 
@@ -119,7 +126,7 @@ def pathToXBMC(infile):
   if not XBMC_PATH: return infile
 
   if infile.startswith(LOCAL_DIR):
-    return "%s%s" % (XBMC_PATH, infile[len(LOCAL_DIR):])
+    return fixSlashes("%s%s" % (XBMC_PATH, infile[len(LOCAL_DIR):]))
   else:
     return infile
 
