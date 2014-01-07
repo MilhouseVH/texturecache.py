@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.2.9 (07/01/2013)
+* Add: When pruning (`p`/`P`), now also consider available picture sources containing artwork and retain associated folder and picture previews. Disable this behaviour with `@prune.retain.previews=no` and all previews associated with your pictures will be removed when pruning
+
 ##Version 1.2.8 (07/01/2013)
 * Fix: Truncation of (photo thumbnail) url while querying texture cache database.with JSON as these urls don't have a trailing forward-slash
 * Fix: Normalise (decode) urls when using SQLite. Photo thumbnail urls are stored in image:// encoded form within Textures##.db

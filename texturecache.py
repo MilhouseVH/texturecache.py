@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.8"
+    self.VERSION = "1.2.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -296,6 +296,17 @@ class MyConfiguration(object):
     for index, r in enumerate(self.PRUNE_RETAIN_TYPES):
       self.PRUNE_RETAIN_TYPES[index] = re.compile(re.sub("^\^image://", "^", r.pattern))
 
+    self.PRUNE_RETAIN_PREVIEWS = self.getBoolean(config, "prune.retain.previews", "yes")
+
+    self.PICTURE_FILETYPES = [".jpg", ".jpeg", ".png", ".tbn", ".gif", ".tif", ".tiff",
+                               ".raw", ".dng", ".crw", ".cr2", ".mdc", ".mrw", ".orf"]
+    for x in self.getSimpleList(config, "picture.filetypes", ""):
+      x = x.lower()
+      if not x.startswith("."):
+        x = ".%s" % x
+      if x not in self.PICTURE_FILETYPES:
+        self.PICTURE_FILETYPES.append(x)
+
     self.RECACHEALL = self.getBoolean(config, "allow.recacheall","no")
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
     self.AUTOUPDATE = self.getBoolean(config, "autoupdate", "yes")
@@ -308,7 +319,13 @@ class MyConfiguration(object):
 
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
 
-    self.NONMEDIA_FILETYPES = self.getSimpleList(config, "nonmedia.filetypes", "")
+    self.NONMEDIA_FILETYPES = []
+    for x in self.getSimpleList(config, "nonmedia.filetypes", ""):
+      x = x.lower()
+      if not x.startswith("."):
+        x = ".%s" % x
+      if x not in self.NONMEDIA_FILETYPES:
+        self.NONMEDIA_FILETYPES.append(x)
 
     self.CACHE_HIDEALLITEMS = self.getBoolean(config, "cache.hideallitems", "no")
 
@@ -414,7 +431,8 @@ class MyConfiguration(object):
 
     if aStr:
       for item in [x.strip() for x in aStr.split(",") if x]:
-        newlist.append(item)
+        if item:
+          newlist.append(item)
 
     return newlist
 
@@ -426,7 +444,7 @@ class MyConfiguration(object):
       if default and default != "" and aList != "":
         aList = "%s,%s " % (default, aList.strip())
 
-    return [re.compile(x.strip()) for x in aList.split(",")] if aList else aList
+    return [re.compile(x.strip()) for x in aList.split(",") if x] if aList else []
 
   def getListFromPattern(self, aPattern):
     if not aPattern: return None
@@ -551,6 +569,8 @@ class MyConfiguration(object):
     print("  cache.extrathumbs = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_THUMBS))
     print("  cache.videoextras = %s" % self.BooleanIsYesNo(self.CACHE_VIDEO_EXTRAS))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
+    print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
+    print("  picture.filetypes = %s" % self.NoneIsBlank(", ".join(self.PICTURE_FILETYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
     print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
@@ -2077,16 +2097,16 @@ class MyJSONComms(object):
 
     # Mostly image, nfo and audio-related playlist file types,
     # but also some random junk...
-    ignoreList = [".jpg", ".png", ".nfo", ".tbn", ".srt", ".sub", ".idx", ".strm", \
-                  ".m3u", ".pls", ".cue", \
-                  ".log", ".ini", ".txt", ".url", ".md5", \
-                  ".bak", ".info", ".db", ".gz", ".tar", ".rar", ".zip"]
+    ignoreList = self.config.PICTURE_FILETYPES
+    ignoreList.extend([".nfo", ".srt", ".sub", ".idx", ".strm", \
+                       ".m3u", ".pls", ".cue", \
+                       ".log", ".ini", ".txt", ".url", ".md5", \
+                       ".bak", ".info", ".db", ".gz", ".tar", ".rar", ".zip"])
 
+    # Allow custom non-media extensions
     for extension in self.config.NONMEDIA_FILETYPES:
-      if extension.startswith("."):
-        ignoreList.append("%s" % extension.lower())
-      else:
-        ignoreList.append(".%s" % extension.lower())
+      if extension not in ignoreList:
+        ignoreList.append(extension)
 
     fileList = []
 
@@ -2345,6 +2365,30 @@ class MyJSONComms(object):
           self.addProperties(REQUEST, "thumbnail")
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
+
+  # Return a list of all pictures (jpg/png/tbn) with a source of "pictures"
+  def getPictures(self):
+    list = []
+
+    for path in self.getSources("pictures"):
+      self.getPicturesForPath(path, list)
+
+    return list
+
+  def getPicturesForPath(self, path, list):
+    data = self.getDirectoryList(path)
+    if "result" not in data or "files" not in data["result"]: return
+
+    DIR_ADDED = False
+    for file in data["result"]["files"]:
+      if file["file"]:
+        if file["filetype"] == "directory":
+          self.getPicturesForPath(file["file"], list)
+        elif file["filetype"] == "file" and os.path.splitext(file["file"])[1].lower() in self.config.PICTURE_FILETYPES:
+          if not DIR_ADDED:
+            DIR_ADDED = True
+            list.append({"type": "directory", "label": path, "thumbnail": "picturefolder@%s" % path})
+          list.append({"type": "file", "label": file["file"], "thumbnail": "%s/transform?size=thumb" % file["file"]})
 
   def parseSQLFilter(self, filter):
     if type(filter) is dict: return filter
@@ -2610,21 +2654,22 @@ class MyTotals(object):
     items = {}
     for a in self.TOTALS:
       for c in self.TOTALS[a]:
-        if not c in items: items[c] = None
+        if c not in items: items[c] = None
 
     # Ensure some basic items are included in the summary
     if item.find("pvr.") != -1:
-      if not "thumbnail" in items: items["thumbnail"] = None
+      if "thumbnail" not in items: items["thumbnail"] = None
     else:
-      if not "fanart" in items: items["fanart"] = None
+      if "fanart" not in items: items["fanart"] = None
     if item.find("movies") != -1:
-      if not "poster" in items: items["poster"] = None
+      if "poster" not in items: items["poster"] = None
     if item.find("tvshows") != -1:
-      if not "thumb" in items: items["thumb"] = None
+      if "thumb" not in items: items["thumb"] = None
     if item.find("artists") != -1 or \
        item.find("albums") != -1 or \
        item.find("songs") != -1:
-      if not "thumbnail" in items: items["thumbnail"] = None
+      if "thumbnail" not in items:
+        items["thumbnail"] = None
 
     DOWNLOAD_LABEL = "Download Time"
 
@@ -2656,7 +2701,7 @@ class MyTotals(object):
             else:
               if tuple[0] < itmin or itmin == 0.0: itmin = tuple[0]
               if tuple[1] > itmax: itmax = tuple[1]
-              if not itype in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
+              if itype not in self.TOTALS[DOWNLOAD_LABEL]: self.TOTALS[DOWNLOAD_LABEL][itype] = 0
           self.TOTALS[DOWNLOAD_LABEL][itype] = (itmax - itmin) + (mtmax - mtmin)
           if itmin < tmin or tmin == 0.0: tmin = itmin
           if itmax > tmax: tmax = itmax
@@ -2884,8 +2929,9 @@ class MyUtility(object):
 
     if strip:
       s = 8 if v.startswith("image://") else None
-      e = -1 if v[-1:] == "/" else None
-      v = v[s:e]
+      if s:
+        e = -1 if v[-1:] == "/" else None
+        v = v[s:e]
 
     if not MyUtility.isPython3:
       try:
@@ -3290,11 +3336,6 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     if item.mtype == "tvshows" and item.season == "Season All": TOTALS.bump("Season-all", item.itype)
 
     dbrow = dbfiles.get(item.decoded_filename, None)
-
-    # Lookup the path using original unquoted version - some paths end up in
-    # the cache while still quoted
-    if not dbrow:
-      dbrow = dbfiles.get(item.filename[:-1], None)
 
     # Don't need to cache file if it's already in the cache, unless forced...
     # Assign the texture cache database id and cachedurl so that removal will avoid having
@@ -4587,10 +4628,9 @@ def pruneCache(remove_nonlibrary_artwork=False):
           break
 
     # Ignore add-on/mirror related images
-    if not re_search_addon.search(URL) and \
-       not re_search_mirror.search(URL) and \
-       not isRetained:
-
+    if not isRetained and \
+       not re_search_addon.search(URL) and \
+       not re_search_mirror.search(URL):
       if URL in libraryFiles:
         del libraryFiles[URL]
       else:
@@ -4805,6 +4845,14 @@ def getAllFiles(keyFunction):
             for c in episode.get("cast", []):
               if "thumbnail" in c:
                 files[keyFunction(c["thumbnail"])] = "cast.thumb"
+
+  # Pictures
+  if gConfig.PRUNE_RETAIN_PREVIEWS:
+    gLogger.progress("Loading: Pictures...")
+    pictures = jcomms.getPictures()
+    for picture in pictures:
+      files[keyFunction(picture["thumbnail"])] = "thumbnail"
+    del pictures
 
   # PVR Channels
   if gConfig.HAS_PVR:
