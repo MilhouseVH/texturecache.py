@@ -666,7 +666,7 @@ class MyLogger():
   def reset(self, initialValue=0):
     self.now = initialValue
 
-  def out(self, data, newLine=False, log=False):
+  def out(self, data, newLine=False, log=False, padspaces=True):
     with threading.Lock():
       udata = MyUtility.toUnicode(data)
       ulen = len(data)
@@ -680,7 +680,7 @@ class MyLogger():
       else:
         sys.stdout.write("%-s%s" % (udata, NL))
 
-      if newLine:
+      if newLine or not padspaces:
         self.lastlen = 0
 
       try:
@@ -5391,7 +5391,7 @@ def StressTest(viewtype, numitems, pause, repeat):
   command_list = COMMANDS.strip().split(" ")
   for i in range(0, repeat):
     start_time = time.time()
-    gLogger.out("Loop %4d of %d, %s over %d GUI items with %s second pause..." % (i+1, repeat, viewtype, numitems, pause))
+    gLogger.out("Loop %4d of %d, %s over %d GUI items with %s second pause..." % (i+1, repeat, viewtype, numitems, pause), padspaces=False)
     ProcessInput(command_list)
     gLogger.out(" %d seconds" % (time.time() - start_time), newLine=True)
 
