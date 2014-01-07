@@ -2885,7 +2885,6 @@ class MyUtility(object):
     if strip:
       s = 8 if v.startswith("image://") else None
       e = -1 if v[-1:] == "/" else None
-      print(v)
       v = v[s:e]
 
     if not MyUtility.isPython3:
