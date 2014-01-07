@@ -65,6 +65,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[input]** Send keyboard/remote control input to client, eg. `input back left left select`. See [JSON API](http://wiki.xbmc.org/?title=JSON-RPC_API/v6#Input) for more details
 
+**[stress-test]** Stress system by iterating over GUI items. eg. `stress-test thumbnail 444 0.1 9` to iterate over 444 items in a thumbnail (5 x 2 poster) view with a 0.1 second delay between each movement. Repeat 9 times. Other view types: `listright` and `listdown`. Default pause is 0.25, default repeat is 1.
+
 **[screenshot]** Take screen grab of the current display
 
 **[power]** Set power state of client - `suspend`, `hibernate`, `shutdown`, `reboot` or `exit`.

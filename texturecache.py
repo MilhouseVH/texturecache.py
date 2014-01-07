@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.9"
+    self.VERSION = "1.3.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -5362,6 +5362,61 @@ def ProcessInput(args):
       gLogger.err("Unexpected error during [%s] with params [%s]" % (REQUEST["method"], REQUEST["params"]), newLine=True)
       return
 
+def StressTest(viewtype, numitems, pause, repeat):
+  n = numitems - 1
+  TOTAL_ROWS = int(n/5)
+  LAST_COLS = (n % 5)
+
+  COMMANDS = "executeaction firstpage pause 1.5 "
+  if viewtype == "thumbnail":
+    d=""
+    if TOTAL_ROWS > 0:
+      for i in range(0, TOTAL_ROWS):
+        d = "left" if d == "right" else "right"
+        COMMANDS = "%s%s" % (COMMANDS, st_move_horizontal(d, 4, pause))
+        if i < TOTAL_ROWS or LAST_COLS >= 0:
+          COMMANDS = "%s%s" % (COMMANDS, st_move_down(pause))
+
+    if LAST_COLS > 0:
+      d = "left" if d == "right" else "right"
+      COMMANDS = "%s%s" % (COMMANDS, st_move_horizontal(d, LAST_COLS, pause))
+  elif viewtype == "listright":
+    COMMANDS = "%s%s" % (COMMANDS, st_list_move("right", numitems - 1, pause))
+  elif viewtype == "listdown":
+    COMMANDS = "%s%s" % (COMMANDS, st_list_move("down", numitems - 1, pause))
+  else:
+    gLogger.err("%s is not a valid viewtype for stress-test" % viewtype, newLine=True)
+    sys.exit(2)
+
+  command_list = COMMANDS.strip().split(" ")
+  for i in range(0, repeat):
+    start_time = time.time()
+    gLogger.out("Loop %4d of %d, %s over %d GUI items with %s second pause..." % (i+1, repeat, viewtype, numitems, pause))
+    ProcessInput(command_list)
+    gLogger.out(" %d seconds" % (time.time() - start_time), newLine=True)
+
+def st_move_horizontal(direction, count, pause):
+  cmd = ""
+  for i in range(0, count):
+    cmd = "%s%s pause %s " % (cmd, direction, pause)
+  return cmd
+
+def st_move_right(count, pause):
+  return "right pause %s " % pause if count == 1 else st_move_horizontal("right", count, pause)
+
+def st_move_left(count, pause):
+  return st_move_horizontal("left", count, pause)
+
+def st_move_down(pause):
+  return "down pause %s " % pause
+
+def st_list_move(direction, count, pause):
+  cmd = ""
+  if count > 0:
+    for i in range(0, count):
+      cmd = "%s%s" % (cmd, st_move_down(pause) if direction == "down" else st_move_right(1, pause))
+  return cmd
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -5398,6 +5453,7 @@ def usage(EXIT_CODE):
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
           rbphdmi [seconds] | stats [class]* |\
           input action* [parameter] | screenshot |\
+          stress-test view-type numitems [pause] [repeat] |\
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -5450,6 +5506,7 @@ def usage(EXIT_CODE):
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("  stats      Ouptut media library stats")
   print("  input      Send keyboard/remote control input to client, where action is back, left, right, up, down, executeaction, sendtext etc.")
+  print(" stress-test Stress GUI by walking over library items. View type: thumbnail, listright, listdown. Default pause 0.25, repeat 1")
   print("  screenshot Take a screen grab of the current display")
   print("")
   print("  config     Show current configuration")
@@ -5500,7 +5557,7 @@ def checkConfig(option):
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
-                "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot",
+                "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot", "stress-test",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "fixurls", "imdb"]
 
@@ -5746,7 +5803,7 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
-                   "input", "screenshot",
+                   "input", "screenshot", "stress-test",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -6088,6 +6145,13 @@ def main(argv):
 
   elif argv[0] == "screenshot":
     ProcessInput(["executeaction", "screenshot"])
+
+  elif argv[0] == "stress-test" and len(argv) >= 3:
+    viewtype = argv[1]
+    numitems = int(argv[2])
+    pause = float(argv[3]) if len(argv) > 3 else 0.25
+    repeat = int(argv[4]) if len(argv) > 4 else 1
+    StressTest(viewtype, numitems, pause, repeat)
 
   else:
     usage(1)

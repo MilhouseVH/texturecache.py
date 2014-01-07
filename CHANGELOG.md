@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.0 (07/01/2013)
+* Add: `stress-test` option to iterate over GUI items in various skin views (`thumbnail`, `listright` and `listdown`) with customisable pauses and repeats
+
 ##Version 1.2.9 (07/01/2013)
 * Add: When pruning (`p`/`P`), now also consider available picture sources containing artwork and retain associated folder and picture previews. Disable this behaviour with `@prune.retain.previews=no` and all previews associated with your pictures will be removed when pruning
 
