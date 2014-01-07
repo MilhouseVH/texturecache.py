@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.2.8 (07/01/2013)
+* Fix: Truncation of (photo thumbnail) url while querying texture cache database.with JSON as these urls don't have a trailing forward-slash
+* Fix: Normalise (decode) urls when using SQLite. Photo thumbnail urls are stored in image:// encoded form within Textures##.db
+
 ##Version 1.2.7 (31/12/2013)
 * Fix: Cosmetics
 

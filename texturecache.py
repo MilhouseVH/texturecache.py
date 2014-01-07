@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.2.7"
+    self.VERSION = "1.2.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -1244,12 +1244,10 @@ class MyDB(object):
   # to match JSON equivalent
   def _transform(self, rows):
     data = []
+    funcNormalise = MyUtility.normalise
     if rows:
       for r in rows:
-        try:
-          url = r[3].encode("iso-8859-1").decode("utf-8")
-        except UnicodeDecodeError:
-          url = r[3]
+        url = funcNormalise(r[3], strip=True)
         data.append({u"textureid": r[0], u"cachedurl": r[1],
                      u"lasthashcheck": r[2], u"url": url,
                      u"sizes":[{u"height": r[4], u"width": r[5], u"usecount": r[6],
@@ -2884,8 +2882,11 @@ class MyUtility(object):
 
     v = urllib2.unquote(value)
 
-    if strip and v.startswith("image://"):
-      v = v[8:-1]
+    if strip:
+      s = 8 if v.startswith("image://") else None
+      e = -1 if v[-1:] == "/" else None
+      print(v)
+      v = v[s:e]
 
     if not MyUtility.isPython3:
       try:
