@@ -5394,7 +5394,7 @@ def StressTest(viewtype, numitems, pause, repeat, cooldown):
     gLogger.out("Loop %4d of %d, %s over %d GUI items with %s second pause..." % (i+1, repeat, viewtype, numitems, pause), padspaces=False)
     ProcessInput(command_list)
     gLogger.out(" %d seconds" % (time.time() - start_time), newLine=True)
-    if repeat > 1 and cooldown > 0:
+    if cooldown > 0:
       gLogger.out("Cooldown period: %s seconds..." % cooldown, padspaces=False)
       time.sleep(cooldown)
       gLogger.out(" complete", newLine=True)
