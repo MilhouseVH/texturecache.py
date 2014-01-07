@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.0"
+    self.VERSION = "1.3.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -5362,7 +5362,7 @@ def ProcessInput(args):
       gLogger.err("Unexpected error during [%s] with params [%s]" % (REQUEST["method"], REQUEST["params"]), newLine=True)
       return
 
-def StressTest(viewtype, numitems, pause, repeat):
+def StressTest(viewtype, numitems, pause, repeat, cooldown):
   n = numitems - 1
   TOTAL_ROWS = int(n/5)
   LAST_COLS = (n % 5)
@@ -5394,6 +5394,10 @@ def StressTest(viewtype, numitems, pause, repeat):
     gLogger.out("Loop %4d of %d, %s over %d GUI items with %s second pause..." % (i+1, repeat, viewtype, numitems, pause), padspaces=False)
     ProcessInput(command_list)
     gLogger.out(" %d seconds" % (time.time() - start_time), newLine=True)
+    if repeat > 1 and cooldown > 0:
+      gLogger.out("Cooldown period: %s seconds..." % cooldown, padspaces=False)
+      time.sleep(cooldown)
+      gLogger.out(" complete", newLine=True)
 
 def st_move_horizontal(direction, count, pause):
   cmd = ""
@@ -5453,7 +5457,7 @@ def usage(EXIT_CODE):
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
           rbphdmi [seconds] | stats [class]* |\
           input action* [parameter] | screenshot |\
-          stress-test view-type numitems [pause] [repeat] |\
+          stress-test view-type numitems [pause] [repeat] [cooldown] |\
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -5506,7 +5510,7 @@ def usage(EXIT_CODE):
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("  stats      Ouptut media library stats")
   print("  input      Send keyboard/remote control input to client, where action is back, left, right, up, down, executeaction, sendtext etc.")
-  print(" stress-test Stress GUI by walking over library items. View type: thumbnail, listright, listdown. Default pause 0.25, repeat 1")
+  print(" stress-test Stress GUI by walking over library items. View type: thumbnail, listright, listdown. Default pause 0.25, repeat 1, cooldown (in seconds) 0.")
   print("  screenshot Take a screen grab of the current display")
   print("")
   print("  config     Show current configuration")
@@ -6151,7 +6155,8 @@ def main(argv):
     numitems = int(argv[2])
     pause = float(argv[3]) if len(argv) > 3 else 0.25
     repeat = int(argv[4]) if len(argv) > 4 else 1
-    StressTest(viewtype, numitems, pause, repeat)
+    cooldown = float(argv[5]) if len(argv) > 5 else 0
+    StressTest(viewtype, numitems, pause, repeat, cooldown)
 
   else:
     usage(1)

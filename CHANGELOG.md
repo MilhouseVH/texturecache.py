@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.1 (07/01/2013)
+* Add: cooldown period to `stress-test`
+
 ##Version 1.3.0 (07/01/2013)
 * Add: `stress-test` option to iterate over GUI items in various skin views (`thumbnail`, `listright` and `listdown`) with customisable pauses and repeats
 
