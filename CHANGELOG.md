@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.2 (07/01/2013)
+* Chg: Add `horizontal` and `vertical` as synonyms for `listright` and `listdown`.
+
 ##Version 1.3.1 (07/01/2013)
 * Add: cooldown period to `stress-test`
 

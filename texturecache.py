@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.1"
+    self.VERSION = "1.3.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -5363,12 +5363,12 @@ def ProcessInput(args):
       return
 
 def StressTest(viewtype, numitems, pause, repeat, cooldown):
-  n = numitems - 1
-  TOTAL_ROWS = int(n/5)
-  LAST_COLS = (n % 5)
+  MOVES = numitems - 1
 
   COMMANDS = "executeaction firstpage pause 1.5 "
   if viewtype == "thumbnail":
+    TOTAL_ROWS = int(MOVES/5)
+    LAST_COLS = MOVES % 5
     d=""
     if TOTAL_ROWS > 0:
       for i in range(0, TOTAL_ROWS):
@@ -5380,10 +5380,10 @@ def StressTest(viewtype, numitems, pause, repeat, cooldown):
     if LAST_COLS > 0:
       d = "left" if d == "right" else "right"
       COMMANDS = "%s%s" % (COMMANDS, st_move_horizontal(d, LAST_COLS, pause))
-  elif viewtype == "listright":
-    COMMANDS = "%s%s" % (COMMANDS, st_list_move("right", numitems - 1, pause))
-  elif viewtype == "listdown":
-    COMMANDS = "%s%s" % (COMMANDS, st_list_move("down", numitems - 1, pause))
+  elif viewtype in ["listright", "horizontal"]:
+    COMMANDS = "%s%s" % (COMMANDS, st_list_move("right", MOVES, pause))
+  elif viewtype in ["listdown", "vertical"]:
+    COMMANDS = "%s%s" % (COMMANDS, st_list_move("down", MOVES, pause))
   else:
     gLogger.err("%s is not a valid viewtype for stress-test" % viewtype, newLine=True)
     sys.exit(2)
@@ -5510,7 +5510,7 @@ def usage(EXIT_CODE):
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("  stats      Ouptut media library stats")
   print("  input      Send keyboard/remote control input to client, where action is back, left, right, up, down, executeaction, sendtext etc.")
-  print(" stress-test Stress GUI by walking over library items. View type: thumbnail, listright, listdown. Default pause 0.25, repeat 1, cooldown (in seconds) 0.")
+  print(" stress-test Stress GUI by walking over library items. View type: thumbnail, horizontal, vertical. Default pause 0.25, repeat 1, cooldown (in seconds) 0.")
   print("  screenshot Take a screen grab of the current display")
   print("")
   print("  config     Show current configuration")
@@ -5802,12 +5802,14 @@ def getLatestVersion(argv):
     USAGE  = "purge"
   elif argv[0] in ["qa", "qax"]:
     USAGE  = "qa"
+  elif argv[0] == "stress-test":
+    USAGE  = "stress"
   elif argv[0] in ["query", "missing", "watched",
                    "power", "wake", "status", "monitor", "rbphdmi",
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
-                   "input", "screenshot", "stress-test",
+                   "input", "screenshot",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
