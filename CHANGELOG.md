@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.3 (08/01/2013)
+* Chg: Allow full size pictures to be retained in cache when pruning, by enabling option `prune.retain.pictures`.
+
 ##Version 1.3.2 (07/01/2013)
 * Chg: Add `horizontal` and `vertical` as synonyms for `listright` and `listdown`.
 

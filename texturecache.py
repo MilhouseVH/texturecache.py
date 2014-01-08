@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.2"
+    self.VERSION = "1.3.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -297,6 +297,7 @@ class MyConfiguration(object):
       self.PRUNE_RETAIN_TYPES[index] = re.compile(re.sub("^\^image://", "^", r.pattern))
 
     self.PRUNE_RETAIN_PREVIEWS = self.getBoolean(config, "prune.retain.previews", "yes")
+    self.PRUNE_RETAIN_PICTURES = self.getBoolean(config, "prune.retain.pictures", "no")
 
     self.PICTURE_FILETYPES = [".jpg", ".jpeg", ".png", ".tbn", ".gif", ".tif", ".tiff",
                                ".raw", ".dng", ".crw", ".cr2", ".mdc", ".mrw", ".orf"]
@@ -570,6 +571,7 @@ class MyConfiguration(object):
     print("  cache.videoextras = %s" % self.BooleanIsYesNo(self.CACHE_VIDEO_EXTRAS))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
+    print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
     print("  picture.filetypes = %s" % self.NoneIsBlank(", ".join(self.PICTURE_FILETYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
@@ -2385,10 +2387,13 @@ class MyJSONComms(object):
         if file["filetype"] == "directory":
           self.getPicturesForPath(file["file"], list)
         elif file["filetype"] == "file" and os.path.splitext(file["file"])[1].lower() in self.config.PICTURE_FILETYPES:
-          if not DIR_ADDED:
-            DIR_ADDED = True
-            list.append({"type": "directory", "label": path, "thumbnail": "picturefolder@%s" % path})
-          list.append({"type": "file", "label": file["file"], "thumbnail": "%s/transform?size=thumb" % file["file"]})
+          if self.config.PRUNE_RETAIN_PREVIEWS:
+            if not DIR_ADDED:
+              DIR_ADDED = True
+              list.append({"type": "directory", "label": path, "thumbnail": "picturefolder@%s" % path})
+            list.append({"type": "file", "label": file["file"], "thumbnail": "%s/transform?size=thumb" % file["file"]})
+          if self.config.PRUNE_RETAIN_PICTURES:
+            list.append({"type": "file", "label": file["file"], "thumbnail": file["file"]})
 
   def parseSQLFilter(self, filter):
     if type(filter) is dict: return filter
@@ -4847,7 +4852,7 @@ def getAllFiles(keyFunction):
                 files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
   # Pictures
-  if gConfig.PRUNE_RETAIN_PREVIEWS:
+  if gConfig.PRUNE_RETAIN_PREVIEWS or gConfig.PRUNE_RETAIN_PICTURES:
     gLogger.progress("Loading: Pictures...")
     pictures = jcomms.getPictures()
     for picture in pictures:
