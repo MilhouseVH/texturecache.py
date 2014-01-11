@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.3"
+    self.VERSION = "1.3.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -2905,16 +2905,13 @@ class MyWatchedItem(object):
       if resume["position"] > self.resume["position"]:
         self.resume["position"] = resume["position"]
 
-      if resume["total"] > self.resume["total"]:
-        self.resume["total"] = resume["total"]
-
   def setState(self, HAS_RESUME, playcount, lastplayed, resume):
     # Assume no change is required
     self.state = 1
 
     if self.playcount == playcount and self.lastplayed == lastplayed:
       if not HAS_RESUME: return
-      if self.resume == resume: return
+      if self.resume["position"] == resume["position"]: return
 
     # Something has changed, apply object values to library
     self.state = 0
@@ -4069,7 +4066,7 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
     lastplayed = item.get("lastplayed", "")
     resume = item.get("resume", {"position": 0.0, "total": 0.0})
 
-    if playcount != 0 or lastplayed != "" or resume["position"] != 0.0 or resume["total"] != 0.0:
+    if playcount != 0 or lastplayed != "" or resume["position"] != 0.0:
       mediaitems.append(MyWatchedItem(mediatype, shortName, episode_year, playcount, lastplayed, resume))
 
     if "seasons" in item:
@@ -4179,7 +4176,7 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
                          }}
 
   if gConfig.JSON_HAS_SETRESUME:
-    REQUEST["params"]["resume"] = mediaitem.resume
+    REQUEST["params"]["resume"] = {"position": mediaitem.resume["position"]}
 
   gLogger.progress("Restoring %s: %s..." % (mediaitem.mtype[:-1], shortName))
 

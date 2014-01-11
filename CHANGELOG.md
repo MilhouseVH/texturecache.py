@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.4 (11/01/2013)
+* Chg: Ignore "total" property when setting resume point - not required and probably a little pointless so leave it out.
+
 ##Version 1.3.3 (08/01/2013)
 * Chg: Allow full size pictures to be retained in cache when pruning, by enabling option `prune.retain.pictures`.
 
