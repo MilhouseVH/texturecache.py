@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.4"
+    self.VERSION = "1.3.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -76,7 +76,9 @@ class MyConfiguration(object):
                                   "removeart":    (6,  9, 1),
                                   "setseason":    (6, 10, 0),
                                   "setmovieset":  (6, 12, 0),
-                                  "filternullval":(6, 13, 1)}
+                                  "filternullval":(6, 13, 1),
+                                  "isodates":     (6, 13, 2)
+                                  }
 
     self.SetJSONVersion(0, 0, 0)
 
@@ -273,6 +275,16 @@ class MyConfiguration(object):
     self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls)
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
+    self.QA_NFO_REFRESH = self.getValue(config, "qa.nfo.refresh", "")
+    if self.QA_NFO_REFRESH:
+      if self.QA_NFO_REFRESH.lower() == "today":
+        temp_date = datetime.date.today()
+      else:
+        temp_date = datetime.datetime.strptime(self.QA_NFO_REFRESH, "%Y-%m-%d %H:%M:%S")
+      self.qa_nfo_refresh_date = int(temp_date.strftime("%s"))
+    else:
+      self.qa_nfo_refresh_date = None
+
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
 
     yn = "yes" if self.getBoolean(config, "cache.extra", "no") else "no"
@@ -371,6 +383,9 @@ class MyConfiguration(object):
     # Filter is/isnot operator broken for empty string value (""), use only if API is fixed
     self.JSON_HAS_FILTERNULLVALUE = self.HasJSONCapability("filternullval")
 
+    # https://github.com/xbmc/xbmc/commit/20717c1b0cc2e5b35996be52cabd7267e0799995
+    self.JSON_HAS_ISO_DATES = self.HasJSONCapability("isodates")
+
   def HasJSONCapability(self, feature):
     if feature not in self.JSON_VER_CAPABILITIES:
       raise ValueError("Invalid JSON capability request for feature [%s]" % feature)
@@ -397,6 +412,18 @@ class MyConfiguration(object):
         self.DOWNLOAD_PREDELETE = (os.path.ismount(self.getDBPath()) or ISMOUNT)
     else:
       self.DOWNLOAD_PREDELETE = self.getBoolean(self.config, "download.predelete","no")
+
+    # Depending on JSON version, and user region, lastmodified date will be formatted in several ways.
+    # When JSON_HAS_ISO_DATES, the date will always be YYYY-MM-DD HH:MM:SS, easy.
+    # Otherwise it may be any format... assume either US (mm/dd/yyyy) or non-US (dd/mm/yyyy).
+    self.MDATE_MDY = self.getBoolean(self.config, "modifieddate.mdy", "no") # US (mm/dd/yyyy) or euro (dd/mm/yyyy)
+    if self.JSON_HAS_ISO_DATES:
+      self.qa_lastmodified_fmt = "%Y-%m-%d %H:%M:%S"
+    else:
+      if self.MDATE_MDY:
+        self.qa_lastmodified_fmt = "%m/%d/%Y %H:%M:%S"
+      else:
+        self.qa_lastmodified_fmt = "%d/%m/%Y %H:%M:%S"
 
   def getValue(self, config, aKey, default=None, allowundefined=False):
     value = None
@@ -507,7 +534,7 @@ class MyConfiguration(object):
   def dumpMemberVariables(self):
     mv = {}
     for key in self.__dict__.keys():
-      if key != "config":
+      if key == key.upper():
         value = self.__dict__[key]
         if type(value) is list:
           newlist = []
@@ -518,7 +545,6 @@ class MyConfiguration(object):
               newlist.append(v)
           value = newlist
         mv[key] = value
-
     return json.dumps(mv, indent=2, sort_keys=True)
 
   def showConfig(self):
@@ -533,6 +559,7 @@ class MyConfiguration(object):
     print("  webserver.ctimeout = %s" % self.WEB_CONNECTTIMEOUT)
     print("  rpc.port = %s" % self.RPC_PORT)
     print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
+    print("  modifieddate.mdy = %s" % self.BooleanIsYesNo(self.MDATE_MDY))
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
     print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
     print("  download.retry = %d" % self.DOWNLOAD_RETRY)
@@ -556,6 +583,7 @@ class MyConfiguration(object):
     print("  setmembers = %s" % self.BooleanIsYesNo(self.ADD_SET_MEMBERS))
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
+    print("  qa.nfo.refresh = %s" % self.NoneIsBlank(self.QA_NFO_REFRESH))
     print("  qa.fail.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_FAIL_TYPES)))
     print("  qa.warn.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_WARN_TYPES)))
 
@@ -1390,6 +1418,8 @@ class MyJSONComms(object):
     self.EXTRA_ART_DIR_CACHE = {}
     self.QUIT_METHOD = self.QUIT_PARAMS = None
 
+    self.clrDirectoryCache()
+
   def __enter__(self):
     return self
 
@@ -1566,8 +1596,13 @@ class MyJSONComms(object):
           # Discard - no longer required
           del messages
 
-          if ("result" in jdata and "limits" in jdata["result"]):
-            self.logger.log("%s.RECEIVED LIMITS: %s" % (id, jdata["result"]["limits"]))
+          # "result" on response for an Application.SetMute()/SetVolume() is
+          # not iterable so just ignore it if we cause an exception...
+          try:
+            if ("result" in jdata and "limits" in jdata["result"]):
+              self.logger.log("%s.RECEIVED LIMITS: %s" % (id, jdata["result"]["limits"]))
+          except TypeError:
+            pass
 
           # Flag to reset buffers next time we read the socket.
           ENDOFDATA = True
@@ -1792,19 +1827,67 @@ class MyJSONComms(object):
     REQUEST = {"method": cleanMethod}
     self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
 
-  def getDirectoryList(self, path, mediatype="files", properties=["file"]):
-    REQUEST = {"method":"Files.GetDirectory",
-               "params": {"directory": path, "media": mediatype}}
+  def clrDirectoryCache(self):
+    self.DCACHE = {}
 
-    if properties:
-      REQUEST["properties"] = properties
+  def setDirectoryCacheItem(self, data, properties, path):
+    props = ",".join(sorted(properties))
 
-    data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+    if props not in self.DCACHE:
+      self.DCACHE[props] = {}
 
-    # Fix null being returned for "files" on some systems...
-    if "result" in data and "files" in data["result"]:
-      if data["result"]["files"] == None:
-        data["result"]["files"] = []
+    self.DCACHE[props][path] = data
+
+  def getDirectoryCacheItem(self, properties, path):
+    props = ",".join(sorted(properties))
+
+    if props not in self.DCACHE or \
+       path not in self.DCACHE[props]:
+      return None
+    else:
+      return self.DCACHE[props][path]
+
+  def getDirectoryList(self, path, mediatype="files", properties=["file"], use_cache=True):
+
+    if use_cache:
+      data = self.getDirectoryCacheItem(properties, path)
+    else:
+      data = None
+
+    if not data:
+      REQUEST = {"method":"Files.GetDirectory",
+                 "params": {"directory": path,
+                            "media": mediatype,
+                            "properties": properties}}
+
+      data = self.sendJSON(REQUEST, "libDirectory", checkResult=False)
+
+      # Fix null being returned for "files" on some systems...
+      if "result" in data and "files" in data["result"]:
+        if data["result"]["files"] == None:
+          data["result"]["files"] = []
+
+        LMOD = ("lastmodified" in properties)
+
+        for f in data["result"]["files"]:
+          if "file" in f:
+            # Real directories won't have extensions, but .m3u and .pls playlists will
+            # leading to infinite recursion, so fix the filetype so as not to try and
+            # traverse playlists.
+            if f["filetype"] == "directory" and os.path.splitext(f["file"])[1] != "":
+              f["filetype"] = "file"
+
+            # Convert last modified date/time to epoch
+            if LMOD and "lastmodified" in f:
+              try:
+                f["lastmodified_timestamp"] = int(datetime.datetime.strptime(f["lastmodified"], self.config.qa_lastmodified_fmt).strftime("%s"))
+              except ValueError:
+                self.logger.err("ERROR: Invalid \"lastmodified\" date detected - try specifying @modifieddate.mdy=%s" %
+                                ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
+                sys.exit(2)
+
+    if use_cache:
+      self.setDirectoryCacheItem(data, properties, path)
 
     return data
 
@@ -1851,7 +1934,9 @@ class MyJSONComms(object):
 
     self.EXTRA_ART_DIR_CACHE[directory] = []
 
-    data = self.getDirectoryList(directory)
+    # Don't cache directory lookup to avoid double-caching.
+    # Should really eliminate EXTRA_ART_DIR_CACHE.
+    data = self.getDirectoryList(directory, use_cache=False)
 
     if "result" not in data: return []
     if "files" not in data["result"]: return []
@@ -1875,7 +1960,7 @@ class MyJSONComms(object):
 
     files = []
     for dir in dirs:
-      data = self.getDirectoryList(dir["file"])
+      data = self.getDirectoryList(dir["file"], use_cache=False)
       if "result" in data and "files" in data["result"]:
         for file in data["result"]["files"]:
           if file["filetype"] == "file" and file["file"]:
@@ -1936,15 +2021,23 @@ class MyJSONComms(object):
 #        return "/image/%s" % urllib2.quote(filename, "")
       return None
 
-  def getFileDetails(self, filename):
+  def getFileDetails(self, filename, properties = ["file", "lastmodified", "size"]):
     REQUEST = {"method":"Files.GetFileDetails",
                "params":{"file": filename,
-                         "properties": ["streamdetails", "lastmodified", "dateadded", "size", "mimetype", "tag", "file"]}}
+                         "properties": properties}}
 
     data = self.sendJSON(REQUEST, "filedetails", checkResult=False)
 
     if "result" in data:
-      return data["result"].get("filedetails", None)
+      details = data["result"].get("filedetails", None)
+      if details and "lastmodified" in details:
+        try:
+          details["lastmodified_timestamp"] = int(datetime.datetime.strptime(details["lastmodified"], self.config.qa_lastmodified_fmt).strftime("%s"))
+        except ValueError:
+          self.logger.err("ERROR: Invalid \"lastmodified\" date detected - try specifying @modifieddate.mdy=%s" %
+                          ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
+          sys.exit(2)
+      return details
     else:
       return None
 
@@ -2118,7 +2211,7 @@ class MyJSONComms(object):
       for path in sources:
         self.logger.progress("Walking source: [%s]" % path)
 
-        for file in self.getFilesForPath(path):
+        for file in self.getFiles(path):
           ext = os.path.splitext(file)[1].lower()
           if ext in ignoreList: continue
 
@@ -2143,26 +2236,22 @@ class MyJSONComms(object):
 
     return fileList
 
-  def getFilesForPath(self, path):
+  def getFiles(self, path):
     fileList = []
-    self.getFilesForPath_recurse(fileList, path)
+    self.getFilesForPath(fileList, path)
     return fileList
 
-  def getFilesForPath_recurse(self, fileList, path):
-    data = self.getDirectoryList(path)
+  def getFilesForPath(self, fileList, path):
+    data = self.getDirectoryList(path, use_cache=False)
     if not "result" in data: return
     if not "files" in data["result"]: return
 
     for file in data["result"]["files"]:
-      ftype = file["filetype"]
-      fname = file["file"]
-      fext = os.path.splitext(fname)[1].lower()
-      #Real directories won't have extensions, but .m3u and .pls playlists will
-      #leading to infinite recursion, so don't try to traverse playlists
-      if ftype == "directory" and fext == "":
-        self.getFilesForPath_recurse(fileList, os.path.dirname(fname))
-      else:
-        fileList.append(fname)
+      if "file" in file:
+        if file["filetype"] == "directory":
+          self.getFilesForPath(fileList, os.path.dirname(file["file"]))
+        else:
+          fileList.append(file["file"])
 
   def setPower(self, state):
     if state == "exit":
@@ -2368,32 +2457,36 @@ class MyJSONComms(object):
 
     return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
 
-  # Return a list of all pictures (jpg/png/tbn) with a source of "pictures"
-  def getPictures(self):
+  # Return a list of all pictures (jpg/png/tbn) from any "pictures" source
+  def getPictures(self, addPreviews=False, addPictures=True):
     list = []
 
-    for path in self.getSources("pictures"):
-      self.getPicturesForPath(path, list)
+    if addPreviews or addPictures:
+      for path in self.getSources("pictures"):
+        self.getPicturesForPath(path, list, addPreviews, addPictures)
 
     return list
 
-  def getPicturesForPath(self, path, list):
-    data = self.getDirectoryList(path)
+  def getPicturesForPath(self, path, list, addPreviews, addPictures):
+    data = self.getDirectoryList(path, use_cache=False)
     if "result" not in data or "files" not in data["result"]: return
 
     DIR_ADDED = False
     for file in data["result"]["files"]:
       if file["file"]:
-        if file["filetype"] == "directory":
-          self.getPicturesForPath(file["file"], list)
-        elif file["filetype"] == "file" and os.path.splitext(file["file"])[1].lower() in self.config.PICTURE_FILETYPES:
-          if self.config.PRUNE_RETAIN_PREVIEWS:
+        ftype = file["filetype"]
+        fname = file["file"]
+
+        if ftype == "directory":
+          self.getPicturesForPath(fname, list, addPreviews, addPictures)
+        elif ftype == "file" and os.path.splitext(fname)[1].lower() in self.config.PICTURE_FILETYPES:
+          if addPreviews:
             if not DIR_ADDED:
               DIR_ADDED = True
               list.append({"type": "directory", "label": path, "thumbnail": "picturefolder@%s" % path})
-            list.append({"type": "file", "label": file["file"], "thumbnail": "%s/transform?size=thumb" % file["file"]})
-          if self.config.PRUNE_RETAIN_PICTURES:
-            list.append({"type": "file", "label": file["file"], "thumbnail": file["file"]})
+            list.append({"type": "file", "label": fname, "thumbnail": "%s/transform?size=thumb" % fname})
+          if addPictures:
+            list.append({"type": "file", "label": fname, "thumbnail": fname})
 
   def parseSQLFilter(self, filter):
     if type(filter) is dict: return filter
@@ -3622,8 +3715,11 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
   blank_items = []
   art_items = []
   check_file = False
+  nfo_file = False
 
-  check_file = (gConfig.QA_FILE and mediatype in ["movies", "tags", "episodes"])
+  if mediatype in ["movies", "tags", "episodes"]:
+    check_file = gConfig.QA_FILE
+    nfo_file = (gConfig.qa_nfo_refresh_date != None)
 
   zero_items.extend(gConfig.getQAFields("zero", mediatype, stripModifier=False))
   blank_items.extend(gConfig.getQAFields("blank", mediatype, stripModifier=False))
@@ -3661,7 +3757,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       ismissing = True
       if j in item:
         ismissing = (item[j] == 0)
-      if missing: missing["Zero %s" % j] = not i.startswith("?")
+      if missing: missing["zero %s" % j] = not i.startswith("?")
 
     for i in blank_items:
       j = i[1:] if i.startswith("?") else i
@@ -3675,7 +3771,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               break
         else:
           ismissing = (item[j] == "" or item[j] == [] or item[j] == [""])
-      if ismissing: missing["Missing %s" % j] = not i.startswith("?")
+      if ismissing: missing["missing %s" % j] = not i.startswith("?")
 
     for i in art_items:
       j = i[1:] if i.startswith("?") else i
@@ -3684,27 +3780,40 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       else:
         artwork = item.get(j, "")
       if artwork == "":
-        missing["Missing %s" % j] = not i.startswith("?")
+        missing["missing %s" % j] = not i.startswith("?")
       else:
         decoded_url = MyUtility.normalise(artwork, strip=True)
         FAILED = False
         if gConfig.QA_FAIL_TYPES:
           for qafailtype in gConfig.QA_FAIL_TYPES:
             if qafailtype.search(decoded_url):
-              missing["Fail URL (%s, \"%s\")" % (j, qafailtype.pattern)] = True
+              missing["URL %s %s" % (j, qafailtype.pattern)] = True
               FAILED = True
               break
         if not FAILED and gConfig.QA_WARN_TYPES:
           for qawarntype in gConfig.QA_WARN_TYPES:
             if qawarntype.search(decoded_url):
-              missing["Warn URL (%s, \"%s\")" % (j, qawarntype.pattern)] = False
+              missing["URL %s %s" % (j, qawarntype.pattern)] = False
               break
 
-    if check_file and "file" in item:
+    if (check_file or nfo_file) and "file" in item:
       for file in unstackFiles(item["file"]):
-        if not jcomms.getFileDetails(file):
-          missing["file"] = False
-          break
+        dir = os.path.dirname(item["file"])
+        data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
+        files = data.get("result", []).get("files", [])
+
+        if check_file and not [f for f in files if f["filetype"] == "file" and f.get("file", None) == file]:
+          missing["missing file"] = False
+
+        if nfo_file:
+          nfofile = "%s.nfo" % os.path.splitext(file)[0]
+          for f in [x for x in files if x["filetype"] == "file" and x.get("file", None) == nfofile]:
+            if "lastmodified_timestamp" in f and \
+               f["lastmodified_timestamp"] >= gConfig.qa_nfo_refresh_date:
+              missing["modified nfo"] = True
+            break
+          else:
+            missing["missing nfo"] = False
 
     if "seasons" in item:
       qaData("seasons", jcomms, database, item["seasons"], "label", "season", False, \
@@ -3726,14 +3835,25 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       else:
         mtype = mediatype[:-1].capitalize()
         if mtype == "Tvshow": mtype = "TVShow"
-      mediaitems.append("%s [%-50s]: %s" % (mtype, addEllipsis(50, name), ", ".join(missing)))
-      if "file" in item and "".join(["Y" if missing[m] else "" for m in missing]) != "":
+
+      if "file" in item:
+        mFAIL = ", ".join([x for x in missing if missing[x] == True])
+        mWARN = ", ".join([x for x in missing if missing[x] == False])
+      else:
+        mFAIL = ""
+        mWARN = ", ".join(missing)
+
+      msg = ""
+      if mFAIL: msg = "%sFAIL (%s), " % (msg, mFAIL)
+      if mWARN: msg = "%sWARN (%s), " % (msg, mWARN)
+      msg = msg [:-2]
+      mediaitems.append("%-8s [%-50s]: %s" % (mtype, addEllipsis(50, name), msg))
+
+      if "file" in item and mFAIL:
         dir = "%s;%s" % (mediatype, os.path.dirname(unstackFiles(item["file"])[0]))
         libraryids = workItems[dir] if dir in workItems else []
         libraryids.append(libraryid)
         workItems[dir] = libraryids
-#      else:
-#        gLogger.out("ERROR: No file for QA item - won't rescan [%s]" % name, newLine=True)
 
   if mitems == None:
     TOTALS.TimeEnd(mediatype, "Parse")
@@ -4849,12 +4969,11 @@ def getAllFiles(keyFunction):
                 files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
   # Pictures
-  if gConfig.PRUNE_RETAIN_PREVIEWS or gConfig.PRUNE_RETAIN_PICTURES:
-    gLogger.progress("Loading: Pictures...")
-    pictures = jcomms.getPictures()
-    for picture in pictures:
-      files[keyFunction(picture["thumbnail"])] = "thumbnail"
-    del pictures
+  gLogger.progress("Loading: Pictures...")
+  pictures = jcomms.getPictures(addPreviews=gConfig.PRUNE_RETAIN_PREVIEWS, addPictures=gConfig.PRUNE_RETAIN_PICTURES)
+  for picture in pictures:
+    files[keyFunction(picture["thumbnail"])] = "thumbnail"
+  del pictures
 
   # PVR Channels
   if gConfig.HAS_PVR:
@@ -5092,29 +5211,39 @@ def doLibraryClean(media):
 
   jcomms.cleanLibrary(cleanMethod)
 
-def getDirectoryList(path, recurse=False):
-  jcomms = MyJSONComms(gConfig, gLogger)
+def getDirectory(path, recurse=False):
+  getDirectoryFiles(MyJSONComms(gConfig, gLogger), path, nodirmsg=True, recurse=recurse)
 
-  data = jcomms.getDirectoryList(path)
+def getDirectoryFiles(jcomms, path, nodirmsg=True, recurse=False):
+  data = jcomms.getDirectoryList(path, use_cache=False)
 
-  if "result" not in data or "files" not in data["result"]:
-    gLogger.out("No directory listing available.", newLine=True)
+  # Invalid path
+  if "result" not in data:
+    if nodirmsg:
+      gLogger.out("Directory \"%s\" not found." % path, newLine=True)
+    return
+
+  # Empty path
+  if "files" not in data["result"]:
+    if nodirmsg:
+      gLogger.out("Directory \"%s\" is empty." % path, newLine=True)
     return
 
   for file in sorted(data["result"]["files"]):
-    ftype = file["filetype"]
-    fname = file["file"]
+    if "file" in file:
+      ftype = file["filetype"]
+      fname = file["file"]
 
-    if ftype == "directory":
-      FTYPE = "DIR"
-      FNAME = os.path.dirname(fname)
-    else:
-      FTYPE = "FILE"
-      FNAME = fname
+      if ftype == "directory":
+        FTYPE = "DIR"
+        FNAME = os.path.dirname(fname)
+      else:
+        FTYPE = "FILE"
+        FNAME = fname
 
-    gLogger.out("%-4s: %s" % (FTYPE, FNAME), newLine=True)
-    if recurse and ftype == "directory":
-      getDirectoryList(FNAME, recurse)
+      gLogger.out("%-4s: %s" % (FTYPE, FNAME), newLine=True)
+      if recurse and FTYPE == "DIR":
+        getDirectoryFiles(jcomms, FNAME, nodirmsg=False, recurse=recurse)
 
 def showSources(media=None, withLabel=None):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -5423,6 +5552,22 @@ def st_list_move(direction, count, pause):
       cmd = "%s%s" % (cmd, st_move_down(pause) if direction == "down" else st_move_right(1, pause))
   return cmd
 
+def setVolume(volume):
+  if volume == "mute":
+    REQUEST = {"method": "Application.SetMute", "params": {"mute": True}}
+  elif volume == "unmute":
+    REQUEST = {"method": "Application.SetMute", "params": {"mute": False}}
+  else:
+    try:
+      REQUEST = {"method": "Application.SetVolume", "params": {"volume": int(volume)}}
+    except:
+      gLogger.err("ERROR: Volume level [%s] is not a valid integer" % volume, newLine=True)
+      return
+
+  data = MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libVolume", checkResult=False)
+  if "result" not in data:
+    gLogger.err("ERROR: Volume change failed - valid values: 0-100, mute and unmute", newLine=True)
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -5459,6 +5604,7 @@ def usage(EXIT_CODE):
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
           rbphdmi [seconds] | stats [class]* |\
           input action* [parameter] | screenshot |\
+          volume [mute;unmute;#] | \
           stress-test view-type numitems [pause] [repeat] [cooldown] |\
           config | version | update | fupdate")
   print("")
@@ -5512,6 +5658,7 @@ def usage(EXIT_CODE):
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("  stats      Ouptut media library stats")
   print("  input      Send keyboard/remote control input to client, where action is back, left, right, up, down, executeaction, sendtext etc.")
+  print("  volume     Set volume level 0-100, mute or unmute")
   print(" stress-test Stress GUI by walking over library items. View type: thumbnail, horizontal, vertical. Default pause 0.25, repeat 1, cooldown (in seconds) 0.")
   print("  screenshot Take a screen grab of the current display")
   print("")
@@ -5565,6 +5712,7 @@ def checkConfig(option):
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot", "stress-test",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
+                "volume",
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
@@ -5811,7 +5959,7 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
-                   "input", "screenshot",
+                   "input", "screenshot", "volume",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -6079,9 +6227,9 @@ def main(argv):
     doLibraryClean("audio")
 
   elif argv[0] == "directory" and len(argv) == 2:
-    getDirectoryList(argv[1], recurse=False)
+    getDirectory(argv[1], recurse=False)
   elif argv[0] == "rdirectory" and len(argv) == 2:
-    getDirectoryList(argv[1], recurse=True)
+    getDirectory(argv[1], recurse=True)
 
   elif argv[0] == "sources" and len(argv) < 3:
     showSources(media=argv[1] if len(argv) == 2 else None)
@@ -6161,6 +6309,9 @@ def main(argv):
     repeat = int(argv[4]) if len(argv) > 4 else 1
     cooldown = float(argv[5]) if len(argv) > 5 else 0
     StressTest(viewtype, numitems, pause, repeat, cooldown)
+
+  elif argv[0] == "volume" and len(argv) == 2:
+    setVolume(argv[1])
 
   else:
     usage(1)

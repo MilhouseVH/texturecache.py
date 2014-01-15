@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 1.3.5 (15/01/2013)
+* Add: `qa.nfo.refresh="YYYY-MM-DD HH:MM:SS"`, or `qa.nfo.refresh=today` (time == 00:00:00). During `qax`, any movie/episode whose NFO has a modification date more recent than the specified date/time, will be re-scraped. Prior to JSON API v6.13.2, the lastmodified date [is ambiguous](http://trac.xbmc.org/ticket/14836) so prior to v6.13.2 it may be necessary to specify `@modifieddate.mdy=yes` if US-format (mm/dd/yyyy) last modified dates are being used - default is `no`, for dd/mm/yyyy dates.
+* Add: `volume` option - set volume level `0`-`100`, `mute`, `unmute` eg. `volume mute`
+* Chg: Clearly differentiate between QA failures (which will prompt a refresh during `qax`) and warnings (which won't prompt a refresh)
+
 ##Version 1.3.4 (11/01/2013)
 * Chg: Ignore "total" property when setting resume point - not required and probably a little pointless so leave it out.
 
