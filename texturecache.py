@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.5"
+    self.VERSION = "1.3.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -279,11 +279,15 @@ class MyConfiguration(object):
     if self.QA_NFO_REFRESH:
       if self.QA_NFO_REFRESH.lower() == "today":
         temp_date = datetime.date.today()
+      elif re.search("^[0-9]*$", self.QA_NFO_REFRESH):
+        temp_date = datetime.date.today() - datetime.timedelta(days=int(self.QA_NFO_REFRESH))
       else:
         temp_date = datetime.datetime.strptime(self.QA_NFO_REFRESH, "%Y-%m-%d %H:%M:%S")
       self.qa_nfo_refresh_date = int(temp_date.strftime("%s"))
+      self.qa_nfo_refresh_date_fmt = temp_date.strftime("%Y-%m-%d %H:%M:%S")
     else:
       self.qa_nfo_refresh_date = None
+      self.qa_nfo_refresh_date_fmt = None
 
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
 
@@ -583,7 +587,7 @@ class MyConfiguration(object):
     print("  setmembers = %s" % self.BooleanIsYesNo(self.ADD_SET_MEMBERS))
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
-    print("  qa.nfo.refresh = %s" % self.NoneIsBlank(self.QA_NFO_REFRESH))
+    print("  qa.nfo.refresh = %s%s" % (self.NoneIsBlank(self.QA_NFO_REFRESH), " (%s)" % self.qa_nfo_refresh_date_fmt if self.qa_nfo_refresh_date_fmt else ""))
     print("  qa.fail.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_FAIL_TYPES)))
     print("  qa.warn.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_WARN_TYPES)))
 

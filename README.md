@@ -27,7 +27,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[j, J, jd, Jd, jr, Jr]** Query media library using JSON API, and output content using JSON notation (and suitable for further external processing). The **jd** and **Jd** options will decode (unquote) all artwork urls. **jr** and **Jr** options will not guarantee ASCII output of decoded urls (ie. the data will be "raw"). **J**, **Jd** and **Jr** options will include additional user configurable fields when querying media library (see [properties file](#optional-properties-file))
 
-**[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Define QA properties using `qa.zero.*`, `qa.blank.*` and `qa.art.*` properties. Enable "[qa.file = yes](#optional-properties-file)" for file validation during QA.
+**[qa]** Perform QA check on media library items, identifying missing properties (eg. plot, mpaa certificate, artwork etc.). Default QA period is previous 30 days, configurable with [qaperiod](#optional-properties-file). Define QA properties using `qa.zero.*`, `qa.blank.*` and `qa.art.*` properties. Enable "[qa.file = yes](#optional-properties-file)" for file validation during QA. Specify a period (`today` or a relative number of days) or date/time (eg. 2014-01-11 01:02:03) for `qa.nfo.refresh` to refresh any media item with an NFO file modified since the specified date.
 
 **[qax]** Like the **qa **option, but also performs a library remove and then library rescan of any media folder found to contain media items that fail a QA test
 
@@ -401,6 +401,7 @@ extrajson.tvshows.season =
 extrajson.tvshows.episode =
 qaperiod = 30
 qa.file = no
+qa.nfo.refresh = 
 qa.fail.urls = ^video, ^music
 qa.warn.urls =
 qa.art.addons =
