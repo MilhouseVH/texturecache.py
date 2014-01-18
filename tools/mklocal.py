@@ -444,9 +444,10 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
       info(args, "%9d bytes" % os.path.getsize(newsource), atype, title, None, None, target=target)
       return target
 
-    # Couldn't copy anything and don't have an alternative source, so stay with current local file
+    # Couldn't copy anything and don't have an alternative source, so stay with
+    # current local file unless args.nokeep.
     if not LOCAL_ALT:
-      result = pathToLocal(orig_source)
+      result = None if args.nokeep pathToLocal(orig_source)
       debug2(atype, "No alt source for non-HTTP files, using:", result)
       return result
 
