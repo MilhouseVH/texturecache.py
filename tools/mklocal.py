@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.1.0
+#version 0.2.0
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -581,7 +581,7 @@ def init():
                     formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=25,width=90))
 
   parser.add_argument("-l", "--local", metavar="DIRECTORY", \
-                      help="Local DIRECTORY into which artwork will be WRITTEN, eg. /freenas/media/Images/")
+                      help="Local DIRECTORY into which artwork will be WRITTEN, eg. /freenas/media/")
 
   parser.add_argument("-p", "--prefix", metavar="PATH", \
                       help="XBMC PATH prefix (eg. nfs://192.168.0.3/mnt/share/media/) that \
