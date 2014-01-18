@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 18/01/2014
+* Add: `nokeep` option - don't keep artwork that cannot be matched to pre-existing local artwork
+
 ## 02/01/2014
 * Chg: Verify existence of --local and --altlocal paths even when --readonly is specified.
 * Fix: Use correct forward slash/backward slash when converting a network path to local Windows path and vice versa

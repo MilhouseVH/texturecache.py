@@ -375,8 +375,11 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
 
   # If we're not downloading, just return the current file name
   if args.readonly:
-    warning(args, "**  NEEDED  **", atype, title, "readonly enabled", currentname)
-    return currentname
+    if args.nokeep:
+      return None
+    else:
+      warning(args, "**  NEEDED  **", atype, title, "readonly enabled", currentname)
+      return currentname
 
   # We're going to create a new file.
   # We have a remote source (currentname) and a partial
@@ -626,6 +629,9 @@ def init():
 
   parser.add_argument("-1", "--singlefolders", action="store_true", \
                       help="Movies are in individual folders so don't use the movie-name as a prefix")
+
+  parser.add_argument("-nk", "--nokeep", action="store_true", \
+                      help="Don't keep artwork if not able to match with pre-existing local artwork")
 
   group = parser.add_mutually_exclusive_group()
   group.add_argument("-q", "--quiet", action="store_true", \
