@@ -372,6 +372,20 @@ cat /tmp/movies.dat | ./texturecache.py set
 
 Required fields are `libraryid`, `type` and `items`. `title` is optional. Fields within `items` will be updated in the media library as per the command line equivalent.
 
+##Directory Paths
+In addition to physical (smb://, nfs:// etc.) paths, the following virtual paths (or their sub-directories) can be used when calling the `directory` and `rdirectory` options:
+* virtualpath://upnproot/
+* musicdb://
+* videodb://
+* library://video
+* sources://video
+* special://musicplaylists
+* special://profile/playlists
+* special://videoplaylists
+* addons://sources
+* upnp://
+* plugin://
+
 ##Optional Properties File
 
 By default the script will run fine on distributions where the `.xbmc/userdata` folder is within the users Home folder (ie. `userdata=~/.xbmc/userdata`). To override this default, specify a properties file with a different value for the `userdata` property.

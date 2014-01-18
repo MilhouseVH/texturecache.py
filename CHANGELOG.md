@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.7 (18/01/2013)
+* Fix: Incorrect type conversion during `set`
+
 ##Version 1.3.6 (17/01/2013)
 * Chg: Support relative date periods for `qa.nfo.refresh`, eg. `qa.nfo.refresh=7` would be 7 days prior to today (from 00:00:00). `0` is therefore equivalent to `today`. View the computed date/time in `config`.
 

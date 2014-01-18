@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.6"
+    self.VERSION = "1.3.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -4409,24 +4409,25 @@ def updateIMDb(mediatype, jcomms, data):
   jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
 
 def getIntFloatStr(aValue):
-  if type(aValue) is str:
+  isString = (type(aValue) == str if MyUtility.isPython3 else type(aValue) in [str, unicode])
+  if isString:
     if (aValue.startswith('"') and aValue.endswith('"')) or \
        (aValue.startswith("'") and aValue.endswith("'")):
       return aValue[1:-1]
 
-  if aValue == "null":
-    return None
+    if aValue == "null":
+      return None
 
   try:
     if int(aValue) == float(aValue):
       return int(aValue)
-    else:
-      return float(aValue)
   except:
-    try:
-      return float(aValue)
-    except:
-      return aValue
+    pass
+
+  try:
+    return float(aValue)
+  except:
+    return aValue
 
 def setDetails_batch(dryRun=True):
   jcomms = MyJSONComms(gConfig, gLogger)
@@ -4445,7 +4446,7 @@ def setDetails_batch(dryRun=True):
     for key in item["items"]:
       kvpairs.append(key)
       kvpairs.append(item["items"][key])
-    setDetails_worker(jcomms, item["type"], item["libraryid"], kvpairs, item.get("title", None), dryRun, i, len(jdata))
+    setDetails_worker(jcomms, item["type"], item["libraryid"], kvpairs, item.get("title", None), dryRun, i, len(jdata), typeconversion=False)
 
   gLogger.progress("")
 
@@ -4456,10 +4457,10 @@ def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
     ukvpairs.append(MyUtility.toUnicode(kv))
 
   jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
-  setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun, None, None)
+  setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun, None, None, typeconversion=True)
   gLogger.progress("")
 
-def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum, maxitems):
+def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum, maxitems, typeconversion):
   if mtype == "movie":
     method = "VideoLibrary.SetMovieDetails"
     idname = "movieid"
@@ -4528,13 +4529,13 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum,
       elif type(pair) is list:
         pairs[KEY] = []
         for item in pair:
-          if item: pairs[KEY].append(getIntFloatStr(item))
+          if item: pairs[KEY].append(getIntFloatStr(item) if typeconversion else item)
       elif type(pair) is str and pair.startswith("[") and pair.endswith("]"):
         pairs[KEY] = []
         for item in [x.strip() for x in pair[1:-1].split(",")]:
-          if item: pairs[KEY].append(getIntFloatStr(item))
+          if item: pairs[KEY].append(getIntFloatStr(item) if typeconversion else item)
       else:
-        pairs[KEY] = getIntFloatStr(pair)
+        pairs[KEY] = getIntFloatStr(pair) if typeconversion else pair
 
       if (pairs[KEY] == None or pairs[KEY] == "") and \
          (KEY.startswith("art.") or KEY in ["fanart", "thumbnail", "thumb"]) and \
