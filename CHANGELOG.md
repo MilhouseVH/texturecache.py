@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.3.8 (21/01/2013)
+* Add: Configuration property `rpc.retry` to control how many attempts are made to reconnect to XBMC RPC server when XBMC has restarted. Default is 12. If set to 0, no attempts will be made to reconnect and the script will exit immediately.
+
 ##Version 1.3.7 (18/01/2013)
 * Fix: Incorrect type conversion during `set`
 

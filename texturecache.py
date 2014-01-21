@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.7"
+    self.VERSION = "1.3.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -181,8 +181,11 @@ class MyConfiguration(object):
 
     self.XBMC_HOST = self.getValue(config, "xbmc.host", "localhost")
     self.WEB_PORT = self.getValue(config, "webserver.port", "8080")
-    self.RPC_PORT = self.getValue(config, "rpc.port", "9090")
     self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
+    self.RPC_PORT = self.getValue(config, "rpc.port", "9090")
+    self.RPC_RETRY = int(self.getValue(config, "rpc.retry", "12"))
+    self.RPC_RETRY = 0 if self.RPC_RETRY < 0 else self.RPC_RETRY
+
     web_user = self.getValue(config, "webserver.username", "")
     web_pass = self.getValue(config, "webserver.password", "")
 
@@ -562,6 +565,7 @@ class MyConfiguration(object):
     print("  webserver.port = %s" % self.WEB_PORT)
     print("  webserver.ctimeout = %s" % self.WEB_CONNECTTIMEOUT)
     print("  rpc.port = %s" % self.RPC_PORT)
+    print("  rpc.retry = %s" % self.RPC_RETRY)
     print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
     print("  modifieddate.mdy = %s" % self.BooleanIsYesNo(self.MDATE_MDY))
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
@@ -5392,7 +5396,7 @@ def rbphdmi(delay):
     cmdqueue.put({"method": method, "params": params})
     return (method == "System.OnQuit")
 
-  RETRIES = 12
+  RETRIES = gConfig.RPC_RETRY
   ATTEMPTS = 0
 
   cmdqueue = Queue.Queue()
@@ -5404,9 +5408,13 @@ def rbphdmi(delay):
   while True:
     try:
       MyJSONComms(gConfig, gLogger).sendJSON({"method": "JSONRPC.Ping"}, "libListen", callback=rbphdmi_listen, checkResult=False)
-      gLogger.debug("XBMC exited - waiting for restart...")
-      time.sleep(15.0)
-      ATTEMPTS = 0
+      if RETRIES != 0:
+        gLogger.debug("XBMC exited - waiting for restart...")
+        time.sleep(15.0)
+        ATTEMPTS = 0
+      else:
+        gLogger.debug("XBMC exited")
+        break
     except socket.error as e:
       gLogger.debug("XBMC not responding, retries remaining %d" % (RETRIES - ATTEMPTS))
       if ATTEMPTS >= RETRIES: raise
