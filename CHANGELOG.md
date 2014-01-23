@@ -1,6 +1,6 @@
 #Changelog
 
-##Version 1.3.9 (22/01/2013)
+##Version 1.3.9 (23/01/2013)
 * Chg: Display current mute state (muted/unmuted) and volume level when no value passed to `volume` option
 
 ##Version 1.3.8 (21/01/2013)
