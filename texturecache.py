@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.8"
+    self.VERSION = "1.3.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -5565,6 +5565,15 @@ def st_list_move(direction, count, pause):
       cmd = "%s%s" % (cmd, st_move_down(pause) if direction == "down" else st_move_right(1, pause))
   return cmd
 
+def showVolume():
+  REQUEST = {"method": "Application.GetProperties", "params": {"properties": ["volume", "muted"]}}
+
+  data = MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libVolume")
+
+  if "result" in data:
+    mute = "muted" if data["result"]["muted"] else "unmuted"
+    gLogger.out("%s %d" % (mute, data["result"]["volume"]), newLine=True)
+
 def setVolume(volume):
   if volume == "mute":
     REQUEST = {"method": "Application.SetMute", "params": {"mute": True}}
@@ -5671,7 +5680,7 @@ def usage(EXIT_CODE):
   print("  rbphdmi    Manage HDMI power saving on a Raspberry Pi by monitoring Screensaver notifications. Default power-off delay is 900 seconds after screensaver has started.")
   print("  stats      Ouptut media library stats")
   print("  input      Send keyboard/remote control input to client, where action is back, left, right, up, down, executeaction, sendtext etc.")
-  print("  volume     Set volume level 0-100, mute or unmute")
+  print("  volume     Set volume level 0-100, mute or unmute, or display current mute state and volume level")
   print(" stress-test Stress GUI by walking over library items. View type: thumbnail, horizontal, vertical. Default pause 0.25, repeat 1, cooldown (in seconds) 0.")
   print("  screenshot Take a screen grab of the current display")
   print("")
@@ -6323,6 +6332,8 @@ def main(argv):
     cooldown = float(argv[5]) if len(argv) > 5 else 0
     StressTest(viewtype, numitems, pause, repeat, cooldown)
 
+  elif argv[0] == "volume" and len(argv) == 1:
+    showVolume()
   elif argv[0] == "volume" and len(argv) == 2:
     setVolume(argv[1])
 
