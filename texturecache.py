@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.0"
+    self.VERSION = "1.4.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -3564,7 +3564,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
                 sc += 1
                 if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
                 single_work_queue.put(item)
-                item.status = MyMediaItem.QUEUED
+                item.status = MyMediaItem.STATUS_QUEUED
                 isSingle = True
                 break
 

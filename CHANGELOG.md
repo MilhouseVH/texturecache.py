@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.4.1 (25/01/2013)
+* Fix: Typo
+
 ##Version 1.4.0 (25/01/2013)
 * Add: For use with `C` and `nc` options, `@cache.refresh=YYYY-MM-DD HH:MM:SS|today|#`, to re-cache (`C`) or list (`nc`) stale cache items. Stale cache items are those local artwork files that have been modified since the specified date. Remote and inaccessible artwork will not classed as stale and instead ignored (skipped).
 * Chg: `dbjson` will now default to `no` when the script is running on localhost, and `yes` when `xbmc.host` is a remote client.
