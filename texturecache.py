@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.1"
+    self.VERSION = "1.4.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -1902,8 +1902,8 @@ class MyJSONComms(object):
                                 ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
                 sys.exit(2)
 
-    if use_cache:
-      self.setDirectoryCacheItem(data, properties, path)
+      if use_cache:
+        self.setDirectoryCacheItem(data, properties, path)
 
     return data
 
@@ -3844,7 +3844,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       for file in unstackFiles(item["file"]):
         dir = os.path.dirname(item["file"])
         data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
-        files = data.get("result", []).get("files", [])
+        files = data.get("result", {}).get("files", [])
 
         if check_file and not [f for f in files if f["filetype"] == "file" and f.get("file", None) == file]:
           missing["missing file"] = False
@@ -4922,7 +4922,7 @@ def getAllFiles(keyFunction):
     gLogger.progress("Loading: %s..." % mediatype)
     data = jcomms.sendJSON(r, "libFiles")
 
-    for items in data.get("result", []):
+    for items in data.get("result", {}):
       if items != "limits":
         if mediatype in ["MovieSets","Addons","Genres"]:
           interval = 0
@@ -4936,7 +4936,7 @@ def getAllFiles(keyFunction):
           if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
           if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
 
-          for a in i.get("art", []):
+          for a in i.get("art", {}):
             files[keyFunction(i["art"][a])] = a
 
           for c in i.get("cast", []):
@@ -4965,7 +4965,7 @@ def getAllFiles(keyFunction):
       gLogger.progress("Loading: TVShows [%s]..." % tvshow["title"])
       tvshowid = tvshow["tvshowid"]
 
-      for a in tvshow.get("art", []):
+      for a in tvshow.get("art", {}):
         files[keyFunction(tvshow["art"][a])] = a
 
       for c in tvshow.get("cast", []):
@@ -4988,7 +4988,7 @@ def getAllFiles(keyFunction):
           seasonid = season["season"]
           gLogger.progress("Loading: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
 
-          for a in season.get("art", []):
+          for a in season.get("art", {}):
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
               SEASON_ALL = False
               (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(season["art"][a])
@@ -5006,7 +5006,7 @@ def getAllFiles(keyFunction):
           for episode in episodedata["result"]["episodes"]:
             episodeid = episode["episodeid"]
 
-            for a in episode.get("art", []):
+            for a in episode.get("art", {}):
               files[keyFunction(episode["art"][a])] = a
 
             for c in episode.get("cast", []):
@@ -5173,7 +5173,7 @@ def get_mangled_artwork(jcomms):
     gLogger.progress("Loading: %s..." % mediatype)
     data = jcomms.sendJSON(r, "libFiles")
 
-    for items in data.get("result", []):
+    for items in data.get("result", {}):
       if items != "limits":
         if mediatype == "set":
           interval = 0
@@ -5354,15 +5354,15 @@ def showStatus(idleTime=600):
              "params": { "booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo"] }}
   data = jcomms.sendJSON(REQUEST, "libSSaver")
   if "result" in data:
-    STATUS.append("Scanning Music: %s" % ("Yes" if data["result"].get("Library.IsScanningMusic",False) else "No"))
-    STATUS.append("Scanning Video: %s" % ("Yes" if data["result"].get("Library.IsScanningVideo",False) else "No"))
-    STATUS.append("ScreenSaver Active: %s" % ("Yes" if data["result"].get("System.ScreenSaverActive",False) else "No"))
+    STATUS.append("Scanning Music: %s" % ("Yes" if data["result"].get("Library.IsScanningMusic", False) else "No"))
+    STATUS.append("Scanning Video: %s" % ("Yes" if data["result"].get("Library.IsScanningVideo", False) else "No"))
+    STATUS.append("ScreenSaver Active: %s" % ("Yes" if data["result"].get("System.ScreenSaverActive", False) else "No"))
 
   property = "System.IdleTime(%s) " % idleTime
   REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
   data = jcomms.sendJSON(REQUEST, "libIdleTime")
   if "result" in data:
-    STATUS.append("System Idle > %ss: %s" % (idleTime, ("Yes" if data["result"].get(property,False) else "No")))
+    STATUS.append("System Idle > %ss: %s" % (idleTime, ("Yes" if data["result"].get(property, False) else "No")))
 
   STATUS.append("PVR Enabled: %s" % ("Yes" if gConfig.HAS_PVR else "No"))
 
