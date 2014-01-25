@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.3.9"
+    self.VERSION = "1.4.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS = "http://goo.gl/BjH6Lj"
@@ -278,21 +278,11 @@ class MyConfiguration(object):
     self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls)
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
-    self.QA_NFO_REFRESH = self.getValue(config, "qa.nfo.refresh", "")
-    if self.QA_NFO_REFRESH:
-      if self.QA_NFO_REFRESH.lower() == "today":
-        temp_date = datetime.date.today()
-      elif re.search("^[0-9]*$", self.QA_NFO_REFRESH):
-        temp_date = datetime.date.today() - datetime.timedelta(days=int(self.QA_NFO_REFRESH))
-      else:
-        temp_date = datetime.datetime.strptime(self.QA_NFO_REFRESH, "%Y-%m-%d %H:%M:%S")
-      self.qa_nfo_refresh_date = int(temp_date.strftime("%s"))
-      self.qa_nfo_refresh_date_fmt = temp_date.strftime("%Y-%m-%d %H:%M:%S")
-    else:
-      self.qa_nfo_refresh_date = None
-      self.qa_nfo_refresh_date_fmt = None
+    (self.QA_NFO_REFRESH, self.qa_nfo_refresh_date, self.qa_nfo_refresh_date_fmt) = self.getRelativeDateAndFormat(config, "qa.nfo.refresh", "")
 
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
+
+    (self.CACHE_REFRESH, self.cache_refresh_date, self.cache_refresh_date_fmt) = self.getRelativeDateAndFormat(config, "cache.refresh", "")
 
     yn = "yes" if self.getBoolean(config, "cache.extra", "no") else "no"
     self.CACHE_EXTRA_FANART = self.getBoolean(config, "cache.extrafanart", yn)
@@ -487,6 +477,23 @@ class MyConfiguration(object):
     for r in aPattern: t.append(r.pattern)
     return ", ".join(t)
 
+  def getRelativeDateAndFormat(self, config, key, default):
+    adate = self.getValue(config, key, default)
+    if adate:
+      if adate.lower() == "today":
+        temp_date = datetime.date.today()
+      elif re.search("^[0-9]*$", adate):
+        temp_date = datetime.date.today() - datetime.timedelta(days=int(adate))
+      else:
+        temp_date = datetime.datetime.strptime(adate, "%Y-%m-%d %H:%M:%S")
+      date_seconds = int(temp_date.strftime("%s"))
+      date_formatted = temp_date.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+      date_seconds = None
+      date_formatted = None
+
+    return (adate, date_seconds, date_formatted)
+
   def getQAFields(self, qatype, mediatype, stripModifier=True):
     if mediatype in ["tvshows", "seasons", "episodes"]:
       mediatype = "tvshows.%s" % mediatype[:-1]
@@ -605,6 +612,7 @@ class MyConfiguration(object):
     print("  cache.extrafanart = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_FANART))
     print("  cache.extrathumbs = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_THUMBS))
     print("  cache.videoextras = %s" % self.BooleanIsYesNo(self.CACHE_VIDEO_EXTRAS))
+    print("  cache.refresh = %s%s" % (self.NoneIsBlank(self.CACHE_REFRESH), " (%s)" % self.cache_refresh_date_fmt if self.cache_refresh_date_fmt else ""))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
     print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
@@ -1569,7 +1577,7 @@ class MyJSONComms(object):
           try:
             udata = data.decode("utf-8")
           except UnicodeDecodeError as e:
-            continue
+            udata = data
 
         try:
           START_PARSE_TIME = time.time()
@@ -2029,25 +2037,18 @@ class MyJSONComms(object):
 #        return "/image/%s" % urllib2.quote(filename, "")
       return None
 
+  # Get file details from a directory lookup, this prevents errors on XBMC when
+  # the file doesn't exist (unless the directory doesn't exist), and also allows the
+  # query results to be cached for use by subsequent file requests in the same directory.
   def getFileDetails(self, filename, properties = ["file", "lastmodified", "size"]):
-    REQUEST = {"method":"Files.GetFileDetails",
-               "params":{"file": filename,
-                         "properties": properties}}
-
-    data = self.sendJSON(REQUEST, "filedetails", checkResult=False)
+    data = self.getDirectoryList(os.path.dirname(filename), mediatype="files", properties=properties)
 
     if "result" in data:
-      details = data["result"].get("filedetails", None)
-      if details and "lastmodified" in details:
-        try:
-          details["lastmodified_timestamp"] = int(datetime.datetime.strptime(details["lastmodified"], self.config.qa_lastmodified_fmt).strftime("%s"))
-        except ValueError:
-          self.logger.err("ERROR: Invalid \"lastmodified\" date detected - try specifying @modifieddate.mdy=%s" %
-                          ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
-          sys.exit(2)
-      return details
-    else:
-      return None
+      files = data["result"].get("files", [])
+      for file in [x for x in files if x["filetype"] == "file" and x.get("file", None) == filename]:
+        return file
+
+    return None
 
   # Get title of item - usually during a notification. As this can be
   # an OnRemove notification, don't check for result as the item may have
@@ -2915,8 +2916,14 @@ class MyTotals(object):
 # don't complain (ie. speculative loading, eg. season-all.tbn)
 #
 class MyMediaItem(object):
+  # 0=Ignore/Skipped; 1=Missing, to be cached; 2=Stale, to be cached; 3=Queued for downloading
+  STATUS_IGNORE = 0
+  STATUS_MISSING = 1
+  STATUS_STALE = 2
+  STATUS_QUEUED = 3
+
   def __init__(self, mediaType, imageType, name, season, episode, filename, dbid, cachedurl, libraryid, missingOK):
-    self.status = 1 # 0=Ignore/Skipped, 1=To be cached, 2=Queued for downloading
+    self.status = MyMediaItem.STATUS_MISSING
     self.mtype = mediaType
     self.itype = imageType
     self.name = name
@@ -3205,6 +3212,18 @@ class MyUtility(object):
     except urllib2.URLError:
       return None
 
+  @staticmethod
+  def is_cache_item_stale(config, jcomms, mediaitem):
+    if config.cache_refresh_date == None: return False
+    if mediaitem.decoded_filename.startswith("http://"): return False
+
+    file = jcomms.getFileDetails(mediaitem.decoded_filename, properties=["file", "lastmodified"])
+
+    if file and "lastmodified_timestamp" in file:
+      return (file["lastmodified_timestamp"] >= config.cache_refresh_date)
+    else:
+      return False
+
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons
 # and Episodes into a single data structure.
@@ -3445,24 +3464,40 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     # to retrieve these items from the database.
     if dbrow:
       if force:
-        itemCount += 1
-        item.status = 1
-        item.dbid = dbrow["textureid"]
-        item.cachedurl = dbrow["cachedurl"]
+        if gConfig.cache_refresh_date:
+          if MyUtility.is_cache_item_stale(gConfig, jcomms, item):
+            item.status = MyMediaItem.STATUS_STALE
+          else:
+            item.status = MyMediaItem.STATUS_IGNORE
+        else:
+          item.status = MyMediaItem.STATUS_MISSING
+
+        if item.status != MyMediaItem.STATUS_IGNORE:
+          itemCount += 1
+          item.dbid = dbrow["textureid"]
+          item.cachedurl = dbrow["cachedurl"]
+        else:
+          TOTALS.bump("Skipped", item.itype)
       else:
-        item.status = 0
-        TOTALS.bump("Skipped", item.itype)
-        if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
-    # These items we are missing from the cache...
+        if nodownload and MyUtility.is_cache_item_stale(gConfig, jcomms, item):
+          item.status = MyMediaItem.STATUS_STALE
+          TOTALS.bump("Stale Item", item.itype)
+        else:
+          item.status = MyMediaItem.STATUS_IGNORE
+          TOTALS.bump("Skipped", item.itype)
+          if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
     else:
+      item.status = MyMediaItem.STATUS_MISSING
       itemCount += 1
-      item.status = 1
-      if not force:
-        if ITEMLIMIT == -1 or itemCount < ITEMLIMIT:
-          MSG = "Need to cache: [%-10s] for %s: %s\n" % (item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
-          gLogger.out(MSG)
-        elif itemCount == ITEMLIMIT:
-          gLogger.out("...and many more! (First %d items shown)\n" % ITEMLIMIT)
+
+    # These items we are missing from the cache, or are stale...
+    if not force and item.status != MyMediaItem.STATUS_IGNORE:
+      if ITEMLIMIT == -1 or itemCount < ITEMLIMIT:
+        reason = "Need to cache" if item.status == MyMediaItem.STATUS_MISSING else "Cache stale  "
+        MSG = "%s: [%-10s] for %s: %s\n" % (reason, item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
+        gLogger.out(MSG)
+      elif itemCount == ITEMLIMIT:
+        gLogger.out("...and many more! (First %d items shown)\n" % ITEMLIMIT)
 
   TOTALS.TimeEnd(mediatype, "Compare")
 
@@ -3472,7 +3507,8 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   if nodownload:
     TOTALS.addNotCached()
     for item in mediaitems:
-      if item.status == 1: TOTALS.bump("Not in Cache", item.itype)
+      if item.status == MyMediaItem.STATUS_MISSING:
+        TOTALS.bump("Not in Cache", item.itype)
 
   gLogger.progress("")
 
@@ -3518,7 +3554,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     c = sc = mc = 0
     for ui in sorted(unique_items):
       for item in mediaitems:
-        if item.status == 1 and item.itype == ui:
+        if item.status in [MyMediaItem.STATUS_MISSING, MyMediaItem.STATUS_STALE] and item.itype == ui:
           c += 1
 
           isSingle = False
@@ -3528,7 +3564,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
                 sc += 1
                 if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
                 single_work_queue.put(item)
-                item.status = 2
+                item.status = MyMediaItem.QUEUED
                 isSingle = True
                 break
 
@@ -3536,7 +3572,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
             mc += 1
             if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: %s" % item)
             multiple_work_queue.put(item)
-            item.status = 2
+            item.status = MyMediaItem.STATUS_QUEUED
 
           gLogger.progress("Queueing work item: Single thread %d, Multi thread %d" % (sc, mc), every=50, finalItem=(c==itemCount))
 
@@ -5839,12 +5875,17 @@ def checkConfig(option):
   # If auto detection enabled, when API level insufficient to read Textures DB
   # using JSON, fall back to SQLite3 calls
   if needDb and gConfig.DBJSON == "auto":
+    # Able to use JSON for Texture db access, no need to check DB availability
     if gConfig.JSON_HAS_TEXTUREDB:
-      # If able to use JSON for Texture db access, no need to check DB availability
-      gConfig.USEJSONDB = True
+      if gConfig.XBMC_HOST != "localhost":
+        gConfig.USEJSONDB = True
+        gLogger.log("JSON Texture DB API available and will be used to access the Texture DB")
+      else:
+        gConfig.USEJSONDB = False
+        gLogger.log("JSON Texture DB API available, but running on localhost - using SQLite to conserve memory")
     else:
       gConfig.USEJSONDB = False
-      gLogger.log("JSON Texture DB API not supported - will use SQLite to access Texture DB")
+      gLogger.log("JSON Texture DB API not supported - will use SQLite to access the Texture DB")
 
   # If JSON Textures API is to be used...
   if gConfig.USEJSONDB:

@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.4.0 (25/01/2013)
+* Add: For use with `C` and `nc` options, `@cache.refresh=YYYY-MM-DD HH:MM:SS|today|#`, to re-cache (`C`) or list (`nc`) stale cache items. Stale cache items are those local artwork files that have been modified since the specified date. Remote and inaccessible artwork will not classed as stale and instead ignored (skipped).
+* Chg: `dbjson` will now default to `no` when the script is running on localhost, and `yes` when `xbmc.host` is a remote client.
+
 ##Version 1.3.9 (23/01/2013)
 * Chg: Display current mute state (muted/unmuted) and volume level when no value passed to `volume` option
 
@@ -13,7 +17,7 @@
 * Chg: Support relative date periods for `qa.nfo.refresh`, eg. `qa.nfo.refresh=7` would be 7 days prior to today (from 00:00:00). `0` is therefore equivalent to `today`. View the computed date/time in `config`.
 
 ##Version 1.3.5 (15/01/2013)
-* Add: `qa.nfo.refresh="YYYY-MM-DD HH:MM:SS"`, or `qa.nfo.refresh=today` (time == 00:00:00). During `qax`, any movie/episode whose NFO has a modification date more recent than the specified date/time, will be re-scraped. Prior to JSON API v6.13.2, the lastmodified date [is ambiguous](http://trac.xbmc.org/ticket/14836) so prior to v6.13.2 it may be necessary to specify `@modifieddate.mdy=yes` if US-format (mm/dd/yyyy) last modified dates are being used - default is `no`, for dd/mm/yyyy dates.
+* Add: `@qa.nfo.refresh="YYYY-MM-DD HH:MM:SS"`, or `qa.nfo.refresh=today` (time == 00:00:00). During `qax`, any movie/episode whose NFO has a modification date more recent than the specified date/time, will be re-scraped. Prior to JSON API v6.13.2, the lastmodified date [is ambiguous](http://trac.xbmc.org/ticket/14836) so prior to v6.13.2 it may be necessary to specify `@modifieddate.mdy=yes` if US-format (mm/dd/yyyy) last modified dates are being used - default is `no`, for dd/mm/yyyy dates.
 * Add: `volume` option - set volume level `0`-`100`, `mute`, `unmute` eg. `volume mute`
 * Chg: Clearly differentiate between QA failures (which will prompt a refresh during `qax`) and warnings (which won't prompt a refresh)
 
