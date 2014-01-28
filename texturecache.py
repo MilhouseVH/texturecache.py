@@ -57,10 +57,11 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.2"
+    self.VERSION = "1.4.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
-    self.ANALYTICS = "http://goo.gl/BjH6Lj"
+    self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
+    self.ANALYTICS_SPAM = "http://goo.gl/5F5QjX"
 
     self.DEBUG = True if os.environ.get("PYTHONDEBUG", "n").lower()=="y" else False
 
@@ -168,6 +169,9 @@ class MyConfiguration(object):
     self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", UD_SYS_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
+
+    # Read library and textures data in chunks to minimise server/client memory usage
+    self.CHUNKED = self.getBoolean(config, "chunked", "no")
 
     self.DBJSON = self.getValue(config, "dbjson", "auto")
     self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
@@ -574,6 +578,7 @@ class MyConfiguration(object):
     print("  rpc.port = %s" % self.RPC_PORT)
     print("  rpc.retry = %s" % self.RPC_RETRY)
     print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
+    print("  chunked = %s" % self.BooleanIsYesNo(self.CHUNKED))
     print("  modifieddate.mdy = %s" % self.BooleanIsYesNo(self.MDATE_MDY))
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
     print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
@@ -2464,7 +2469,100 @@ class MyJSONComms(object):
           self.addProperties(REQUEST, "fanart")
           self.addProperties(REQUEST, "thumbnail")
 
-    return (SECTION, TITLE, IDENTIFIER, self.sendJSON(REQUEST, "lib%s" % mediatype.capitalize()))
+    return (SECTION, TITLE, IDENTIFIER,
+            self.getDataProxy(mediatype, REQUEST, trim_cast_thumbs=(action != "dump")))
+
+  # Load data chunked, or in one single query.
+  # TV Shows, seasons and episodes are already "chunked" by definition.
+  # If specified, remove cast members without thumbnails to reduce memory footprint.
+  def getDataProxy(self, mediatype, request, trim_cast_thumbs=True, idname=None):
+    if not idname:
+      idname = "lib%s" % mediatype.capitalize()
+
+    mediatype = mediatype.lower()
+
+    if self.config.CHUNKED:
+      silent = (mediatype in ["tvshows", "seasons", "episodes"])
+      data = self.chunkedLoad(mediatype, request, trim_cast_thumbs, idname=idname, silent=silent)
+    else:
+      data = self.sendJSON(request, idname)
+      if "result" in data and trim_cast_thumbs and "cast" in request.get("params",{}).get("properties",[]):
+        for section in data["result"]:
+          if section != "limits":
+            for item in data["result"][section]:
+              self.removecastwithoutthumbs(item)
+
+    return data
+
+  # Load movies in chunks using limits.
+  # Return resulting list of all movies.
+  def chunkedLoad(self, mediatype, request, trim_cast_thumbs=True, idname=None, silent=False):
+    if not idname:
+      idname = "libChunked%s" % mediatype.capitalize()
+
+    CHUNK_SIZE = 400
+    if mediatype in ["movies", "tags", "sets-members"]:
+      if "cast" in request.get("params",{}).get("properties",[]):
+        CHUNK_SIZE = 35
+
+    chunk = 0
+    chunk_start = 0
+    total_items = 1
+    chunks = 0
+    section = None
+
+    results = []
+
+    while chunk_start < total_items:
+      chunk += 1
+      if not silent:
+        # Don't yet know how many chunks there will be
+        if chunk_start != 0:
+          self.logger.progress("Loading %s: Chunk %d of %d..." % (mediatype.capitalize(), chunk, chunks))
+        else:
+          self.logger.progress("Loading %s: Chunk %d..." % (mediatype.capitalize(), chunk))
+
+      request["params"]["limits"] = {"start": chunk_start, "end": chunk_start + CHUNK_SIZE}
+      data = self.sendJSON(request, idname)
+      if "result" not in data: break
+
+      #Get total_items and section name once first chunk is retrieved
+      if chunk_start == 0:
+        if "limits" not in data["result"]:
+          break
+
+        total_items = data["result"]["limits"]["total"]
+        chunks = -(-total_items // CHUNK_SIZE)
+        self.logger.log("Chunk processing: found %d %s, retrieving in chunks of %d" % (total_items, mediatype, CHUNK_SIZE))
+
+        for section in data.get("result", {}):
+          if section != "limits":
+            break
+        else:
+          break
+
+      # Add section to accumulated results
+      if section in data["result"]:
+        # Remove those cast members without thumbnails
+        if trim_cast_thumbs and "cast" in request.get("params",{}).get("properties",[]):
+          for item in data["result"][section]:
+            self.removecastwithoutthumbs(item)
+        results.extend(data["result"][section])
+
+      chunk_start = (chunk * CHUNK_SIZE)
+
+    response = {"result": {"limits": {"start": 0, "end": len(results), "total": len(results)}}}
+    if section: response["result"][section] = results
+    return response
+
+  # Create a new cast list ignoring any cast member without a thumbnail.
+  # Replace original cast list with the new cast list.
+  def removecastwithoutthumbs(self, mediaitem):
+    if "cast" in mediaitem:
+      cast = []
+      for i in mediaitem["cast"]:
+        if "thumbnail" in i: cast.append(i)
+      mediaitem["cast"] = cast
 
   # Return a list of all pictures (jpg/png/tbn) from any "pictures" source
   def getPictures(self, addPreviews=False, addPictures=True):
@@ -2509,13 +2607,31 @@ class MyJSONComms(object):
 
     PATTERN = re.compile(r'''((?:[^ "']|"[^"]*"|'[^']*')+)''')
 
+    stack = []
     data = []
     fields = []
     condition = None
+    group = False
     f = 0
     for token in PATTERN.split(filter)[1::2]:
+      if token.startswith("("):
+        group = False
+        token = token[1:]
+      elif token.endswith(")"):
+        group = True
+        token = token[:-1]
+
       if token in ["and", "or"]:
-        condition = token
+        if condition and condition != token:
+          if group:
+            if token in ["and", "or"]:
+              if stack == []:
+                stack.append({token: [{condition: data}]})
+              else:
+                s = stack.pop()
+                stack.append({token: [s]})
+          data = []
+        condition = token if not group else None
         continue
 
       fields.append(token)
@@ -2538,9 +2654,9 @@ class MyJSONComms(object):
         elif fields[1] == "<":
           fields[1] = "lessthan"
         elif fields[1] == ">=":
-          fields[1] = "=greaterthan"
+          fields[1] = "greaterthanequal"
         elif fields[1] == "<=":
-          fields[1] = "=lessthan"
+          fields[1] = "lessthanequal"
         elif fields[1].lower() == "like":
           if re.match("^%.*%", fields[2]):
             fields[1] = "contains"
@@ -2553,19 +2669,35 @@ class MyJSONComms(object):
           fields[2] = fields[2].replace("%","")
         else:
           fields[1] = "is"
+          pass
 
-        if fields[1].startswith("="):
+        if fields[1].endswith("thanequal"):
           data.append({"or": [{"field": fields[0], "operator": "is", "value": fields[2]},
-                              {"field": fields[0], "operator": fields[1][1:], "value": fields[2]}]})
+                              {"field": fields[0], "operator": fields[1][:-5], "value": fields[2]}]})
         else:
           data.append({"field": fields[0], "operator": fields[1], "value": fields[2]})
+          if group:
+            if stack == []:
+              stack.append({condition: data})
+            else:
+              s = stack.pop()
+              c1 = "or" if "or" in s else "and"
+              c2 = "or" if "or" in s[c1][0] else "and"
+              if condition:
+                s[c1].append({condition: data})
+              else:
+                s[c1].extend(data)
+              stack.append(s)
+            data = []
 
         fields = []
         f = 0
 
-    if data:
+    if stack:
+      return stack[0]
+    elif data:
       if condition:
-        return { condition: data }
+        return {condition: data}
       else:
         return data[0]
     else:
@@ -2917,13 +3049,14 @@ class MyTotals(object):
 #
 class MyMediaItem(object):
   # 0=Ignore/Skipped; 1=Missing, to be cached; 2=Stale, to be cached; 3=Queued for downloading
-  STATUS_IGNORE = 0
-  STATUS_MISSING = 1
-  STATUS_STALE = 2
-  STATUS_QUEUED = 3
+  STATUS_UNKNOWN = 0
+  STATUS_IGNORE = 1
+  STATUS_MISSING = 2
+  STATUS_STALE = 3
+  STATUS_QUEUED = 4
 
   def __init__(self, mediaType, imageType, name, season, episode, filename, dbid, cachedurl, libraryid, missingOK):
-    self.status = MyMediaItem.STATUS_MISSING
+    self.status = MyMediaItem.STATUS_UNKNOWN
     self.mtype = mediaType
     self.itype = imageType
     self.name = name
@@ -3264,9 +3397,11 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   jcomms = MyJSONComms(gConfig, gLogger)
   database = MyDB(gConfig, gLogger)
 
-  if mediatype == "tvshows": TOTALS.addSeasonAll()
-
-  gLogger.progress("Loading %s..." % mediatype)
+  if mediatype == "tvshows":
+    TOTALS.addSeasonAll()
+    gLogger.progress("Loading TV Shows...")
+  else:
+    gLogger.progress("Loading %s..." % mediatype.capitalize())
 
   TOTALS.TimeStart(mediatype, "Load")
 
@@ -3312,7 +3447,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   # Add movie file members to sets when dumping
   if action == "dump" and mediatype == "sets" and gConfig.ADD_SET_MEMBERS and data:
-    gLogger.progress("Loading movie set members...")
+    gLogger.progress("Loading Sets members...")
     (s, t, i, fdata) = jcomms.getData(action, "sets-members", filter, extraFields, lastRun=lastRun, secondaryFields=None)
     if fdata and "result" in fdata and s in fdata["result"]:
       set_files = {}
@@ -3345,7 +3480,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   if mediatype == "tvshows":
     for tvshow in data:
       title = tvshow["title"]
-      gLogger.progress("Loading TV Show: [%s]..." % title)
+      gLogger.progress("Loading TV Show: %s..." % title)
       (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun=lastRun)
       if not "result" in data2: return
       limits = data2["result"]["limits"]
@@ -3353,7 +3488,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
-        gLogger.progress("Loading TV Show: [%s, Season %d]..." % (title, seasonid))
+        gLogger.progress("Loading TV Show: %s, Season %d..." % (title, seasonid))
         (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun=lastRun, secondaryFields=secondaryFields)
         if not "result" in data3: return
         limits = data3["result"]["limits"]
@@ -3439,59 +3574,23 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   # Don't need this data anymore, make it available for garbage collection
   del data, imagecache
 
-  TOTALS.TimeStart(mediatype, "Compare")
+  # Match media library items with any cached artwork
+  matchTextures(mediatype, mediaitems, jcomms, database, force, nodownload)
 
-  gLogger.progress("Loading database items...")
-  dbfiles = {}
-  with database:
-    for r in database.getRows(allfields=False):
-      dbfiles[r["url"]] = r
+  if force:
+    ITEMLIMIT = 0
+  elif nodownload:
+    ITEMLIMIT = -1
+  else:
+    ITEMLIMIT = 100
 
-  gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
-
-  gLogger.progress("Matching database items...")
-
-  ITEMLIMIT = -1 if nodownload else 100
-
+  # Count number of items that need to be downloaded, and
+  # output details of items that are stale or missing from the cache (unless force,
+  # in which case everything is being downloaded so don't output anything!)
   itemCount = 0
   for item in mediaitems:
-    if item.mtype == "tvshows" and item.season == "Season All": TOTALS.bump("Season-all", item.itype)
-
-    dbrow = dbfiles.get(item.decoded_filename, None)
-
-    # Don't need to cache file if it's already in the cache, unless forced...
-    # Assign the texture cache database id and cachedurl so that removal will avoid having
-    # to retrieve these items from the database.
-    if dbrow:
-      if force:
-        if gConfig.cache_refresh_date:
-          if MyUtility.is_cache_item_stale(gConfig, jcomms, item):
-            item.status = MyMediaItem.STATUS_STALE
-          else:
-            item.status = MyMediaItem.STATUS_IGNORE
-        else:
-          item.status = MyMediaItem.STATUS_MISSING
-
-        if item.status != MyMediaItem.STATUS_IGNORE:
-          itemCount += 1
-          item.dbid = dbrow["textureid"]
-          item.cachedurl = dbrow["cachedurl"]
-        else:
-          TOTALS.bump("Skipped", item.itype)
-      else:
-        if nodownload and MyUtility.is_cache_item_stale(gConfig, jcomms, item):
-          item.status = MyMediaItem.STATUS_STALE
-          TOTALS.bump("Stale Item", item.itype)
-        else:
-          item.status = MyMediaItem.STATUS_IGNORE
-          TOTALS.bump("Skipped", item.itype)
-          if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
-    else:
-      item.status = MyMediaItem.STATUS_MISSING
+    if item.status in [MyMediaItem.STATUS_MISSING, MyMediaItem.STATUS_STALE]:
       itemCount += 1
-
-    # These items we are missing from the cache, or are stale...
-    if not force and item.status != MyMediaItem.STATUS_IGNORE:
       if ITEMLIMIT == -1 or itemCount < ITEMLIMIT:
         reason = "Need to cache" if item.status == MyMediaItem.STATUS_MISSING else "Cache stale  "
         MSG = "%s: [%-10s] for %s: %s\n" % (reason, item.itype.center(10), re.sub("(.*)s$", "\\1", item.mtype), item.getFullName())
@@ -3499,137 +3598,265 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       elif itemCount == ITEMLIMIT:
         gLogger.out("...and many more! (First %d items shown)\n" % ITEMLIMIT)
 
-  TOTALS.TimeEnd(mediatype, "Compare")
-
-  # Don't need this data anymore, make it available for garbage collection
-  del dbfiles
-
   if nodownload:
     TOTALS.addNotCached()
     for item in mediaitems:
       if item.status == MyMediaItem.STATUS_MISSING:
         TOTALS.bump("Not in Cache", item.itype)
 
-  gLogger.progress("")
+  # Don't proceed beyond this point unless there is something to download...
+  if itemCount == 0 or nodownload: return
 
-  if itemCount > 0 and not nodownload:
-    single_work_queue = Queue.Queue()
-    multiple_work_queue = Queue.Queue()
-    error_queue = Queue.Queue()
+  # Queue up the items to be downloaded...
+  single_work_queue = Queue.Queue()
+  multiple_work_queue = Queue.Queue()
+  error_queue = Queue.Queue()
 
-    gLogger.out("\n")
+  gLogger.out("\n")
 
-    # Identify unique itypes, so we can group items in the queue
-    # This is crucial to working out when the first/last item is loaded
-    # in order to calculate accurate elapsed times by itype
-    unique_items = {}
+  # Identify unique itypes, so we can group items in the queue
+  # This is crucial to working out when the first/last item is loaded
+  # in order to calculate accurate elapsed times by itype
+  unique_items = {}
+  for item in mediaitems:
+    if not item.itype in unique_items:
+      unique_items[item.itype] = True
+
+  if force and gConfig.DOWNLOAD_PREDELETE:
+    TOTALS.TimeStart(mediatype, "PreDelete")
+    TOTALS.init()
+    dbitems = 0
     for item in mediaitems:
-      if not item.itype in unique_items:
-        unique_items[item.itype] = True
+      if item.dbid != 0:
+        dbitems += 1
+    dbitem = 0
+    with database:
+      for ui in sorted(unique_items):
+        for item in mediaitems:
+          if item.dbid != 0 and item.itype == ui:
+            dbitem += 1
+            gLogger.progress("Pre-deleting cached items %d of %d... rowid %d, cachedurl %s" % (dbitem, dbitems, item.dbid, item.cachedurl))
+            TOTALS.start(item.mtype, item.itype)
+            database.deleteItem(item.dbid, item.cachedurl)
+            TOTALS.bump("Deleted", item.itype)
+            TOTALS.finish(item.mtype, item.itype)
+            item.dbid = 0
+            item.cachedurl = ""
+    TOTALS.stop()
+    TOTALS.TimeEnd(mediatype, "PreDelete")
+    gLogger.progress("")
 
-    if force and gConfig.DOWNLOAD_PREDELETE:
-      TOTALS.TimeStart(mediatype, "PreDelete")
-      TOTALS.init()
-      dbitems = 0
-      for item in mediaitems:
-        if item.dbid != 0:
-          dbitems += 1
-      dbitem = 0
-      with database:
-        for ui in sorted(unique_items):
-          for item in mediaitems:
-            if item.dbid != 0 and item.itype == ui:
-              dbitem += 1
-              gLogger.progress("Pre-deleting cached items %d of %d... rowid %d, cachedurl %s" % (dbitem, dbitems, item.dbid, item.cachedurl))
-              TOTALS.start(item.mtype, item.itype)
-              database.deleteItem(item.dbid, item.cachedurl)
-              TOTALS.bump("Deleted", item.itype)
-              TOTALS.finish(item.mtype, item.itype)
-              item.dbid = 0
-              item.cachedurl = ""
-      TOTALS.stop()
-      TOTALS.TimeEnd(mediatype, "PreDelete")
-      gLogger.progress("")
+  c = sc = mc = 0
+  for ui in sorted(unique_items):
+    for item in mediaitems:
+      if item.status in [MyMediaItem.STATUS_MISSING, MyMediaItem.STATUS_STALE] and item.itype == ui:
+        c += 1
 
-    c = sc = mc = 0
-    for ui in sorted(unique_items):
-      for item in mediaitems:
-        if item.status in [MyMediaItem.STATUS_MISSING, MyMediaItem.STATUS_STALE] and item.itype == ui:
-          c += 1
+        isSingle = False
+        if gConfig.SINGLETHREAD_URLS:
+          for site in gConfig.SINGLETHREAD_URLS:
+            if site.search(item.decoded_filename):
+              sc += 1
+              if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
+              single_work_queue.put(item)
+              item.status = MyMediaItem.STATUS_QUEUED
+              isSingle = True
+              break
 
-          isSingle = False
-          if gConfig.SINGLETHREAD_URLS:
-            for site in gConfig.SINGLETHREAD_URLS:
-              if site.search(item.decoded_filename):
-                sc += 1
-                if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: single [%s], %s" % (site.pattern, item))
-                single_work_queue.put(item)
-                item.status = MyMediaItem.STATUS_QUEUED
-                isSingle = True
-                break
+        if not isSingle:
+          mc += 1
+          if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: %s" % item)
+          multiple_work_queue.put(item)
+          item.status = MyMediaItem.STATUS_QUEUED
 
-          if not isSingle:
-            mc += 1
-            if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("QUEUE ITEM: %s" % item)
-            multiple_work_queue.put(item)
-            item.status = MyMediaItem.STATUS_QUEUED
+        gLogger.progress("Queueing work item: Single thread %d, Multi thread %d" % (sc, mc), every=50, finalItem=(c==itemCount))
 
-          gLogger.progress("Queueing work item: Single thread %d, Multi thread %d" % (sc, mc), every=50, finalItem=(c==itemCount))
+  # Don't need this data anymore, make it available for garbage collection
+  del mediaitems
 
-    # Don't need this data anymore, make it available for garbage collection
-    del mediaitems
+  TOTALS.TimeStart(mediatype, "Download")
 
-    TOTALS.TimeStart(mediatype, "Download")
+  THREADS = []
 
-    THREADS = []
+  if not single_work_queue.empty():
+    gLogger.log("Creating 1 download thread for single access sites")
+    t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount,
+                      gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
+    THREADS.append(t)
+    t.setDaemon(True)
 
-    if not single_work_queue.empty():
-      gLogger.log("Creating 1 download thread for single access sites")
-      t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount,
+  if not multiple_work_queue.empty():
+    tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
+    THREADCOUNT = tCount if tCount <= mc else mc
+    gLogger.log("Creating %d download thread(s) for multi-access sites" % THREADCOUNT)
+    for i in range(THREADCOUNT):
+      t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount,
                         gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
       THREADS.append(t)
       t.setDaemon(True)
 
-    if not multiple_work_queue.empty():
-      tCount = gConfig.DOWNLOAD_THREADS["download.threads.%s" % mediatype]
-      THREADCOUNT = tCount if tCount <= mc else mc
-      gLogger.log("Creating %d download thread(s) for multi-access sites" % THREADCOUNT)
-      for i in range(THREADCOUNT):
-        t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount,
-                          gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
-        THREADS.append(t)
-        t.setDaemon(True)
+  # Start the threads...
+  for t in THREADS: t.start()
 
-    # Start the threads...
-    for t in THREADS: t.start()
+  try:
+    ALIVE = True
+    while ALIVE:
+      ALIVE = False
+      for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
+      if ALIVE: time.sleep(1.0)
+  except (KeyboardInterrupt, SystemExit):
+    stopped.set()
+    gLogger.progress("Please wait while threads terminate...")
+    ALIVE = True
+    while ALIVE:
+      ALIVE = False
+      for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
+      if ALIVE: time.sleep(0.1)
 
-    try:
-      ALIVE = True
-      while ALIVE:
-        ALIVE = False
-        for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
-        if ALIVE: time.sleep(1.0)
-    except (KeyboardInterrupt, SystemExit):
-      stopped.set()
-      gLogger.progress("Please wait while threads terminate...")
-      ALIVE = True
-      while ALIVE:
-        ALIVE = False
-        for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
-        if ALIVE: time.sleep(0.1)
+  TOTALS.TimeEnd(mediatype, "Download")
 
-    TOTALS.TimeEnd(mediatype, "Download")
+  gLogger.progress("", newLine=True, noBlank=True)
 
-    gLogger.progress("", newLine=True, noBlank=True)
+  if not error_queue.empty():
+    gLogger.out("\nThe following items could not be downloaded:\n\n")
+    while not error_queue.empty():
+      item = error_queue.get()
+      name = item.getFullName()[:40]
+      gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
+      gLogger.log("ERROR ITEM: %s" % item)
+      error_queue.task_done()
 
-    if not error_queue.empty():
-      gLogger.out("\nThe following items could not be downloaded:\n\n")
-      while not error_queue.empty():
-        item = error_queue.get()
-        name = item.getFullName()[:40]
-        gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
-        gLogger.log("ERROR ITEM: %s" % item)
-        error_queue.task_done()
+def matchTextures(mediatype, mediaitems, jcomms, database, force, nodownload):
+
+  TOTALS.TimeStart(mediatype, "Compare")
+
+  if gConfig.CHUNKED:
+    matchTextures_chunked(mediatype, mediaitems, jcomms, database, force, nodownload)
+  else:
+    matchTextures_fast(mediatype, mediaitems, jcomms, database, force, nodownload)
+
+  TOTALS.TimeEnd(mediatype, "Compare")
+
+  return
+
+def matchTextures_fast(mediatype, mediaitems, jcomms, database, force, nodownload):
+  gLogger.progress("Loading Texture DB...")
+
+  dbfiles = {}
+  with database:
+    for r in database.getRows(allfields=False):
+      dbfiles[r["url"]] = r
+
+  gLogger.log("Loaded %d items from texture cache database" % len(dbfiles))
+
+  gLogger.progress("Matching Library and Texture items...")
+
+  itemCount = 0
+
+  for item in mediaitems:
+    dbrow = dbfiles.get(item.decoded_filename, None)
+    matchTextures_item_row(mediatype, jcomms, item, dbrow, force, nodownload)
+
+  # Don't need this data anymore, make it available for garbage collection
+  del dbfiles
+
+  gLogger.progress("")
+
+  return
+
+def matchTextures_chunked(mediatype, mediaitems, jcomms, database, force, nodownload):
+  ITEMLIMIT = -1 if nodownload else 100
+
+  unmatched = len(mediaitems)
+  matched = 0
+  skipped = 0
+
+  # Build a url based hash of indexes so that we can quickly access mediaitems
+  # by index for a given url
+  url_to_index = {}
+  for inum, item in enumerate(mediaitems):
+    url_to_index[item.decoded_filename] = inum
+
+  TEXTUREDB = ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"]
+
+  dbindex = 0
+  dbmax = 0
+
+  with database:
+    for fnum, folder in enumerate(TEXTUREDB):
+
+      # Once all library items have been matched, no need to continue querying textures db
+      if unmatched == 0: break
+
+      gLogger.progress("Loading Texture DB: Chunk %2d of %d [unmatched %d: matched %d, skipped %d] (%d of %d)" %
+        (fnum+1, len(TEXTUREDB), unmatched, matched, skipped, dbindex, dbmax))
+
+      dbfiles = []
+      for r in database.getRows("WHERE cachedurl LIKE '%s/%%'" % folder, allfields=False):
+        dbfiles.append(r)
+
+      dbindex = 0
+      dbmax = len(dbfiles)
+
+      for dbrow in dbfiles:
+        dbindex += 1
+
+        gLogger.progress("Loading Texture DB: Chunk %2d of %d [unmatched %d: matched %d, skipped %d] (%d of %d)" %
+          (fnum+1, len(TEXTUREDB), unmatched, matched, skipped, dbindex, dbmax), every=50, finalItem=(dbindex==dbmax))
+
+        inum = url_to_index.get(dbrow["url"], None)
+        if inum != None:
+          item = mediaitems[inum]
+          if item.status == MyMediaItem.STATUS_UNKNOWN:
+            unmatched -= 1
+            matchTextures_item_row(mediatype, jcomms, item, dbrow, force, nodownload)
+            if item.status == MyMediaItem.STATUS_IGNORE:
+              skipped += 1
+            else:
+              matched += 1
+
+  # Any media library items that haven't been matched must also be processed
+  for item in mediaitems:
+    if item.status == MyMediaItem.STATUS_UNKNOWN:
+      matchTextures_item_row(mediatype, jcomms, item, None, force, nodownload)
+
+  gLogger.progress("")
+
+  return
+
+def matchTextures_item_row(mediatype, jcomms, item, dbrow, force, nodownload):
+  if item.mtype == "tvshows" and item.season == "Season All": TOTALS.bump("Season-all", item.itype)
+
+  # Don't need to cache file if it's already in the cache, unless forced...
+  # Assign the texture cache database id and cachedurl so that removal will avoid having
+  # to retrieve these items from the database.
+  if dbrow:
+    if force:
+      if gConfig.cache_refresh_date:
+        if MyUtility.is_cache_item_stale(gConfig, jcomms, item):
+          item.status = MyMediaItem.STATUS_STALE
+        else:
+          item.status = MyMediaItem.STATUS_IGNORE
+      else:
+        item.status = MyMediaItem.STATUS_MISSING
+
+      if item.status != MyMediaItem.STATUS_IGNORE:
+        item.dbid = dbrow["textureid"]
+        item.cachedurl = dbrow["cachedurl"]
+      else:
+        TOTALS.bump("Skipped", item.itype)
+    else:
+      if nodownload and MyUtility.is_cache_item_stale(gConfig, jcomms, item):
+        item.status = MyMediaItem.STATUS_STALE
+        TOTALS.bump("Stale Item", item.itype)
+      else:
+        item.status = MyMediaItem.STATUS_IGNORE
+        TOTALS.bump("Skipped", item.itype)
+        if gLogger.VERBOSE and gLogger.LOGGING: gLogger.log("ITEM SKIPPED: %s" % item)
+  else:
+    item.status = MyMediaItem.STATUS_MISSING
+
+  return
 
 #
 # Iterate over all the elements, seeking out artwork to be stored in a list.
@@ -3664,7 +3891,7 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
       season = item.get("artist", None) if title_name != "artist" else None
       episode= item.get("album", None) if title_name != "album" else None
 
-    gLogger.progress("Parsing [%s]..." % longName, every = 25)
+    gLogger.progress("Parsing %s: %s..." % (mediatype.capitalize(), longName), every = 25)
 
     for a in ["fanart", "poster", "thumb", "thumbnail"]:
       if a in item and evaluateURL(a, item[a], imagecache):
@@ -3792,7 +4019,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       season = None
       episode = None
 
-    gLogger.progress("Parsing [%s]..." % name, every = 25)
+    gLogger.progress("Parsing %s: %s..." % (mediatype.capitalize(), name), every = 25)
 
     missing = {}
 
@@ -3934,7 +4161,7 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
       season = None
       episode = None
 
-    gLogger.progress("Parsing [%s]..." % name, every = 25)
+    gLogger.progress("Parsing %s: %s..." % (mediatype.capitalize(), name), every = 25)
 
     # Remove matched file from fileList - what files remain at the end
     # will be reported to the user
@@ -3994,7 +4221,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
       season = None
       episode = None
 
-    gLogger.progress("Parsing [%s]..." % name, every = 25)
+    gLogger.progress("Parsing %s: %s..." % (mediatype.capitalize(), name), every = 25)
 
     RESULTS = []
 
@@ -4224,7 +4451,7 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
       episode_year = item.get("year", 0)
       longName = shortName = title
 
-    gLogger.progress("Parsing [%s]..." % longName, every = 25)
+    gLogger.progress("Parsing %s: %s..." % (mediatype.capitalize(), longName), every = 25)
 
     playcount = item.get("playcount", 0)
     lastplayed = item.get("lastplayed", "")
@@ -4275,7 +4502,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
       episode_year = item.get("year", 0)
       longName = shortName = title
 
-    gLogger.progress("Parsing [%s]..." % longName, every = 25)
+    gLogger.progress("Parsing %s: %s..." % (mediatype.capitalize(), longName), every = 25)
 
     playcount = item.get("playcount", 0)
     lastplayed = item.get("lastplayed", "")
@@ -4760,12 +4987,56 @@ def orphanCheck(removeOrphans=False):
                   % (format(len(orphanedfiles),",d"), format(int(FSIZE/1024), ",d")))
 
 def pruneCache(remove_nonlibrary_artwork=False):
-  dbfiles = {}
+
   localfiles = []
   libraryFiles = getAllFiles(keyFunction=getKeyFromFilename)
 
-  gLogger.progress("Loading texture cache...")
+  re_search = []
+  # addon
+  re_search.append(re.compile(r"^.*[/\\]\.xbmc[/\\]addons[/\\].*"))
+  # mirror
+  re_search.append(re.compile(r"^http://mirrors.xbmc.org/addons/.*"))
+
   database = MyDB(gConfig, gLogger)
+
+  if gConfig.CHUNKED:
+    pruneCache_chunked(database, libraryFiles, localfiles, re_search)
+  else:
+    pruneCache_fast(database, libraryFiles, localfiles, re_search)
+
+  # Prune, with optional remove...
+  if localfiles != []:
+    if remove_nonlibrary_artwork:
+      gLogger.out("Pruning cached images from texture cache...", newLine=True)
+    else:
+      gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
+    gLogger.out("", newLine=True)
+
+  FSIZE = 0
+  GOTSIZE = os.path.exists(gConfig.getFilePath())
+  localfiles.sort(key=lambda row: row["url"])
+
+  with database:
+    for row in localfiles:
+      database.dumpRow(row)
+      if GOTSIZE and os.path.exists(gConfig.getFilePath(row["cachedurl"])):
+        FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
+      if remove_nonlibrary_artwork:
+        database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
+
+  if GOTSIZE:
+    gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
+                  % (format(len(localfiles), ",d"),
+                     format(int(FSIZE/1024), ",d")))
+  else:
+    gLogger.out("\nSummary: %s files\n\n" \
+                  % (format(len(localfiles), ",d")))
+
+
+def pruneCache_fast(database, libraryFiles, localfiles, re_search):
+  gLogger.progress("Loading texture cache...")
+
+  dbfiles = {}
 
   with database:
     for r in database.getRows(allfields=True):
@@ -4777,62 +5048,67 @@ def pruneCache(remove_nonlibrary_artwork=False):
 
   gLogger.progress("Processing texture cache...")
 
-  re_search_addon = re.compile(r"^.*[/\\]\.xbmc[/\\]addons[/\\].*")
-  re_search_mirror = re.compile(r"^http://mirrors.xbmc.org/addons/.*")
-
   for rownum, hash in enumerate(dbfiles):
     gLogger.progress("Processing texture cache...%d%%" % (100 * rownum / totalrows), every=25)
-
-    row = dbfiles[hash]
-    URL = row["url"]
-
-    isRetained = False
-    if gConfig.PRUNE_RETAIN_TYPES:
-      for retain in gConfig.PRUNE_RETAIN_TYPES:
-        if retain.search(URL):
-          gLogger.log("Retained image due to rule [%s]" % retain.pattern)
-          isRetained = True
-          break
-
-    # Ignore add-on/mirror related images
-    if not isRetained and \
-       not re_search_addon.search(URL) and \
-       not re_search_mirror.search(URL):
-      if URL in libraryFiles:
-        del libraryFiles[URL]
-      else:
-        localfiles.append(row)
+    pruneCache_processrow(dbfiles[hash], libraryFiles, localfiles, re_search)
 
   gLogger.progress("")
 
-  # Prune, with optional remove...
-  if localfiles != []:
-    if remove_nonlibrary_artwork:
-      gLogger.out("Pruning cached images from texture cache...", newLine=True)
-    else:
-      gLogger.out("The following items are present in the texture cache but not the media library:", newLine=True)
-    gLogger.out("", newLine=True)
+def pruneCache_chunked(database, libraryFiles, localfiles, re_search):
+  gLogger.progress("Loading Texture DB items...")
 
-  FSIZE = 0
-  GOTSIZE = False
-  localfiles.sort(key=lambda row: row["url"])
+  # One extr folder which is used to try and identify non-standard folders
+  TEXTUREDB = ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","!"]
 
   with database:
-    for row in localfiles:
-      database.dumpRow(row)
-      if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
-          GOTSIZE = True
-          FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
-      if remove_nonlibrary_artwork:
-        database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
+    for fnum, folder in enumerate(TEXTUREDB):
+      if folder == "!":
+        # Everything other than the regular folders
+        filter = "WHERE (cachedurl < '0' or cachedurl > ':') and (cachedurl < 'a' or cachedurl > 'g')"
+      else:
+        filter = "WHERE cachedurl LIKE '%s/%%'" % folder
 
-  if GOTSIZE:
-    gLogger.out("\nSummary: %s files; Total size: %s KB\n\n" \
-                  % (format(len(localfiles), ",d"),
-                     format(int(FSIZE/1024), ",d")))
-  else:
-    gLogger.out("\nSummary: %s files\n\n" \
-                  % (format(len(localfiles), ",d")))
+      gLogger.progress("Loading Texture DB: Chunk %2d of %d..." % (fnum+1, len(TEXTUREDB)))
+
+      dbfiles = []
+      dbrows = database.getRows(filter, allfields=True)
+      j = len(dbrows)
+
+      for i, dbrow in enumerate(dbrows):
+        gLogger.progress("Processing artwork: Chunk %2d of %d (%d%%)" %
+          (fnum+1, len(TEXTUREDB), (100 * i / j)), every=25, finalItem=(i == j))
+        pruneCache_processrow(dbrow, libraryFiles, localfiles, re_search)
+        time.sleep(0.01)
+
+  gLogger.progress("")
+
+def pruneCache_processrow(row, libraryFiles, localfiles, re_search):
+
+  URL = row["url"]
+  isRetained = False
+
+  if gConfig.PRUNE_RETAIN_TYPES:
+    for retain in gConfig.PRUNE_RETAIN_TYPES:
+      if retain.search(URL):
+        gLogger.log("Retained image due to rule [%s]" % retain.pattern)
+        isRetained = True
+        break
+    if isRetained: return
+
+  if URL in libraryFiles:
+    del libraryFiles[URL]
+    return
+
+  if re_search:
+    # Ignore add-on/mirror related images
+    for r in re_search:
+      if r.search(URL):
+        isRetained = True
+        break
+
+  # Not an addon or mirror...
+  if not isRetained:
+    localfiles.append(row)
 
 def getHash(string):
   string = string.lower()
@@ -4920,7 +5196,7 @@ def getAllFiles(keyFunction):
       jcomms.addProperties(r, "file")
 
     gLogger.progress("Loading: %s..." % mediatype)
-    data = jcomms.sendJSON(r, "libFiles")
+    data = jcomms.getDataProxy(mediatype, r)
 
     for items in data.get("result", {}):
       if items != "limits":
@@ -4947,7 +5223,7 @@ def getAllFiles(keyFunction):
             for file in jcomms.getExtraArt(i):
               files[keyFunction(file["file"])] = file["type"]
 
-        if title != "": gLogger.progress("Parsing: %s [%s]..." % (mediatype, title))
+        if title != "": gLogger.progress("Parsing %s: %s..." % (mediatype, title))
 
   gLogger.progress("Loading: TVShows...")
 
@@ -4958,7 +5234,7 @@ def getAllFiles(keyFunction):
   if gConfig.CACHE_EXTRA:
     jcomms.addProperties(REQUEST, "file")
 
-  tvdata = jcomms.sendJSON(REQUEST, "libTV")
+  tvdata = jcomms.getDataProxy("tvshows", REQUEST)
 
   if "result" in tvdata and "tvshows" in tvdata["result"]:
     for tvshow in tvdata["result"]["tvshows"]:
@@ -4980,7 +5256,7 @@ def getAllFiles(keyFunction):
                            "sort": {"order": "ascending", "method": "season"},
                            "properties":["season", "art"]}}
 
-      seasondata = jcomms.sendJSON(REQUEST, "libTV")
+      seasondata = jcomms.getDataProxy("seasons", REQUEST)
 
       if "seasons" in seasondata["result"]:
         SEASON_ALL = True
@@ -5001,7 +5277,7 @@ def getAllFiles(keyFunction):
                      "params":{"tvshowid": tvshowid, "season": seasonid,
                                "properties":["cast", "art"]}}
 
-          episodedata = jcomms.sendJSON(REQUEST, "libTV")
+          episodedata = jcomms.getDataProxy("episodes", REQUEST)
 
           for episode in episodedata["result"]["episodes"]:
             episodeid = episode["episodeid"]
@@ -5183,9 +5459,9 @@ def get_mangled_artwork(jcomms):
         title = ""
         for i in data["result"][items]:
           title = i.get("title", i.get("artist", i.get("name", None)))
-          gLogger.progress("Parsing: %s [%s]..." % (mediatype, title), every=interval)
+          gLogger.progress("Parsing %s: %s..." % (mediatype, title), every=interval)
           addItems(i, mtype, idname)
-        if title != "": gLogger.progress("Parsing: %s [%s]..." % (mediatype, title))
+        if title != "": gLogger.progress("Parsing %s: %s..." % (mediatype, title))
 
   gLogger.progress("Loading: TVShows...")
 
@@ -5481,6 +5757,7 @@ def MediaLibraryStats(media_list):
     media = re.search(".*Get(.*)", m).group(1)
     if not lmedia_list or media.lower() in lmedia_list:
       REQUEST = {"method": m, "params": {"limits": {"start": 0, "end": 1}}}
+      if media == "Artists": REQUEST["params"]["albumartistsonly"] = False
       data = jcomms.sendJSON(REQUEST, "libStats")
       if "result" in data and "limits" in data["result"]:
         gLogger.out("%-11s: %d" % (media, data["result"]["limits"]["total"]), newLine=True)
@@ -5626,6 +5903,32 @@ def setVolume(volume):
   if "result" not in data:
     gLogger.err("ERROR: Volume change failed - valid values: 0-100, mute and unmute", newLine=True)
 
+def readFile(infile, outfile):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  url = jcomms.getDownloadURL(infile)
+  if url:
+    try:
+      PAYLOAD = jcomms.sendWeb("GET", url, rawData=True)
+      if outfile == "-":
+        gLogger.out(PAYLOAD)
+      else:
+        f = open(outfile, "wb")
+        f.write(PAYLOAD)
+        f.flush()
+        f.close()
+    except httplib.HTTPException as e:
+      gLogger.err("ERROR not authorised access to file: %s" % infile, newLine=True)
+      sys.exit(2)
+    except Exception as e:
+      gLogger.err("ERROR while creating output file: %s" % str(e), newLine=True)
+      sys.exit(2)
+  else:
+    gLogger.err("ERROR file does not exist: %s" % infile, newLine=True)
+    sys.exit(2)
+
+  return
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -5658,7 +5961,7 @@ def usage(EXIT_CODE):
           remove mediatype libraryid | watched class backup <filename> | \
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
-          sources [media] | sources media [label] | directory path | rdirectory path | \
+          sources [media] | sources media [label] | directory path | rdirectory path | readfile infile [outfile ; -] | \
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
           rbphdmi [seconds] | stats [class]* |\
           input action* [parameter] | screenshot |\
@@ -5707,6 +6010,7 @@ def usage(EXIT_CODE):
   print("  sources    List all sources, or sources for specfic media type (video, music, pictures, files, programs) or label (eg. \"My Movies\")")
   print("  directory  Retrieve list of files in a specific directory (see sources)")
   print("  rdirectory Recursive version of directory")
+  print("  readfile   Read contents of a remote file, writing output to stdout (\"-\", but not suitable for binary data) or the named file (suitable for binary data)")
   print("  status     Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor    Display client event notifications as they occur")
   print("  power      Control power state of client, where state is one of suspend, hibernate, shutdown, reboot and exit")
@@ -5761,16 +6065,16 @@ def checkConfig(option):
   jsonNeedVersion = 6
 
   # Web server access
-  optWeb = ["c","C"]
+  optWeb = ["c", "C", "readfile"]
 
   # Socket (JSON RPC) access
-  optSocket = ["c","C","nc","lc","lnc","j","J","jd","Jd","jr","Jr",
+  optSocket = ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "jr", "Jr",
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot", "stress-test",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
-                "volume",
+                "volume", "readfile",
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
@@ -6022,16 +6326,28 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
-                   "input", "screenshot", "volume",
+                   "input", "screenshot", "volume", "readfile",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
+
+  # Someone is running 15 db requests on a Pi every 15 minutes, 24x7,
+  # skewing the analytics rendering them mostly useless.
+  # Send such requests to the "spam" analytics URL instead.
+  spamtastic = (USAGE in ["db"] and PLATFORM == "Linux ARM")
+  if spamtastic:
+    analytics_url = gConfig.ANALYTICS_SPAM
+    USAGE = argv[0]
+  else:
+    analytics_url = gConfig.ANALYTICS_GOOD
 
   HEADERS = []
   HEADERS.append(("User-agent", user_agent))
   HEADERS.append(("Referer", "http://www.%s" % USAGE))
 
+  remoteVersion = remoteHash = None
+
   # Try checking version via Analytics URL
-  (remoteVersion, remoteHash) = getLatestVersion_ex(gConfig.ANALYTICS, headers = HEADERS)
+  (remoteVersion, remoteHash) = getLatestVersion_ex(analytics_url, headers = HEADERS)
 
   # If the Analytics call fails, go direct to github
   if remoteVersion == None or remoteHash == None:
@@ -6377,6 +6693,9 @@ def main(argv):
     showVolume()
   elif argv[0] == "volume" and len(argv) == 2:
     setVolume(argv[1])
+
+  elif argv[0] == "readfile" and len(argv) == 3:
+    readFile(argv[1], argv[2])
 
   else:
     usage(1)

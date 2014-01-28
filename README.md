@@ -53,6 +53,8 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[directory, rdirectory]** Obtain directory listing for a specific path (see **sources**). Use **rdirectory** for a recursive listing.
 
+**[readfile]** Read contents of the named file, outputting contents to stdout (`-`, not suitable for binary data) or the named file (suitable for binary data).
+
 **[sources]** List of sources for a specific media class (video, music, pictures, files, programs), optionally filtered by label (eg. "My Movies")
 
 **[status]** Display status of client - ScreenSaver active, IsIdle (default period 600 seconds, or user specified) and active Player type (audio or video), plus title of any media currently being played.
@@ -467,7 +469,7 @@ purge.minlen = 5
 nonmedia.filetypes =
 watched.overwrite = no
 network.mac =
-imdb.fields = ratings, votes
+imdb.fields = rating, votes
 bin.tvservice = /usr/bin/tvservice
 hdmi.force.hotplug = no
 ```

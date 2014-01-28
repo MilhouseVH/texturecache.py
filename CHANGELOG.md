@@ -1,5 +1,23 @@
 #Changelog
 
+##Version 1.4.3 (28/01/2013)
+* Add: Implement chunked queries to reduce memory consumption on client and server (which are often the same device). In testing, chunked queries significantly reduced XBMC memory consumption, by as much as 80MB or more (a big deal on a Pi with under 200MB free). Chunking will ensure that queries use a relatively fixed (and small) amount of server memory when responding to queries, rather than unpredictable and sometimes very large amounts of memory when responding to unconstrained queries (for example when retrieving all movies with all cast members, or the entire texture cache database).
+
+ Media library queries will be chunked using JSON API limits (start/end), with the chunk size varying according to the anticipated complexity of the query (eg. when caching cast thumbs a smaller chunk size will be used due to the significant increase in data per movie.
+
+ The Textures13 db query will also be chunked, though not using limits as this isn't currently supported by the JSON API (nor obviously SQL, which is used when the Texture DB JSON API isn't available). Instead, data for each of the Thumbnail folders (0-9,a-f) will be retrieved in sequence (cachedurl like '0/%' etc.), which results in more manageable (but unfortunately still variable) amounts of data, and has required related functions (caching, pruning) to be re-written.
+
+ In addition, chunking allows unnecessary query data to be eliminated sooner, reducing client memory consumption - for example, when caching artwork, details of cast members without thumbnails can be dropped as soon as each each chunk is received, which avoids storing often significant amounts of redundant information, only to be processed and discarded later.
+
+ Chunked queries is not currently enabled by default, but can be enabled with `@chunked=yes` - please do so and report any problems. If there are no problems reported in the next week or so I will enable chunked queries as the default setting. Other than a slight performance gain when not chunking (assuming you don't run out of memory), there should be no reason to disable this option and in fact I may also remove the non-chunked code at some point in the future.
+
+ Other functions, such as texture database searches (`s`, `S`, `x`, `X` etc.) and orphan file checks (`r`/`R`) have not been updated to support chunked queries as it's not practical to do so, plus you are less likely to have memory problems when performing these operations.
+
+* Add: `readfile` option to return content of the named file, outputting contents to stdout when the output filename is `-` (not suitable for binary data) or the named output file (which is suitable for binary data)
+
+##Version 1.4.2 (25/01/2013)
+* Fix: Using wrong type - list not dict - when directory not found
+
 ##Version 1.4.1 (25/01/2013)
 * Fix: Typo
 
@@ -104,7 +122,7 @@
 * Chg: Delay import of sqlite3 module until determined that sqlite access is required (@dbjson=no)
 
 ##Version 1.1.0 (17/11/2013)
-* Add: `imdb movies [filter]` option to update a subset of imdb related fields on movies, all or filtered. Uses `imdbnumber` from the media library to query http://www.omdbapi.com. Specify the fields to be updated using the property `@imdb.fields`, the default fields being `ratings` and `votes`. Available fields are: `title`, `year`, `runtime`, `genre`, `plot`, `plotoutline`, `rating`, `votes`.
+* Add: `imdb movies [filter]` option to update a subset of imdb related fields on movies, all or filtered. Uses `imdbnumber` from the media library to query http://www.omdbapi.com. Specify the fields to be updated using the property `@imdb.fields`, the default fields being `rating` and `votes`. Available fields are: `title`, `year`, `runtime`, `genre`, `plot`, `plotoutline`, `rating`, `votes`.
 
 Output should be piped into `set` for changes to be applied to the media library. For example, to update ratings, votes and also year on Avatar:
 
