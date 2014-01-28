@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.3"
+    self.VERSION = "1.4.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2223,7 +2223,7 @@ class MyJSONComms(object):
       sources = self.getSources(mtype, withLabel=label)
 
       for path in sources:
-        self.logger.progress("Walking source: [%s]" % path)
+        self.logger.progress("Walking source: %s" % path)
 
         for file in self.getFiles(path):
           ext = os.path.splitext(file)[1].lower()
@@ -5073,12 +5073,12 @@ def pruneCache_chunked(database, libraryFiles, localfiles, re_search):
       dbfiles = []
       dbrows = database.getRows(filter, allfields=True)
       j = len(dbrows)
-
-      for i, dbrow in enumerate(dbrows):
+      i = 0
+      for dbrow in dbrows:
+        i += 1
         gLogger.progress("Processing artwork: Chunk %2d of %d (%d%%)" %
           (fnum+1, len(TEXTUREDB), (100 * i / j)), every=25, finalItem=(i == j))
         pruneCache_processrow(dbrow, libraryFiles, localfiles, re_search)
-        time.sleep(0.01)
 
   gLogger.progress("")
 
@@ -5195,7 +5195,7 @@ def getAllFiles(keyFunction):
     if gConfig.CACHE_EXTRA and mediatype == "Movies":
       jcomms.addProperties(r, "file")
 
-    gLogger.progress("Loading: %s..." % mediatype)
+    gLogger.progress("Loading %s..." % mediatype)
     data = jcomms.getDataProxy(mediatype, r)
 
     for items in data.get("result", {}):
@@ -5208,7 +5208,7 @@ def getAllFiles(keyFunction):
         title = ""
         for i in data["result"][items]:
           title = i.get("title", i.get("artist", i.get("name", None)))
-          gLogger.progress("Loading: %s [%s]..." % (mediatype, title), every=interval)
+          gLogger.progress("Loading %s: %s..." % (mediatype, title), every=interval)
           if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
           if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
 
@@ -5225,7 +5225,7 @@ def getAllFiles(keyFunction):
 
         if title != "": gLogger.progress("Parsing %s: %s..." % (mediatype, title))
 
-  gLogger.progress("Loading: TVShows...")
+  gLogger.progress("Loading TVShows...")
 
   REQUEST = {"method":"VideoLibrary.GetTVShows",
              "params": {"sort": {"order": "ascending", "method": "title"},
@@ -5238,7 +5238,7 @@ def getAllFiles(keyFunction):
 
   if "result" in tvdata and "tvshows" in tvdata["result"]:
     for tvshow in tvdata["result"]["tvshows"]:
-      gLogger.progress("Loading: TVShows [%s]..." % tvshow["title"])
+      gLogger.progress("Loading TVShows: %s..." % tvshow["title"])
       tvshowid = tvshow["tvshowid"]
 
       for a in tvshow.get("art", {}):
@@ -5262,7 +5262,7 @@ def getAllFiles(keyFunction):
         SEASON_ALL = True
         for season in seasondata["result"]["seasons"]:
           seasonid = season["season"]
-          gLogger.progress("Loading: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
+          gLogger.progress("Loading TVShows: %s, Season %d..." % (tvshow["title"], seasonid))
 
           for a in season.get("art", {}):
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
@@ -5290,7 +5290,7 @@ def getAllFiles(keyFunction):
                 files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
   # Pictures
-  gLogger.progress("Loading: Pictures...")
+  gLogger.progress("Loading Pictures...")
   pictures = jcomms.getPictures(addPreviews=gConfig.PRUNE_RETAIN_PREVIEWS, addPictures=gConfig.PRUNE_RETAIN_PICTURES)
   for picture in pictures:
     files[keyFunction(picture["thumbnail"])] = "thumbnail"
@@ -5298,7 +5298,7 @@ def getAllFiles(keyFunction):
 
   # PVR Channels
   if gConfig.HAS_PVR:
-    gLogger.progress("Loading: PVR Channels...")
+    gLogger.progress("Loading PVR Channels...")
     for channelType in ["tv", "radio"]:
       REQUEST = {"method":"PVR.GetChannelGroups",
                  "params":{"channeltype": channelType}}
@@ -5463,7 +5463,7 @@ def get_mangled_artwork(jcomms):
           addItems(i, mtype, idname)
         if title != "": gLogger.progress("Parsing %s: %s..." % (mediatype, title))
 
-  gLogger.progress("Loading: TVShows...")
+  gLogger.progress("Loading TVShows...")
 
   REQUEST = {"method":"VideoLibrary.GetTVShows",
              "params": {"sort": {"order": "ascending", "method": "title"},
@@ -5473,7 +5473,7 @@ def get_mangled_artwork(jcomms):
 
   if "result" in tvdata and "tvshows" in tvdata["result"]:
     for tvshow in tvdata["result"]["tvshows"]:
-      gLogger.progress("Loading: TVShows [%s]..." % tvshow["title"])
+      gLogger.progress("Loading TVShows: %s..." % tvshow["title"])
 
       tvshowid = tvshow["tvshowid"]
       addItems(tvshow, "tvshow", "tvshowid")

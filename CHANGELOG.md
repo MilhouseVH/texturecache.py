@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.4.4 (28/01/2013)
+* Fix: Cosmetics
+
 ##Version 1.4.3 (28/01/2013)
 * Add: Implement chunked queries to reduce memory consumption on client and server (which are often the same device). In testing, chunked queries significantly reduced XBMC memory consumption, by as much as 80MB or more (a big deal on a Pi with under 200MB free). Chunking will ensure that queries use a relatively fixed (and small) amount of server memory when responding to queries, rather than unpredictable and sometimes very large amounts of memory when responding to unconstrained queries (for example when retrieving all movies with all cast members, or the entire texture cache database).
 
