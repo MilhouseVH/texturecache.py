@@ -466,7 +466,10 @@ autoupdate = yes
 lastrunfile =
 orphan.limit.check = yes
 purge.minlen = 5
-nonmedia.filetypes =
+picture.filetypes =
+video.filetypes =
+audio.filetypes =
+subtitle.filetypes =
 watched.overwrite = no
 network.mac =
 imdb.fields = rating, votes
@@ -486,6 +489,10 @@ Cast thumbnails will not be cached by default, so specify `cache.castthumb = yes
 
 Extrafanart and extrathumbs will not be cached by default or considered when pruning. Specify `cache.extra = yes` to cache/prune both extrafanart and extrathumbs, or `cache.extrafanart = yes` or `cache.extrathumbs = yes` to enable just extrafanart or just extrathumbs.
 
+Filtering will default to the title field in most cases, such that `jd movies avatar` will return only movies where the title contains the text "avatar". However, you may specify an alternate field on which to filter with `@filter=<field>`. For example, should you wish to select only movies directed by James Cameron, use `jd movies "james cameron" @filter=director`.
+
+The default filter operator is `contains`, but this can be changed to any one of the [standard filter operators](http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6#List.Filter.Operators) using `@filter.operator=<operator>`. For example, `jd movies 21 @filter.operator=is` will return only the movie "21", but not "21 Jump Street".
+
 Cache specific artwork types by specifying a comma-delimited list of artwork types for `cache.artwork`, eg. `cache.artwork=poster, fanart` to cache only posters and fanart. By default this list is empty, which will ensure that all artwork types are cached.
 
 Ignore specific URLs when pre-loading the cache (c/C/nc options), by specifying comma delimited regex patterns for the `cache.ignore.types` property. Default values are `^video` and `^music` (not that these patterns are applied after the image:// prefix has been removed from the url). Set to none (no argument) to process all URLs. Any URL that matches one of the ignore types will not be considered for re-caching (and will be counted as "ignored").
@@ -500,7 +507,7 @@ Use `download.threads` to vary the number of threads used when downloading and c
 
 Specify a comma delimited list of pattherns in `singlethread.urls` to force downloads corresponding with those URLs on a single thread, necessary for sites that limit the number of concurrent requests. One such site is fanart.tv, hence the default value includes `assets\.fanart\.tv`.
 
-When identifying `missing` media files (ie. files that are not present in the mediua library), additional non-media file types can be ignored by adding their file extensions as a comma delimited list of values to `nonmedia.filetypes` (eg. `ex1, ex2`)
+When identifying `missing` media files (ie. files that are not present in the media library), additional audio and video file types can be included by specifying a comma delimited list of file extensions for `audio.filetypes` and `video.filetypes` respectively (eg. `wmv, ogg`). All current XBMC audio and video file extensions are supported by default.
 
 ##Command Line Properties
 

@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.4"
+    self.VERSION = "1.4.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -70,6 +70,12 @@ class MyConfiguration(object):
     self.CONFIG_NAME = "texturecache.cfg"
 
     self.HAS_PVR = False
+
+    # https://github.com/xbmc/xbmc/blob/master/xbmc/settings/AdvancedSettings.cpp
+    m_pictureExtensions = ".png|.jpg|.jpeg|.bmp|.gif|.ico|.tif|.tiff|.tga|.pcx|.cbz|.zip|.cbr|.rar|.dng|.nef|.cr2|.crw|.orf|.arw|.erf|.3fr|.dcr|.x3f|.mef|.raf|.mrw|.pef|.sr2|.rss"
+    m_musicExtensions = ".nsv|.m4a|.flac|.aac|.strm|.pls|.rm|.rma|.mpa|.wav|.wma|.ogg|.mp3|.mp2|.m3u|.mod|.amf|.669|.dmf|.dsm|.far|.gdm|.imf|.it|.m15|.med|.okt|.s3m|.stm|.sfx|.ult|.uni|.xm|.sid|.ac3|.dts|.cue|.aif|.aiff|.wpl|.ape|.mac|.mpc|.mp+|.mpp|.shn|.zip|.rar|.wv|.nsf|.spc|.gym|.adx|.dsp|.adp|.ymf|.ast|.afc|.hps|.xsp|.xwav|.waa|.wvs|.wam|.gcm|.idsp|.mpdsp|.mss|.spt|.rsd|.mid|.kar|.sap|.cmc|.cmr|.dmc|.mpt|.mpd|.rmt|.tmc|.tm8|.tm2|.oga|.url|.pxml|.tta|.rss|.cm3|.cms|.dlt|.brstm|.wtv|.mka|.tak"
+    m_videoExtensions = ".m4v|.3g2|.3gp|.nsv|.tp|.ts|.ty|.strm|.pls|.rm|.rmvb|.m3u|.m3u8|.ifo|.mov|.qt|.divx|.xvid|.bivx|.vob|.nrg|.img|.iso|.pva|.wmv|.asf|.asx|.ogm|.m2v|.avi|.bin|.dat|.mpg|.mpeg|.mp4|.mkv|.avc|.vp3|.svq3|.nuv|.viv|.dv|.fli|.flv|.rar|.001|.wpl|.zip|.vdr|.dvr-ms|.xsp|.mts|.m2t|.m2ts|.evo|.ogv|.sdp|.avs|.rec|.url|.pxml|.vc1|.h264|.rcv|.rss|.mpls|.webm|.bdmv|.wtv"
+    m_subtitlesExtensions = ".utf|.utf8|.utf-8|.sub|.srt|.smi|.rt|.txt|.ssa|.text|.ssa|.aqt|.jss|.ass|.idx|.ifo|.rar|.zip"
 
     # These features become available with the respective API version
     self.JSON_VER_CAPABILITIES = {"setresume":    (6,  2, 0),
@@ -87,7 +93,10 @@ class MyConfiguration(object):
     serial_urls = "assets\.fanart\.tv"
     embedded_urls = "^video, ^music"
 
-    config = ConfigParser.SafeConfigParser()
+    if MyUtility.isPython3:
+      config = ConfigParser.SafeConfigParser(strict=False)
+    else:
+      config = ConfigParser.SafeConfigParser()
     self.config = config
 
     #Use @section argument if passed on command line
@@ -171,7 +180,7 @@ class MyConfiguration(object):
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
     # Read library and textures data in chunks to minimise server/client memory usage
-    self.CHUNKED = self.getBoolean(config, "chunked", "no")
+    self.CHUNKED = self.getBoolean(config, "chunked", "yes")
 
     self.DBJSON = self.getValue(config, "dbjson", "auto")
     self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
@@ -297,6 +306,7 @@ class MyConfiguration(object):
 
     self.LOGFILE = self.getValue(config, "logfile", "")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
+    self.LOGDCACHE = self.getBoolean(config, "logfile.dcache", "no")
 
     self.CACHE_ARTWORK = self.getSimpleList(config, "cache.artwork", "")
     self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls)
@@ -312,14 +322,23 @@ class MyConfiguration(object):
     self.PRUNE_RETAIN_PREVIEWS = self.getBoolean(config, "prune.retain.previews", "yes")
     self.PRUNE_RETAIN_PICTURES = self.getBoolean(config, "prune.retain.pictures", "no")
 
-    self.PICTURE_FILETYPES = [".jpg", ".jpeg", ".png", ".tbn", ".gif", ".tif", ".tiff",
-                               ".raw", ".dng", ".crw", ".cr2", ".mdc", ".mrw", ".orf"]
-    for x in self.getSimpleList(config, "picture.filetypes", ""):
-      x = x.lower()
-      if not x.startswith("."):
-        x = ".%s" % x
-      if x not in self.PICTURE_FILETYPES:
-        self.PICTURE_FILETYPES.append(x)
+    self.picture_filetypes    = m_pictureExtensions.split("|")
+    self.PICTURE_FILETYPES_EX = self.getFileExtList(config, "picture.filetypes", "")
+    self.picture_filetypes.extend(self.PICTURE_FILETYPES_EX)
+
+    self.video_filetypes    = m_videoExtensions.split("|")
+    self.VIDEO_FILETYPES_EX = self.getFileExtList(config, "video.filetypes", "")
+    self.video_filetypes.extend(self.VIDEO_FILETYPES_EX)
+
+    self.audio_filetypes    = m_musicExtensions.split("|")
+    self.AUDIO_FILETYPES_EX = self.getFileExtList(config, "audio.filetypes", "")
+    self.audio_filetypes.extend(self.AUDIO_FILETYPES_EX)
+
+    self.subtitle_filetypes    = m_subtitlesExtensions.split("|")
+    self.SUBTITLE_FILETYPES_EX = self.getFileExtList(config, "subtitle.filetypes", "")
+    self.subtitle_filetypes.extend(self.SUBTITLE_FILETYPES_EX)
+
+    self.IGNORE_PLAYLISTS = self.getBoolean(config, "ignore.playlists","yes")
 
     self.RECACHEALL = self.getBoolean(config, "allow.recacheall","no")
     self.CHECKUPDATE = self.getBoolean(config, "checkupdate", "yes")
@@ -332,14 +351,6 @@ class MyConfiguration(object):
         self.LASTRUNFILE_DATETIME = temp.strftime("%Y-%m-%d %H:%M:%S")
 
     self.ORPHAN_LIMIT_CHECK = self.getBoolean(config, "orphan.limit.check", "yes")
-
-    self.NONMEDIA_FILETYPES = []
-    for x in self.getSimpleList(config, "nonmedia.filetypes", ""):
-      x = x.lower()
-      if not x.startswith("."):
-        x = ".%s" % x
-      if x not in self.NONMEDIA_FILETYPES:
-        self.NONMEDIA_FILETYPES.append(x)
 
     self.CACHE_HIDEALLITEMS = self.getBoolean(config, "cache.hideallitems", "no")
 
@@ -363,6 +374,15 @@ class MyConfiguration(object):
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
     self.FORCE_HOTPLUG = self.getBoolean(config, "hdmi.force.hotplug", "no")
+
+    # Use a smaller cache on ARM systems, based on the assumption that ARM systems
+    # will have less memory than other platforms
+    defSize = "512" if platform.machine().lower().startswith("arm") else "2048"
+    self.DCACHE_SIZE = int(self.getValue(config, "dcache.size", defSize))
+    self.DCACHE_AGELIMIT = int(self.getValue(config, "dcache.agelimit", "180"))
+
+    self.FILTER_FIELD = self.getValue(config, "filter", "")
+    self.FILTER_OPERATOR = self.getValue(config, "filter.operator", "contains")
 
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
@@ -465,6 +485,15 @@ class MyConfiguration(object):
 
     return newlist
 
+  def getFileExtList(self, config, aKey, default=""):
+    newList = []
+    for x in [x.lower() for x in self.getSimpleList(config, aKey, default)]:
+      if not x.startswith("."):
+        x = ".%s" % x
+      if x not in newList:
+        newList.append(x)
+    return newList
+
   def getPatternFromList(self, config, aKey, default=""):
     aList = self.getValue(config, aKey, default)
 
@@ -549,6 +578,7 @@ class MyConfiguration(object):
         caps[feature] = self.HasJSONCapability(feature)
       return caps
 
+  # Dump configuration variables, ignoring any keys that are not entirely upper case
   def dumpMemberVariables(self):
     mv = {}
     for key in self.__dict__.keys():
@@ -621,9 +651,9 @@ class MyConfiguration(object):
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
     print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
-    print("  picture.filetypes = %s" % self.NoneIsBlank(", ".join(self.PICTURE_FILETYPES)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
+    print("  logfile.dcache = %s" % self.BooleanIsYesNo(self.LOGDCACHE))
     print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
     print("  autoupdate = %s" % self.BooleanIsYesNo(self.AUTOUPDATE))
     if self.RECACHEALL:
@@ -632,12 +662,17 @@ class MyConfiguration(object):
     print("  lastrunfile = %s%s" % (self.NoneIsBlank(self.LASTRUNFILE), temp))
     print("  orphan.limit.check = %s" % self.BooleanIsYesNo(self.ORPHAN_LIMIT_CHECK))
     print("  purge.minlen = %s" % self.PURGE_MIN_LEN)
-    print("  nonmedia.filetypes = %s" % self.NoneIsBlank(", ".join(self.NONMEDIA_FILETYPES)))
+    print("  picture.filetypes = %s" % self.NoneIsBlank(", ".join(self.PICTURE_FILETYPES_EX)))
+    print("  video.filetypes = %s" % self.NoneIsBlank(", ".join(self.VIDEO_FILETYPES_EX)))
+    print("  audio.filetypes = %s" % self.NoneIsBlank(", ".join(self.AUDIO_FILETYPES_EX)))
+    print("  subtitle.filetypes = %s" % self.NoneIsBlank(", ".join(self.SUBTITLE_FILETYPES_EX)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("  imdb.fields = %s" % self.NoneIsBlank(self.IMDB_FIELDS))
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
     print("  hdmi.force.hotplug = %s" % self.BooleanIsYesNo(self.FORCE_HOTPLUG))
+    print("  dcache.size = %d" % self.DCACHE_SIZE)
+    print("  dcache.agelimit = %d" % self.DCACHE_AGELIMIT)
 
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
@@ -1013,13 +1048,11 @@ class MyHDMIManager(threading.Thread):
         elif method == "GUI.OnScreensaverDeactivated":
           self.logger.debug("Screensaver has deactivated")
           screensaver_active = False
-          if hdmi_on:
-            if self.EventEnabled(self.EV_HDMI_OFF):
-              self.logger.debug("Scheduled HDMI power-off cancelled")
+          if self.EventEnabled(self.EV_HDMI_OFF):
+            self.EventStop(self.EV_HDMI_OFF)
+            self.logger.debug("Scheduled HDMI power-off cancelled")
           else:
-            hdmi_on = self.enable_hdmi()
             self.sendXBMCExit()
-          self.EventStop(self.EV_HDMI_OFF)
 
         elif method == "Player.OnStop":
           self.EventSet(self.EV_PLAY_STOP)
@@ -1039,6 +1072,8 @@ class MyHDMIManager(threading.Thread):
           library_active = False
 
         elif method == "System.OnQuit":
+          if not hdmi_on:
+            hdmi_on = self.enable_hdmi()
           self.EventsStopAll()
 
       except Queue.Empty as e:
@@ -1436,10 +1471,7 @@ class MyJSONComms(object):
     self.aUpdateCount = self.vUpdateCount = 0
     self.jcomms2 = None
 
-    self.EXTRA_ART_DIR_CACHE = {}
     self.QUIT_METHOD = self.QUIT_PARAMS = None
-
-    self.clrDirectoryCache()
 
   def __enter__(self):
     return self
@@ -1848,32 +1880,8 @@ class MyJSONComms(object):
     REQUEST = {"method": cleanMethod}
     self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
 
-  def clrDirectoryCache(self):
-    self.DCACHE = {}
-
-  def setDirectoryCacheItem(self, data, properties, path):
-    props = ",".join(sorted(properties))
-
-    if props not in self.DCACHE:
-      self.DCACHE[props] = {}
-
-    self.DCACHE[props][path] = data
-
-  def getDirectoryCacheItem(self, properties, path):
-    props = ",".join(sorted(properties))
-
-    if props not in self.DCACHE or \
-       path not in self.DCACHE[props]:
-      return None
-    else:
-      return self.DCACHE[props][path]
-
-  def getDirectoryList(self, path, mediatype="files", properties=["file"], use_cache=True):
-
-    if use_cache:
-      data = self.getDirectoryCacheItem(properties, path)
-    else:
-      data = None
+  def getDirectoryList(self, path, mediatype="files", properties=["file","lastmodified"], use_cache=True, timestamp=False):
+    data = MyUtility.getDirectoryCacheItem(properties, path)
 
     if not data:
       REQUEST = {"method":"Files.GetDirectory",
@@ -1888,8 +1896,6 @@ class MyJSONComms(object):
         if data["result"]["files"] == None:
           data["result"]["files"] = []
 
-        LMOD = ("lastmodified" in properties)
-
         for f in data["result"]["files"]:
           if "file" in f:
             # Real directories won't have extensions, but .m3u and .pls playlists will
@@ -1899,18 +1905,21 @@ class MyJSONComms(object):
               f["filetype"] = "file"
 
             # Convert last modified date/time to epoch
-            if LMOD and "lastmodified" in f:
-              try:
-                f["lastmodified_timestamp"] = int(datetime.datetime.strptime(f["lastmodified"], self.config.qa_lastmodified_fmt).strftime("%s"))
-              except ValueError:
-                self.logger.err("ERROR: Invalid \"lastmodified\" date detected - try specifying @modifieddate.mdy=%s" %
-                                ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
-                sys.exit(2)
+            if timestamp: self.setTimeStamp(f)
 
       if use_cache:
-        self.setDirectoryCacheItem(data, properties, path)
+        MyUtility.setDirectoryCacheItem(data, properties, path)
 
     return data
+
+  def setTimeStamp(self, item):
+    if "lastmodified" in item:
+      try:
+        item["lastmodified_timestamp"] = int(datetime.datetime.strptime(item["lastmodified"], self.config.qa_lastmodified_fmt).strftime("%s"))
+      except ValueError:
+        self.logger.err("ERROR: Invalid \"lastmodified\" date detected - try specifying @modifieddate.mdy=%s" %
+                        ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
+        sys.exit(2)
 
   def getExtraArt(self, item):
     if not (item and self.config.CACHE_EXTRA): return []
@@ -1920,7 +1929,7 @@ class MyJSONComms(object):
     # fanart/thumbnail artwork.
     directory = None
     if "file" in item:
-      directory = item["file"]
+      directory = self.unstackFiles(item["file"])[0]
     else:
       for a in ["fanart", "thumbnail"]:
         if a in item:
@@ -1948,16 +1957,7 @@ class MyJSONComms(object):
     else:
       return []
 
-    # This cache of previous GetDirectory lookups avoids
-    # repeated lookups on the same path
-    if directory in self.EXTRA_ART_DIR_CACHE:
-      return self.EXTRA_ART_DIR_CACHE[directory]
-
-    self.EXTRA_ART_DIR_CACHE[directory] = []
-
-    # Don't cache directory lookup to avoid double-caching.
-    # Should really eliminate EXTRA_ART_DIR_CACHE.
-    data = self.getDirectoryList(directory, use_cache=False)
+    data = self.getDirectoryList(directory)
 
     if "result" not in data: return []
     if "files" not in data["result"]: return []
@@ -1981,14 +1981,12 @@ class MyJSONComms(object):
 
     files = []
     for dir in dirs:
-      data = self.getDirectoryList(dir["file"], use_cache=False)
+      data = self.getDirectoryList(dir["file"])
       if "result" in data and "files" in data["result"]:
         for file in data["result"]["files"]:
           if file["filetype"] == "file" and file["file"]:
             if os.path.splitext(file["file"])[1].lower() in [".jpg", ".png", ".tbn"]:
               files.append({"file": MyUtility.denormalise(file["file"], prefix=True), "type": dir["type"].lower()})
-
-    self.EXTRA_ART_DIR_CACHE[directory] = files
 
     return files
 
@@ -2051,6 +2049,7 @@ class MyJSONComms(object):
     if "result" in data:
       files = data["result"].get("files", [])
       for file in [x for x in files if x["filetype"] == "file" and x.get("file", None) == filename]:
+        if "lastmodified" in properties: self.setTimeStamp(file)
         return file
 
     return None
@@ -2201,21 +2200,18 @@ class MyJSONComms(object):
   def getAllFilesForSource(self, mediatype, labels):
     if mediatype == "songs":
       mtype = "music"
+      includeList = self.config.audio_filetypes
+    elif mediatype == "pictures":
+      mtype = "pictures"
+      includeList = self.config.picture_filetypes
     else:
       mtype = "video"
+      includeList = self.config.video_filetypes
 
-    # Mostly image, nfo and audio-related playlist file types,
-    # but also some random junk...
-    ignoreList = self.config.PICTURE_FILETYPES
-    ignoreList.extend([".nfo", ".srt", ".sub", ".idx", ".strm", \
-                       ".m3u", ".pls", ".cue", \
-                       ".log", ".ini", ".txt", ".url", ".md5", \
-                       ".bak", ".info", ".db", ".gz", ".tar", ".rar", ".zip"])
-
-    # Allow custom non-media extensions
-    for extension in self.config.NONMEDIA_FILETYPES:
-      if extension not in ignoreList:
-        ignoreList.append(extension)
+    if self.config.IGNORE_PLAYLISTS:
+      for ignoreExt in [".m3u", ".pls", ".cue"]:
+        if ignoreExt in includeList:
+          includeList.remove(ignoreExt)
 
     fileList = []
 
@@ -2227,7 +2223,7 @@ class MyJSONComms(object):
 
         for file in self.getFiles(path):
           ext = os.path.splitext(file)[1].lower()
-          if ext in ignoreList: continue
+          if ext not in includeList: continue
 
           if os.path.splitext(file)[0].lower().endswith("trailer"): continue
 
@@ -2276,7 +2272,7 @@ class MyJSONComms(object):
 
   def getData(self, action, mediatype,
               filter = None, useExtraFields = False, secondaryFields = None,
-              showid = None, seasonid = None, channelgroupid = None, lastRun = False, subType = None):
+              tvshow = None, tvseason = None, channelgroupid = None, lastRun = False, subType = None, uniquecast = None):
 
     EXTRA = mediatype
     SECTION = mediatype
@@ -2347,7 +2343,7 @@ class MyJSONComms(object):
     elif mediatype == "seasons":
       REQUEST = {"method":"VideoLibrary.GetSeasons",
                  "params":{"sort": {"order": "ascending", "method": "season"},
-                           "tvshowid": showid, "properties":["season", "art"]}}
+                           "tvshowid": tvshow["tvshowid"], "properties":["season", "art"]}}
       FILTER = ""
       TITLE = "label"
       EXTRA = "tvshows.season"
@@ -2355,7 +2351,7 @@ class MyJSONComms(object):
     elif mediatype == "episodes":
       REQUEST = {"method":"VideoLibrary.GetEpisodes",
                  "params":{"sort": {"order": "ascending", "method": "label"},
-                           "tvshowid": showid, "season": seasonid, "properties":["art"]}}
+                           "tvshowid": tvshow["tvshowid"], "season": tvseason["season"], "properties":["art"]}}
       FILTER = ""
       TITLE = "label"
       EXTRA = "tvshows.episode"
@@ -2400,7 +2396,8 @@ class MyJSONComms(object):
     elif filter and filter.strip() != "" and not mediatype in ["addons", "agenres", "vgenres",
                                                                "sets", "seasons", "episodes",
                                                                "pvr.tv", "pvr.radio", "pvr.channels"]:
-        self.addFilter(REQUEST, {"field": FILTER, "operator": "contains", "value": filter})
+        FILTER = self.config.FILTER_FIELD if self.config.FILTER_FIELD else FILTER
+        self.addFilter(REQUEST, {"field": FILTER, "operator": self.config.FILTER_OPERATOR, "value": filter})
 
     if mediatype in ["movies", "tags", "episodes"]:
       if lastRun and self.config.LASTRUNFILE_DATETIME:
@@ -2470,12 +2467,12 @@ class MyJSONComms(object):
           self.addProperties(REQUEST, "thumbnail")
 
     return (SECTION, TITLE, IDENTIFIER,
-            self.getDataProxy(mediatype, REQUEST, trim_cast_thumbs=(action != "dump")))
+            self.getDataProxy(mediatype, REQUEST, trim_cast_thumbs=(action != "dump"), uniquecast=uniquecast))
 
   # Load data chunked, or in one single query.
   # TV Shows, seasons and episodes are already "chunked" by definition.
   # If specified, remove cast members without thumbnails to reduce memory footprint.
-  def getDataProxy(self, mediatype, request, trim_cast_thumbs=True, idname=None):
+  def getDataProxy(self, mediatype, request, trim_cast_thumbs=True, idname=None, uniquecast=None):
     if not idname:
       idname = "lib%s" % mediatype.capitalize()
 
@@ -2483,25 +2480,25 @@ class MyJSONComms(object):
 
     if self.config.CHUNKED:
       silent = (mediatype in ["tvshows", "seasons", "episodes"])
-      data = self.chunkedLoad(mediatype, request, trim_cast_thumbs, idname=idname, silent=silent)
+      data = self.chunkedLoad(mediatype, request, trim_cast_thumbs, idname=idname, silent=silent, uniquecast=uniquecast)
     else:
       data = self.sendJSON(request, idname)
       if "result" in data and trim_cast_thumbs and "cast" in request.get("params",{}).get("properties",[]):
         for section in data["result"]:
           if section != "limits":
             for item in data["result"][section]:
-              self.removecastwithoutthumbs(item)
+              self.removecastwithoutthumbs(item, uniquecast)
 
     return data
 
-  # Load movies in chunks using limits.
-  # Return resulting list of all movies.
-  def chunkedLoad(self, mediatype, request, trim_cast_thumbs=True, idname=None, silent=False):
+  # Load library data in chunks, using limits.
+  # Return resulting list of all requested items.
+  def chunkedLoad(self, mediatype, request, trim_cast_thumbs=True, idname=None, silent=False, uniquecast=None):
     if not idname:
       idname = "libChunked%s" % mediatype.capitalize()
 
     CHUNK_SIZE = 400
-    if mediatype in ["movies", "tags", "sets-members"]:
+    if mediatype in ["movies", "tags", "sets-members", "tvshows"]:
       if "cast" in request.get("params",{}).get("properties",[]):
         CHUNK_SIZE = 35
 
@@ -2510,7 +2507,6 @@ class MyJSONComms(object):
     total_items = 1
     chunks = 0
     section = None
-
     results = []
 
     while chunk_start < total_items:
@@ -2535,18 +2531,19 @@ class MyJSONComms(object):
         chunks = -(-total_items // CHUNK_SIZE)
         self.logger.log("Chunk processing: found %d %s, retrieving in chunks of %d" % (total_items, mediatype, CHUNK_SIZE))
 
-        for section in data.get("result", {}):
-          if section != "limits":
+        for s in data.get("result", {}):
+          if s != "limits":
+            section = s
             break
         else:
           break
 
       # Add section to accumulated results
-      if section in data["result"]:
+      if section and section in data["result"]:
         # Remove those cast members without thumbnails
         if trim_cast_thumbs and "cast" in request.get("params",{}).get("properties",[]):
           for item in data["result"][section]:
-            self.removecastwithoutthumbs(item)
+            self.removecastwithoutthumbs(item, uniquecast)
         results.extend(data["result"][section])
 
       chunk_start = (chunk * CHUNK_SIZE)
@@ -2557,14 +2554,20 @@ class MyJSONComms(object):
 
   # Create a new cast list ignoring any cast member without a thumbnail.
   # Replace original cast list with the new cast list.
-  def removecastwithoutthumbs(self, mediaitem):
+  def removecastwithoutthumbs(self, mediaitem, uniquecast=None):
     if "cast" in mediaitem:
       cast = []
       for i in mediaitem["cast"]:
-        if "thumbnail" in i: cast.append(i)
+        if "thumbnail" in i:
+          if uniquecast != None:
+            if i["thumbnail"] not in uniquecast:
+              uniquecast[i["thumbnail"]] = True
+              cast.append(i)
+          else:
+            cast.append(i)
       mediaitem["cast"] = cast
 
-  # Return a list of all pictures (jpg/png/tbn) from any "pictures" source
+  # Return a list of all pictures (jpg/png/tbn etc.) from any "pictures" source
   def getPictures(self, addPreviews=False, addPictures=True):
     list = []
 
@@ -2586,7 +2589,7 @@ class MyJSONComms(object):
 
         if ftype == "directory":
           self.getPicturesForPath(fname, list, addPreviews, addPictures)
-        elif ftype == "file" and os.path.splitext(fname)[1].lower() in self.config.PICTURE_FILETYPES:
+        elif ftype == "file" and os.path.splitext(fname)[1].lower() in self.config.picture_filetypes:
           if addPreviews:
             if not DIR_ADDED:
               DIR_ADDED = True
@@ -2658,15 +2661,18 @@ class MyJSONComms(object):
         elif fields[1] == "<=":
           fields[1] = "lessthanequal"
         elif fields[1].lower() == "like":
-          if re.match("^%.*%", fields[2]):
+          # If fields2 is url encoded, just use "contains", otherwise % signs indicate operator
+          if urllib2.unquote(fields[2]) != fields[2]:
             fields[1] = "contains"
-          elif re.match("^%.*", fields[2]):
-            fields[1] = "endswith"
-          elif re.match("^.*%", fields[2]):
-            fields[1] = "startswith"
           else:
-            fields[1] = "is"
-          fields[2] = fields[2].replace("%","")
+            if re.match("^%.*%", fields[2]):
+              fields[1] = "contains"
+            elif re.match("^%.*", fields[2]):
+              fields[1] = "endswith"
+            elif re.match("^.*%", fields[2]):
+              fields[1] = "startswith"
+            else:
+              fields[1] = "is"
         else:
           fields[1] = "is"
           pass
@@ -2759,6 +2765,12 @@ class MyJSONComms(object):
                "params": {"textureid": id}}
 
     return self.sendJSON(REQUEST, "libTextures", checkResult=False)
+
+  def unstackFiles(self, files):
+    if files.startswith("stack://"):
+      return files[8:].split(" , ")
+    else:
+      return [files]
 
 #
 # Hold and print some pretty totals.
@@ -3162,6 +3174,10 @@ class MyWatchedItem(object):
 class MyUtility(object):
   isPython3 = (sys.version_info >= (3, 0))
 
+  DCData = {}
+  DCStats = {}
+  DCStatsAccumulated = {}
+
   # Convert quoted filename into consistent utf-8
   # representation for both Python2 and Python3
   @staticmethod
@@ -3350,12 +3366,147 @@ class MyUtility(object):
     if config.cache_refresh_date == None: return False
     if mediaitem.decoded_filename.startswith("http://"): return False
 
-    file = jcomms.getFileDetails(mediaitem.decoded_filename, properties=["file", "lastmodified"])
+    # Only check file details for the following media types
+    if mediaitem.mtype in ["movies", "tags", "sets", "tvshows", "seasons", "episodes", "albums", "artists", "songs"]:
+      file = jcomms.getFileDetails(mediaitem.decoded_filename, properties=["file", "lastmodified"])
+      if file and "lastmodified_timestamp" in file:
+        return (file["lastmodified_timestamp"] >= config.cache_refresh_date)
 
-    if file and "lastmodified_timestamp" in file:
-      return (file["lastmodified_timestamp"] >= config.cache_refresh_date)
-    else:
-      return False
+    return False
+
+  @staticmethod
+  def invalidateDirectoryCache(mediatype):
+    with threading.Lock():
+      # Transfer current stats to accumulated
+      for p in MyUtility.DCData:
+        for c in MyUtility.DCStats[p]:
+          if c not in MyUtility.DCStatsAccumulated: MyUtility.DCStatsAccumulated[c] = 0
+          MyUtility.DCStatsAccumulated[c] += MyUtility.DCStats[p][c]
+
+      MyUtility.logDirectoryCacheStats(mediatype, totals=False)
+
+      del MyUtility.DCData
+      del MyUtility.DCStats
+      MyUtility.DCData = {}
+      MyUtility.DCStats = {}
+
+  @staticmethod
+  def setDirectoryCacheItem(data, properties, path):
+    props = ",".join(sorted(properties))
+
+    fs_bs = "\\" if path.find("\\") != -1 else "/"
+    if path[-1:] != fs_bs: path += fs_bs
+
+    with threading.Lock():
+      if props not in MyUtility.DCData:
+        MyUtility.DCData[props] = {}
+      if props not in MyUtility.DCStats:
+        MyUtility.DCStats[props] = {"miss": 0, "store": 0, "hit": 0, "evicted": 0}
+
+      count = MyUtility.DCData[props].get(path, {"count": 0})["count"]
+      MyUtility.DCData[props][path] = {"time": time.time(), "count": count+1, "data": data}
+
+      if gConfig.LOGDCACHE:
+        hits = MyUtility.DCData[props][path]["count"]
+        size = len(MyUtility.DCData[props])
+        gLogger.log("Directory Cache %4s: %s (%s) [hit #1. %d items in cache]" %
+                    ("STOR", props, path, size))
+
+      # If we've just added a new item, we may need to now trim the cache
+      if count == 0:
+        MyUtility.DCStats[props]["store"] += 1
+        MyUtility.trimDirectoryCache(props)
+
+  @staticmethod
+  def getDirectoryCacheItem(properties, path):
+    props = ",".join(sorted(properties))
+
+    fs_bs = "\\" if path.find("\\") != -1 else "/"
+    if path[-1:] != fs_bs: path += fs_bs
+
+    with threading.Lock():
+      if props not in MyUtility.DCData:
+        MyUtility.DCData[props] = {}
+        if props not in MyUtility.DCStats:
+          MyUtility.DCStats[props] = {"miss": 1, "store": 0, "hit": 0, "evicted": 0}
+        result = None
+      elif path not in MyUtility.DCData[props]:
+        MyUtility.DCStats[props]["miss"] += 1
+        result = None
+      else:
+        MyUtility.DCStats[props]["hit"] += 1
+        c = MyUtility.DCData[props][path]
+#        MyUtility.DCData[props][path] = {"time": time.time(), "count": c["count"]+1, "data": c["data"]}
+        c["time"] = time.time()
+        c["count"] += 1
+        result = c["data"]
+
+      if gConfig.LOGDCACHE:
+        hits = MyUtility.DCData[props][path]["count"] if result else 1
+        size = len(MyUtility.DCData[props])
+        gLogger.log("Directory Cache %4s: %s (%s) [hit #%d, %d items in cache]" %
+                    (("HIT " if result else "MISS"), props, path, hits, size))
+
+      return result
+
+  @staticmethod
+  def trimDirectoryCache(properties):
+    if properties not in MyUtility.DCData: return
+    if len(MyUtility.DCData[properties]) <= gConfig.DCACHE_SIZE: return
+
+    cp = MyUtility.DCData[properties]
+
+    now = time.time()
+    cexpiry = now - gConfig.DCACHE_AGELIMIT
+
+    delKeys = []
+
+    # Identify any cache items that can be expired due to old age
+    for citem in cp:
+      if cp[citem]["time"] < cexpiry:
+        delKeys.append(citem)
+
+    for ditem in delKeys:
+      if gConfig.LOGDCACHE:
+        gLogger.log("Directory Cache TRIM: %s (%s) [%d hits, %d items] (Age: %5.2f seconds)" %
+          (properties, ditem, MyUtility.DCData[properties][ditem]["count"],
+            len(MyUtility.DCData[properties]), (now - cp[ditem]["time"])))
+      del cp[ditem]
+
+    if properties in MyUtility.DCStats:
+      MyUtility.DCStats[properties]["evicted"] += len(delKeys)
+
+    # If we still need to trim the cache
+    # to its maximum size, get rid of the oldest item(s)
+    while len(cp) > gConfig.DCACHE_SIZE:
+      oldestTime = now
+      oldestItem = None
+      for citem in cp:
+        if cp[citem]["time"] < oldestTime:
+          oldestTime = cp[citem]["time"]
+          oldestItem = citem
+      if oldestItem:
+        if properties in MyUtility.DCStats:
+          MyUtility.DCStats[properties]["evicted"] += 1
+        if gConfig.LOGDCACHE:
+          gLogger.log("Directory Cache TRIM: %s (%s) [%d hits, %d items] (Size)" %
+            (properties, oldestItem, cp[oldestItem]["count"], len(cp)))
+        del cp[oldestItem]
+
+  @staticmethod
+  def logDirectoryCacheStats(mediatype=None, totals=False):
+    if gLogger.LOGGING:
+      if totals and MyUtility.DCStatsAccumulated:
+        gLogger.log("Directory Cache Config: Maximum Size %d, Age Limit %d seconds" %
+                     (gConfig.DCACHE_SIZE, gConfig.DCACHE_AGELIMIT))
+        stats = MyUtility.DCStatsAccumulated
+        gLogger.log("Directory Cache Totals: Misses %d, Stores %d, Hits %d, Evicted %d" %
+                     (stats["miss"], stats["store"], stats["hit"], stats["evicted"]))
+      else:
+        for props in MyUtility.DCStats:
+          stats = MyUtility.DCStats[props]
+          gLogger.log("Directory Cache PERF: Misses %d, Stores %d, Hits %d, Evicted %d, mediatype [%s] for properties: %s" %
+                       (stats["miss"], stats["store"], stats["hit"], stats["evicted"], mediatype, props.split(",")))
 
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons
@@ -3410,12 +3561,19 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
   else:
     secondaryFields = None
 
+  # Keep a hash of unique cast thumbnails to minimise number of cast member
+  # details that are loaded from the client - the vast majority will be
+  # duplicates that can be discarded.
+  UCAST = {}
+
   if mediatype in ["pvr.tv", "pvr.radio"] and not gConfig.HAS_PVR:
     (section_name, title_name, id_name, data) = ("", "", "", [])
   elif mediatype == "vgenres":
     _data = []
     for subtype in ["movie", "tvshow", "musicvideo"]:
-      (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun=lastRun, secondaryFields=secondaryFields, subType=subtype)
+      (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields,
+                                                                 lastRun=lastRun, secondaryFields=secondaryFields,
+                                                                 subType=subtype)
       if data and "result" in data and section_name in data["result"]:
         if filter != "":
           filteredData = []
@@ -3429,7 +3587,8 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     section_name = mediatype
     data["result"] = { section_name: _data}
   else:
-    (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields, lastRun=lastRun, secondaryFields=secondaryFields)
+    (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields,
+                                                               lastRun=lastRun, secondaryFields=secondaryFields, uniquecast=UCAST)
 
   if data and "result" in data and section_name in data["result"]:
     data = data["result"][section_name]
@@ -3481,19 +3640,28 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     for tvshow in data:
       title = tvshow["title"]
       gLogger.progress("Loading TV Show: %s..." % title)
-      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, showid=tvshow[id_name], lastRun=lastRun)
+
+      (s2, t2, i2, data2) = jcomms.getData(action, "seasons", filter, extraFields, tvshow=tvshow, lastRun=lastRun, uniquecast=UCAST)
       if not "result" in data2: return
       limits = data2["result"]["limits"]
       if limits["total"] == 0: continue
       tvshow[s2] = data2["result"][s2]
       for season in tvshow[s2]:
         seasonid = season["season"]
+        if seasonid < 0:
+          gLogger.err("WARNING: TV Show [%s] has invalid Season (%d) - ignored" % (title, seasonid), newLine=True)
+          continue
+
         gLogger.progress("Loading TV Show: %s, Season %d..." % (title, seasonid))
-        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, showid=tvshow[id_name], seasonid=season[i2], lastRun=lastRun, secondaryFields=secondaryFields)
+
+        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, tvshow=tvshow, tvseason=season,
+                                             lastRun=lastRun, secondaryFields=secondaryFields, uniquecast=UCAST)
         if not "result" in data3: return
         limits = data3["result"]["limits"]
         if limits["total"] == 0: continue
         season[s3] = data3["result"][s3]
+
+  del UCAST
 
   if lastRun and mediatype in ["movies", "tvshows"]:
     # Create a new list containing only tvshows with episodes...
@@ -3544,6 +3712,9 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       updateIMDb(mediatype, jcomms, data)
     else:
       raise ValueError("Unknown action [%s]" % action)
+
+  # Free memory used to cache any GetDirectory() information
+  MyUtility.invalidateDirectoryCache(mediatype)
 
   gLogger.progress("")
 
@@ -4079,6 +4250,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
         if nfo_file:
           nfofile = "%s.nfo" % os.path.splitext(file)[0]
           for f in [x for x in files if x["filetype"] == "file" and x.get("file", None) == nfofile]:
+            jcomms.setTimeStamp(f)
             if "lastmodified_timestamp" in f and \
                f["lastmodified_timestamp"] >= gConfig.qa_nfo_refresh_date:
               missing["modified nfo"] = True
@@ -4140,7 +4312,7 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
   gLogger.reset()
 
   if showName == None:
-      TOTALS.TimeStart(mediatype, "Parse")
+    TOTALS.TimeStart(mediatype, "Parse")
 
   for item in data:
     libraryid = item[id_name]
@@ -4845,17 +5017,22 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
   database = MyDB(gConfig, gLogger)
 
   with database:
-    SQL = ""
-    if (search != "" or filter != ""):
-      if search != "": SQL = "WHERE t.url LIKE '%" + search + "%'"
-      if filter != "": SQL = filter + " "
+    SQL = []
+    if search != "":
+      SQL.append("WHERE t.url LIKE '%%%s%%' ORDER BY t.cachedurl ASC" % search)
+      if urllib2.quote(search, "()") != search:
+        SQL.append("WHERE t.url LIKE '%%%s%%' ORDER BY t.cachedurl ASC" % urllib2.quote(search, "()"))
+    elif filter != "":
+      SQL.append("%s " % filter)
 
     FSIZE = 0
     FCOUNT = 0
     ROWS = []
 
     gLogger.progress("Loading database items...")
-    dbrows = database.getRows(filter=SQL, order="ORDER BY t.cachedurl ASC", allfields=True)
+    dbrows = []
+    for sql in SQL:
+      dbrows.extend(database.getRows(filter=sql, allfields=True))
     rpcnt = 100.0
     if len(dbrows) != 0:
       rpcnt = rpcnt / len(dbrows)
@@ -5140,6 +5317,7 @@ def getAllFiles(keyFunction):
   jcomms = MyJSONComms(gConfig, gLogger)
 
   files = {}
+  UCAST = {}
 
   REQUEST = [
               {"method":"AudioLibrary.GetAlbums",
@@ -5196,7 +5374,7 @@ def getAllFiles(keyFunction):
       jcomms.addProperties(r, "file")
 
     gLogger.progress("Loading %s..." % mediatype)
-    data = jcomms.getDataProxy(mediatype, r)
+    data = jcomms.getDataProxy(mediatype, r, uniquecast=UCAST)
 
     for items in data.get("result", {}):
       if items != "limits":
@@ -5225,6 +5403,9 @@ def getAllFiles(keyFunction):
 
         if title != "": gLogger.progress("Parsing %s: %s..." % (mediatype, title))
 
+    # Free memory used to cache any GetDirectory() information
+    MyUtility.invalidateDirectoryCache(mediatype)
+
   gLogger.progress("Loading TVShows...")
 
   REQUEST = {"method":"VideoLibrary.GetTVShows",
@@ -5234,7 +5415,7 @@ def getAllFiles(keyFunction):
   if gConfig.CACHE_EXTRA:
     jcomms.addProperties(REQUEST, "file")
 
-  tvdata = jcomms.getDataProxy("tvshows", REQUEST)
+  tvdata = jcomms.getDataProxy("tvshows", REQUEST, uniquecast=UCAST)
 
   if "result" in tvdata and "tvshows" in tvdata["result"]:
     for tvshow in tvdata["result"]["tvshows"]:
@@ -5256,12 +5437,16 @@ def getAllFiles(keyFunction):
                            "sort": {"order": "ascending", "method": "season"},
                            "properties":["season", "art"]}}
 
-      seasondata = jcomms.getDataProxy("seasons", REQUEST)
+      seasondata = jcomms.getDataProxy("seasons", REQUEST, uniquecast=UCAST)
 
       if "seasons" in seasondata["result"]:
         SEASON_ALL = True
         for season in seasondata["result"]["seasons"]:
           seasonid = season["season"]
+          if seasonid < 0:
+            gLogger.err("WARNING: TV Show [%s] has invalid Season (%d) - ignored" % (tvshow["title"], seasonid), newLine=True)
+            continue
+
           gLogger.progress("Loading TVShows: %s, Season %d..." % (tvshow["title"], seasonid))
 
           for a in season.get("art", {}):
@@ -5277,7 +5462,7 @@ def getAllFiles(keyFunction):
                      "params":{"tvshowid": tvshowid, "season": seasonid,
                                "properties":["cast", "art"]}}
 
-          episodedata = jcomms.getDataProxy("episodes", REQUEST)
+          episodedata = jcomms.getDataProxy("episodes", REQUEST, uniquecast=UCAST)
 
           for episode in episodedata["result"]["episodes"]:
             episodeid = episode["episodeid"]
@@ -5289,12 +5474,17 @@ def getAllFiles(keyFunction):
               if "thumbnail" in c:
                 files[keyFunction(c["thumbnail"])] = "cast.thumb"
 
+      # Free memory used to cache any GetDirectory() information
+      MyUtility.invalidateDirectoryCache("TVShows")
+
   # Pictures
   gLogger.progress("Loading Pictures...")
   pictures = jcomms.getPictures(addPreviews=gConfig.PRUNE_RETAIN_PREVIEWS, addPictures=gConfig.PRUNE_RETAIN_PICTURES)
   for picture in pictures:
     files[keyFunction(picture["thumbnail"])] = "thumbnail"
   del pictures
+  # Free memory used to cache any GetDirectory() information
+  MyUtility.invalidateDirectoryCache("Pictures")
 
   # PVR Channels
   if gConfig.HAS_PVR:
@@ -5312,6 +5502,9 @@ def getAllFiles(keyFunction):
           if "result" in channeldata:
             for channel in channeldata["result"].get("channels", []):
               files[keyFunction(channel["thumbnail"])] = "pvr.thumb"
+
+    # Free memory used to cache any GetDirectory() information
+    MyUtility.invalidateDirectoryCache("PVR")
 
   return files
 
@@ -5488,6 +5681,10 @@ def get_mangled_artwork(jcomms):
       if "seasons" in seasondata["result"]:
         for season in seasondata["result"]["seasons"]:
           seasonid = season["season"]
+          if seasonid < 0:
+            gLogger.err("WARNING: TV Show [%s] has invalid Season (%d) - ignored" % (tvshow["title"], seasonid), newLine=True)
+            continue
+
           gLogger.progress("Loading: TVShows [%s, Season %d]..." % (tvshow["title"], seasonid))
 
           # Can't set items on season unless seasonid is present...
@@ -5911,7 +6108,8 @@ def readFile(infile, outfile):
     try:
       PAYLOAD = jcomms.sendWeb("GET", url, rawData=True)
       if outfile == "-":
-        gLogger.out(PAYLOAD)
+        os.write(sys.stdout.fileno(), PAYLOAD)
+        sys.stdout.flush()
       else:
         f = open(outfile, "wb")
         f.write(PAYLOAD)
@@ -6181,12 +6379,8 @@ def checkConfig(option):
   if needDb and gConfig.DBJSON == "auto":
     # Able to use JSON for Texture db access, no need to check DB availability
     if gConfig.JSON_HAS_TEXTUREDB:
-      if gConfig.XBMC_HOST != "localhost":
-        gConfig.USEJSONDB = True
-        gLogger.log("JSON Texture DB API available and will be used to access the Texture DB")
-      else:
-        gConfig.USEJSONDB = False
-        gLogger.log("JSON Texture DB API available, but running on localhost - using SQLite to conserve memory")
+      gConfig.USEJSONDB = True
+      gLogger.log("JSON Texture DB API available and will be used to access the Texture DB")
     else:
       gConfig.USEJSONDB = False
       gLogger.log("JSON Texture DB API not supported - will use SQLite to access the Texture DB")
@@ -6694,12 +6888,15 @@ def main(argv):
   elif argv[0] == "volume" and len(argv) == 2:
     setVolume(argv[1])
 
-  elif argv[0] == "readfile" and len(argv) == 3:
-    readFile(argv[1], argv[2])
+  elif argv[0] == "readfile" and len(argv) >= 2:
+    infile = argv[1]
+    outfile = argv[2] if len(argv) == 3 else "-"
+    readFile(infile, outfile)
 
   else:
     usage(1)
 
+  MyUtility.logDirectoryCacheStats(totals=True)
   gLogger.log("Successful completion")
 
   sys.exit(EXIT_CODE)

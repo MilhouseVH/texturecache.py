@@ -1,16 +1,32 @@
 #Changelog
 
+##Version 1.4.5 (10/02/2013)
+* Fix: Improve memory efficiency of JSON GetDirectory processing by limiting the directory cache to a fixed size - thanks @theowiesengrund for helping with testing
+* Fix: Significantly improve memory efficiency of cast thumbnail processing - thanks @theowiesengrund for helping with testing
+
+* Chg: Make `@chunked=yes` the default setting
+* Chg: Enable HDMI with `tvservice --preferred` whenever xbmc quits, either normally or abnormally - this will ensure that HDMI is correctly re-enabled even after `killall xbmc.bin` etc.
+* Chg: Alter `missing` behaviour to now consider only file types matching known audio or video file extensions (those supported by XBMC). This is to say the behaviour has changed from an exclusion to inclusion approach. Specify additional file extensions that should be included by adding comma-delimited values to `audio.filetypes` or `video.filetypes` properties. All standard XBMC audio and video file extensions are supported by default.
+* Chg: Remove `nonmedia.filetypes` property as no longer has a purpose
+* Chg: Display warning when a tv show with invalid season (season identifier < 0) is detected
+* Chg: Search the texture cache database (`s` option) up to two 2 times, first with the non-encoded search term, and the second time after encoding the search term (and only then if the encoded term is different to the unencoded search term), then combining the results. This is necessary to find encoded urls used for embedded artwork (`music@`, `video@` and also picture thumbnails)
+
+* Rev: Revert the change that made `@dbjson=no` the default setting on localhost, as this should no longer be necessary when using chunked queries. When available, the TextureDB JSON API should always be used by default (whether remote or local).
+
+* Add: When filtering media library results, the default filter field is usually `title` (eg. `movies avatar` or `albums mothership`). However should you wish to filter on an alternate field then specify the field name in the `@filter` property, eg. `movies cameron @filter=director` or `albums "the beatles" @filter=artist`
+* Add: Specify alternate filter operator, the default opertator being `contains`. Use `@filter.operator=<operator>` where `<operator>` is any one of the [standard filter operators](http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6#List.Filter.Operators). For example, `jd movies 21 @filter.operator=is` would return details only for the movie named "21", and not also "21 Jump Street" as would be the case when using the default `contains` operator.
+
 ##Version 1.4.4 (28/01/2013)
 * Fix: Cosmetics
 
 ##Version 1.4.3 (28/01/2013)
-* Add: Implement chunked queries to reduce memory consumption on client and server (which are often the same device). In testing, chunked queries significantly reduced XBMC memory consumption, by as much as 80MB or more (a big deal on a Pi with under 200MB free). Chunking will ensure that queries use a relatively fixed (and small) amount of server memory when responding to queries, rather than unpredictable and sometimes very large amounts of memory when responding to unconstrained queries (for example when retrieving all movies with all cast members, or the entire texture cache database).
+* Add: Implement chunked queries to reduce memory consumption on client and server (which are often the same device). In testing, chunked queries significantly reduced XBMC memory consumption, by as much as 80MB or more (a big deal on a Pi with under 200MB free). This change will ensure that queries use a relatively fixed (and small) amount of server memory when responding to chunked queries, rather than unpredictable and sometimes very large amounts of memory when responding to unconstrained queries (for example when retrieving all movies with all cast members, or the entire texture cache database).
 
- Media library queries will be chunked using JSON API limits (start/end), with the chunk size varying according to the anticipated complexity of the query (eg. when caching cast thumbs a smaller chunk size will be used due to the significant increase in data per movie.
+ Media library queries will be chunked using JSON API limits (start/end), with the chunk size varying according to the anticipated complexity of the query, eg. when caching cast thumbs a smaller chunk size will be used due to the significant increase in data per movie.
 
  The Textures13 db query will also be chunked, though not using limits as this isn't currently supported by the JSON API (nor obviously SQL, which is used when the Texture DB JSON API isn't available). Instead, data for each of the Thumbnail folders (0-9,a-f) will be retrieved in sequence (cachedurl like '0/%' etc.), which results in more manageable (but unfortunately still variable) amounts of data, and has required related functions (caching, pruning) to be re-written.
 
- In addition, chunking allows unnecessary query data to be eliminated sooner, reducing client memory consumption - for example, when caching artwork, details of cast members without thumbnails can be dropped as soon as each each chunk is received, which avoids storing often significant amounts of redundant information, only to be processed and discarded later.
+ In addition, chunking allows unnecessary query data to be eliminated sooner, reducing client memory consumption - for example, when caching artwork, details of cast members without thumbnails can be dropped as soon as each chunk is received which avoids storing often significant amounts of redundant information only to be processed and discarded later.
 
  Chunked queries is not currently enabled by default, but can be enabled with `@chunked=yes` - please do so and report any problems. If there are no problems reported in the next week or so I will enable chunked queries as the default setting. Other than a slight performance gain when not chunking (assuming you don't run out of memory), there should be no reason to disable this option and in fact I may also remove the non-chunked code at some point in the future.
 
