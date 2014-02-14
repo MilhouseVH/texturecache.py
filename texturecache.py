@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.5"
+    self.VERSION = "1.4.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -840,6 +840,11 @@ class MyLogger():
         sys.stderr.write("\n")
       sys.stderr.flush()
     if log: self.log(data)
+
+  def flush(self):
+    sys.stdout.flush()
+    sys.stderr.flush()
+    if self.LOGFILE: self.LOGFILE.flush()
 
 #
 # Image loader thread class.
@@ -6907,3 +6912,10 @@ if __name__ == "__main__":
     main(sys.argv[1:])
   except (KeyboardInterrupt, SystemExit) as e:
     if type(e) == SystemExit: sys.exit(int(str(e)))
+  except Exception:
+    if "gLogger" in globals() and gLogger.LOGGING:
+      import logging
+      gLogger.flush()
+      logging.basicConfig(filename=gLogger.LOGFILE.name, level=logging.DEBUG)
+      logging.exception("** Terminating due to unexpected exception **")
+    raise

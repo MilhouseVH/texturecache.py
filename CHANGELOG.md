@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.4.6 (14/02/2013)
+* Add: If an unhandled exception occurs and logging is enabled (`@logfile`), write the exception details to the log file.
+
 ##Version 1.4.5 (10/02/2013)
 * Fix: Improve memory efficiency of JSON GetDirectory processing by limiting the directory cache to a fixed size - thanks @theowiesengrund for helping with testing
 * Fix: Significantly improve memory efficiency of cast thumbnail processing - thanks @theowiesengrund for helping with testing
