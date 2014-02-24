@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.6"
+    self.VERSION = "1.4.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -6132,6 +6132,17 @@ def readFile(infile, outfile):
 
   return
 
+def ShowGUINotification(title, message, displaytime, image):
+  REQUEST = {"method": "GUI.ShowNotification",
+             "params": {"title": title, "message": message}}
+
+  if displaytime:
+    REQUEST["params"]["displaytime"] = displaytime
+  if image:
+    REQUEST["params"]["image"] = icon
+
+  MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libNotification")
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -6165,6 +6176,7 @@ def usage(EXIT_CODE):
           watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
           sources [media] | sources media [label] | directory path | rdirectory path | readfile infile [outfile ; -] | \
+          notify title message [displaytime [image]] | \
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
           rbphdmi [seconds] | stats [class]* |\
           input action* [parameter] | screenshot |\
@@ -6214,6 +6226,7 @@ def usage(EXIT_CODE):
   print("  directory  Retrieve list of files in a specific directory (see sources)")
   print("  rdirectory Recursive version of directory")
   print("  readfile   Read contents of a remote file, writing output to stdout (\"-\", but not suitable for binary data) or the named file (suitable for binary data)")
+  print("  notify     Send notification to XBMC GUI. Requires title and message arguments, with optional displaytime in milliseconds (default 5000) and image/icon location")
   print("  status     Display state of client - ScreenSaverActive, SystemIdle (default 600 seconds), active Player state etc.")
   print("  monitor    Display client event notifications as they occur")
   print("  power      Control power state of client, where state is one of suspend, hibernate, shutdown, reboot and exit")
@@ -6277,7 +6290,7 @@ def checkConfig(option):
                 "directory", "rdirectory", "sources",
                 "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot", "stress-test",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
-                "volume", "readfile",
+                "volume", "readfile", "notify",
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
@@ -6525,7 +6538,7 @@ def getLatestVersion(argv):
                    "directory", "rdirectory", "sources", "remove",
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
-                   "input", "screenshot", "volume", "readfile",
+                   "input", "screenshot", "volume", "readfile", "notify",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -6897,6 +6910,13 @@ def main(argv):
     infile = argv[1]
     outfile = argv[2] if len(argv) == 3 else "-"
     readFile(infile, outfile)
+
+  elif argv[0] == "notify" and len(argv) >= 3:
+    _title      = argv[1]
+    _message    = argv[2]
+    _displaytime= int(argv[3]) if len(argv) >= 4 else None
+    _image      = argv[4] if len(argv) >= 5 else None
+    ShowGUINotification(_title, _message, _displaytime, _image)
 
   else:
     usage(1)
