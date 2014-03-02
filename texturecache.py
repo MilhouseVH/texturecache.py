@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.7"
+    self.VERSION = "1.4.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4852,7 +4852,20 @@ def updateIMDb(mediatype, jcomms, data):
 
   jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
 
-def getIntFloatStr(aValue):
+def getIntFloatStr(aField, aValue):
+  # Some fields can only be strings...
+  if aField in ["title", "plot", "plotoutline", "votes", "studio", "description",
+                "artist", "album", "albumartist", "theme", "mood", "style", "comment",
+                "lyrics", "director", "tagline", "originaltitle", "writer", "mpaa",
+                "country", "imdbnumber", "set", "showtitle", "tag", "sorttitle",
+                "premiered", "dateadded", "lastplayed"]:
+    if (aValue.startswith('"') and aValue.endswith('"')) or \
+       (aValue.startswith("'") and aValue.endswith("'")):
+      return aValue[1:-1]
+    else:
+      return "%s" % aValue
+
+  # For everything else, try to work out the data type from the value
   isString = (type(aValue) == str if MyUtility.isPython3 else type(aValue) in [str, unicode])
   if isString:
     if (aValue.startswith('"') and aValue.endswith('"')) or \
@@ -4973,13 +4986,13 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum,
       elif type(pair) is list:
         pairs[KEY] = []
         for item in pair:
-          if item: pairs[KEY].append(getIntFloatStr(item) if typeconversion else item)
+          if item: pairs[KEY].append(getIntFloatStr(KEY, item) if typeconversion else item)
       elif type(pair) is str and pair.startswith("[") and pair.endswith("]"):
         pairs[KEY] = []
         for item in [x.strip() for x in pair[1:-1].split(",")]:
-          if item: pairs[KEY].append(getIntFloatStr(item) if typeconversion else item)
+          if item: pairs[KEY].append(getIntFloatStr(KEY, item) if typeconversion else item)
       else:
-        pairs[KEY] = getIntFloatStr(pair) if typeconversion else pair
+        pairs[KEY] = getIntFloatStr(KEY, pair) if typeconversion else pair
 
       if (pairs[KEY] == None or pairs[KEY] == "") and \
          (KEY.startswith("art.") or KEY in ["fanart", "thumbnail", "thumb"]) and \

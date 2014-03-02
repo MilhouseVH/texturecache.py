@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.4.8 (02/03/2013)
+* Cosmetic - ensure certain types during `set` are always string
+
 ##Version 1.4.7 (24/02/2013)
 * Add: Send GUI notification with `notify` option, eg. `notify "Title" "Message"`. Optionally, the display time (in milliseconds, default 5000) can be specified, as well as the location of a suitable image file (which must be accessible to the XBMC client)
 
