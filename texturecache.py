@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.8"
+    self.VERSION = "1.4.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -514,12 +514,14 @@ class MyConfiguration(object):
     adate = self.getValue(config, key, default)
     if adate:
       if adate.lower() == "today":
-        temp_date = datetime.date.today()
+        t = datetime.date.today()
+        temp_date = datetime.datetime(t.year, t.month, t.day, 0, 0, 0)
       elif re.search("^[0-9]*$", adate):
-        temp_date = datetime.date.today() - datetime.timedelta(days=int(adate))
+        t = datetime.date.today() - datetime.timedelta(days=int(adate))
+        temp_date = datetime.datetime(t.year, t.month, t.day, 0, 0, 0)
       else:
         temp_date = datetime.datetime.strptime(adate, "%Y-%m-%d %H:%M:%S")
-      date_seconds = int(temp_date.strftime("%s"))
+      date_seconds = MyUtility.SinceEpoch(temp_date)
       date_formatted = temp_date.strftime("%Y-%m-%d %H:%M:%S")
     else:
       date_seconds = None
@@ -1920,7 +1922,7 @@ class MyJSONComms(object):
   def setTimeStamp(self, item):
     if "lastmodified" in item:
       try:
-        item["lastmodified_timestamp"] = int(datetime.datetime.strptime(item["lastmodified"], self.config.qa_lastmodified_fmt).strftime("%s"))
+        item["lastmodified_timestamp"] = MyUtility.SinceEpoch(datetime.datetime.strptime(item["lastmodified"], self.config.qa_lastmodified_fmt))
       except ValueError:
         self.logger.err("ERROR: Invalid \"lastmodified\" date detected - try specifying @modifieddate.mdy=%s" %
                         ("no" if self.config.MDATE_MDY else "yes"), newLine=True)
@@ -3178,6 +3180,7 @@ class MyWatchedItem(object):
 # Helper class...
 class MyUtility(object):
   isPython3 = (sys.version_info >= (3, 0))
+  EPOCH = datetime.datetime.utcfromtimestamp(0)
 
   DCData = {}
   DCStats = {}
@@ -3512,6 +3515,10 @@ class MyUtility(object):
           stats = MyUtility.DCStats[props]
           gLogger.log("Directory Cache PERF: Misses %d, Stores %d, Hits %d, Evicted %d, mediatype [%s] for properties: %s" %
                        (stats["miss"], stats["store"], stats["hit"], stats["evicted"], mediatype, props.split(",")))
+
+  @staticmethod
+  def SinceEpoch(dt):
+    return int((dt - MyUtility.EPOCH).total_seconds())
 
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons

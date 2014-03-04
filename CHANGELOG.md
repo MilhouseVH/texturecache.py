@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.4.9 (02/03/2013)
+* Fix: datetime.strftime(%s) isn't supported by Windows...
+
 ##Version 1.4.8 (02/03/2013)
 * Cosmetic - ensure certain types during `set` are always string
 
