@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.4.9"
+    self.VERSION = "1.5.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1014,6 +1014,8 @@ class MyHDMIManager(threading.Thread):
     screensaver_active = False
     player_active = False
     library_active = False
+    cansuspend = False
+
     qtimeout = None
 
     # This is the order events will be processed...
@@ -1038,28 +1040,38 @@ class MyHDMIManager(threading.Thread):
           player_active = clientState["players.active"]
           library_active = (clientState["scanning.music"] or clientState["scanning.video"])
 
-          self.logger.debug("HDMI is [%s], Screensaver is [%s], Player is [%s], Library scan [%s]" %
+          # If the Pi can suspend, don't schedule the EV_HDMI_OFF event or restart XBMC
+          # to re-init the HDMI. Instead, just log various events, and call tvservice
+          # whenever sleeping or waking, in case anyone wants to hook the tvservice
+          # calls for additional CEC functionality.
+          cansuspend = clientState["cansuspend"]
+
+          self.logger.debug("HDMI is [%s], Screensaver is [%s], Player is [%s], Library scan [%s], Can Suspend [%s]" %
                             (("on" if hdmi_on else "off"),
                              ("active" if screensaver_active else "inactive"),
                              ("active" if player_active else "inactive"),
-                             ("active" if library_active else "inactive")))
+                             ("active" if library_active else "inactive"),
+                             ("yes" if cansuspend else "no")))
 
-          if screensaver_active and hdmi_on:
-            self.EventSet(self.EV_HDMI_OFF)
+          if not cansuspend:
+            if screensaver_active and hdmi_on:
+              self.EventSet(self.EV_HDMI_OFF)
 
         elif method == "GUI.OnScreensaverActivated":
           self.logger.debug("Screensaver has activated")
           screensaver_active = True
-          self.EventSet(self.EV_HDMI_OFF)
+          if not cansuspend:
+            self.EventSet(self.EV_HDMI_OFF)
 
         elif method == "GUI.OnScreensaverDeactivated":
           self.logger.debug("Screensaver has deactivated")
           screensaver_active = False
-          if self.EventEnabled(self.EV_HDMI_OFF):
-            self.EventStop(self.EV_HDMI_OFF)
-            self.logger.debug("Scheduled HDMI power-off cancelled")
-          else:
-            self.sendXBMCExit()
+          if not cansuspend:
+            if self.EventEnabled(self.EV_HDMI_OFF):
+              self.EventStop(self.EV_HDMI_OFF)
+              self.logger.debug("Scheduled HDMI power-off cancelled")
+            else:
+              self.sendXBMCExit()
 
         elif method == "Player.OnStop":
           self.EventSet(self.EV_PLAY_STOP)
@@ -1077,6 +1089,16 @@ class MyHDMIManager(threading.Thread):
         elif method.endswith(".OnScanFinished") or method.endswith(".OnCleanFinished"):
           self.logger.debug("Library scan has finished")
           library_active = False
+
+        elif method == "System.OnSleep":
+          self.logger.debug("Client is now suspended")
+          # HDMI already disabled, but calls to tvservice could be used to hook CEC functionality
+          hdmi_on = self.disable_hdmi()
+
+        elif method == "System.OnWake":
+          self.logger.debug("Client has resumed")
+          # HDMI already enabled, but calls to tvservice could be used to hook CEC functionality
+          hdmi_on = self.enable_hdmi()
 
         elif method == "System.OnQuit":
           if not hdmi_on:
@@ -1181,7 +1203,6 @@ class MyHDMIManager(threading.Thread):
 
     REQUEST = {"method": "XBMC.GetInfoBooleans",
                "params": {"booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo"]}}
-
     data = jcomms.sendJSON(REQUEST, "libBooleans", checkResult=False)
     values = data.get("result", {})
     statuses["screensaver.active"] = values.get("System.ScreenSaverActive", False)
@@ -1192,6 +1213,13 @@ class MyHDMIManager(threading.Thread):
     data = jcomms.sendJSON(REQUEST, "libPlayers", checkResult=False)
     values = data.get("result", [])
     statuses["players.active"] = (values != [])
+
+    REQUEST = {"method": "System.GetProperties",
+               "params": { "properties": ["canshutdown", "cansuspend", "canreboot", "canhibernate"] }}
+    data = jcomms.sendJSON(REQUEST, "libProperties", checkResult=False)
+    values = data.get("result", {})
+    for s in REQUEST["params"]["properties"]:
+      statuses[s] = values.get(s, False)
 
     return statuses
 
@@ -6388,6 +6416,9 @@ def checkConfig(option):
                  "params": { "booleans": ["System.GetBool(pvrmanager.enabled)"] }}
       data = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
       gConfig.HAS_PVR = ("result" in data and data["result"].get("System.GetBool(pvrmanager.enabled)", False))
+
+      if gLogger.VERBOSE and gLogger.LOGGING:
+        gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
     except socket.error:
       pass
 
@@ -6497,7 +6528,6 @@ def checkConfig(option):
   gConfig.postConfig()
 
   if gLogger.VERBOSE and gLogger.LOGGING:
-    gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
     gLogger.log("CONFIG VALUES: \n%s" % gConfig.dumpMemberVariables())
 
   return True
