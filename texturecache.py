@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.1"
+    self.VERSION = "1.5.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -236,6 +236,10 @@ class MyConfiguration(object):
     self.XTRAJSON = {}
     self.QA_FIELDS = {}
 
+    # Modifiers - both convey optionality:
+    #    ? - warn instead of fail when item is missing (or present in fail/warn pattern)
+    #    # - don't warn when missing, warn otherwise (unless art present in fail list, then fail)
+    #    ! - don't warn when missing, fail otherwise (unless art present in warn list, then warn)
     self.QA_FIELDS["qa.art.addons"] = "thumbnail"
     self.QA_FIELDS["qa.art.agenres"] = "thumbnail"
     self.QA_FIELDS["qa.art.vgenres"] = "thumbnail"
@@ -549,7 +553,7 @@ class MyConfiguration(object):
     if aStr:
       for item in [item.strip() for item in aStr.split(",")]:
         if item != "":
-          if stripModifier and item.startswith("?"):
+          if stripModifier and item[:1] in ["?", "#", "!"]:
             newlist.append(item[1:])
           else:
             newlist.append(item)
@@ -4263,14 +4267,15 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     missing = {}
 
     for i in zero_items:
-      j = i[1:] if i.startswith("?") else i
+      (j, MOD, MOD_MISSING_SILENT, MOD_MISSING_WARN_FAIL) = splitModifierToken(i)
       ismissing = True
       if j in item:
         ismissing = (item[j] == 0)
-      if missing: missing["zero %s" % j] = not i.startswith("?")
+      if ismissing and not MOD_MISSING_SILENT:
+          missing["zero %s" % j] = MOD_MISSING_WARN_FAIL
 
     for i in blank_items:
-      j = i[1:] if i.startswith("?") else i
+      (j, MOD, MOD_MISSING_SILENT, MOD_MISSING_WARN_FAIL) = splitModifierToken(i)
       ismissing = True
       if j in item:
         if type(item[j]) is dict:
@@ -4281,16 +4286,18 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               break
         else:
           ismissing = (item[j] == "" or item[j] == [] or item[j] == [""])
-      if ismissing: missing["missing %s" % j] = not i.startswith("?")
+      if ismissing and MOD_MISSING_SILENT:
+        missing["missing %s" % j] = MOD_MISSING_WARN_FAIL
 
     for i in art_items:
-      j = i[1:] if i.startswith("?") else i
+      (j, MOD, MOD_MISSING_SILENT, MOD_MISSING_WARN_FAIL) = splitModifierToken(i)
       if "art" in item:
         artwork = item.get("art", {}).get(j, "")
       else:
         artwork = item.get(j, "")
       if artwork == "":
-        missing["missing %s" % j] = not i.startswith("?")
+        if not MOD_MISSING_SILENT:
+          missing["missing %s" % j] = MOD_MISSING_WARN_FAIL
       else:
         decoded_url = MyUtility.normalise(artwork, strip=True)
         FAILED = False
@@ -4371,10 +4378,17 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     gLogger.progress("")
     for m in mediaitems: gLogger.out("%s\n" % m)
 
-  if rescan and mediatype in ["movies", "tags", "sets", "tvshows"] and False:
+  if rescan and mediatype in ["movies", "tags", "sets", "tvshows"]:
     TOTALS.TimeStart(mediatype, "Rescan")
     jcomms.rescanDirectories(workItems)
     TOTALS.TimeEnd(mediatype, "Rescan")
+
+def splitModifierToken(field):
+  if field and field[:1] in ["?", "#", "!"]:
+    m = field[:1]
+    return (field[1:], m, (m in ["#", "!"]), (False if (m == "?" or m == "#") else True))
+  else:
+    return (field, "", False, False)
 
 def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, season=None):
   gLogger.reset()

@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.5.2 (05/03/2013)
+*Add: "#"/"!" modifiers on `qa.*` fields, supressing warning whenever field is missing, else warn ("#") or fail ("!") when present but invalid. Other existing modifier is "?", which will warn whenever item is missing, rather than fail.
+*Fix: Remove debug which prevented `qax` from removing any items (sorry)
+
 ##Version 1.5.1 (05/03/2013)
 *Add: Include suspend capability and idle timer state in `status`
 *Add: Include songs as `tc.members` in `jd albums` when `@songmembers=yes`
