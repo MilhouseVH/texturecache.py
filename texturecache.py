@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.0"
+    self.VERSION = "1.5.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -359,6 +359,7 @@ class MyConfiguration(object):
     self.MAC_ADDRESS = self.getValue(config, "network.mac", "")
 
     self.ADD_SET_MEMBERS = self.getBoolean(config, "setmembers", "yes")
+    self.ADD_SONG_MEMBERS = self.getBoolean(config, "songmembers", "no")
 
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
@@ -383,6 +384,8 @@ class MyConfiguration(object):
 
     self.FILTER_FIELD = self.getValue(config, "filter", "")
     self.FILTER_OPERATOR = self.getValue(config, "filter.operator", "contains")
+
+    self.SEARCH_ENCODE = self.getBoolean(config, "encode", "yes")
 
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
@@ -633,6 +636,7 @@ class MyConfiguration(object):
     print("  extrajson.tvshows.season = %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.season"]))
     print("  extrajson.tvshows.episode= %s" % self.NoneIsBlank(self.XTRAJSON["extrajson.tvshows.episode"]))
     print("  setmembers = %s" % self.BooleanIsYesNo(self.ADD_SET_MEMBERS))
+    print("  songmembers = %s" % self.BooleanIsYesNo(self.ADD_SONG_MEMBERS))
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
     print("  qa.nfo.refresh = %s%s" % (self.NoneIsBlank(self.QA_NFO_REFRESH), " (%s)" % self.qa_nfo_refresh_date_fmt if self.qa_nfo_refresh_date_fmt else ""))
@@ -1368,7 +1372,7 @@ class MyDB(object):
     else:
       return None
 
-  def _getAllColumns(self, filter=None, order=None):
+  def _getAllColumns(self, filter, order):
     if self.DBVERSION >= 13:
       SQL = "SELECT t.id, t.cachedurl, t.lasthashcheck, t.url, s.height, s.width, s.usecount, s.lastusetime, s.size, t.imagehash " \
             "FROM texture t JOIN sizes s ON (t.id = s.idtexture)"
@@ -2350,7 +2354,14 @@ class MyJSONComms(object):
     elif mediatype == "songs":
       REQUEST = {"method":"AudioLibrary.GetSongs",
                  "params":{"sort": {"order": "ascending", "method": "title"},
-                           "properties":["title", "artist", "album", "fanart", "thumbnail"]}}
+                           "properties":["title", "track", "artist", "album", "fanart", "thumbnail"]}}
+    elif mediatype == "song-members":
+      REQUEST = {"method":"AudioLibrary.GetSongs",
+                 "params":{"sort": {"order": "ascending", "method": "track"},
+                           "properties":["title", "track", "album", "fanart", "thumbnail", "file"]}}
+      EXTRA = "songs"
+      SECTION = "songs"
+      IDENTIFIER = "songid"
     elif mediatype in ["movies", "tags"]:
       REQUEST = {"method":"VideoLibrary.GetMovies",
                  "params":{"sort": {"order": "ascending", "method": "title"},
@@ -2418,16 +2429,18 @@ class MyJSONComms(object):
             word += 1
             if (word%2 == 0) and tag in ["and","or"]: filterBoolean = tag
             else: self.addFilter(REQUEST, {"field": "tag", "operator": "contains", "value": tag}, filterBoolean)
-    elif mediatype == "sets-members":
-        if filter:
-          self.addFilter(REQUEST, {"field": "set", "operator": "contains", "value": filter})
+    elif mediatype in ["sets-members", "song-members"]:
+        _f = "set" if mediatype == "sets-members" else "album"
+        if filter and not self.config.FILTER_FIELD:
+          self.addFilter(REQUEST, {"field": _f, "operator": self.config.FILTER_OPERATOR, "value": filter})
         else:
           # JSON filter is broken when handling empty (null) strings - they're ignored - though
           # hopefully this will be fixed in a later version of API, in which case use it
           if self.config.JSON_HAS_FILTERNULLVALUE:
-            self.addFilter(REQUEST, {"field": "set", "operator": "isnot", "value": ""})
+            self.addFilter(REQUEST, {"field": _f, "operator": "isnot", "value": ""})
           else:
-            self.addFilter(REQUEST, {"field": "set", "operator": "doesnotcontain", "value": "@@@@@@@@@@@@"})
+            self.addFilter(REQUEST, {"field": _f, "operator": "doesnotcontain", "value": "@@@@@@@@@@@@"})
+
     elif filter and filter.strip() != "" and not mediatype in ["addons", "agenres", "vgenres",
                                                                "sets", "seasons", "episodes",
                                                                "pvr.tv", "pvr.radio", "pvr.channels"]:
@@ -2481,7 +2494,10 @@ class MyJSONComms(object):
     elif action == "dump":
       if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
         self.addProperties(REQUEST, "file")
-      extraFields = self.config.XTRAJSON["extrajson.%s" % EXTRA] if EXTRA != "" else None
+      if "extrajson.%s" % EXTRA in self.config.XTRAJSON:
+        extraFields = self.config.XTRAJSON["extrajson.%s" % EXTRA] if EXTRA != "" else None
+      else:
+        extraFields = None
       if useExtraFields and extraFields:
         self.addProperties(REQUEST, extraFields)
       if secondaryFields:
@@ -3563,11 +3579,6 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     gLogger.err("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
 
-  # Only QA movies and tvshows (and sub-types) for now...
-  if action == "qa" and rescan and mediatype not in ["movies", "tags", "sets", "tvshows", "seasons", "episodes"]:
-    gLogger.err("Error: media class [%s] is not currently supported by qax" % mediatype, newLine=True)
-    sys.exit(2)
-
   # Only songs, movies and tvshows (and sub-types) valid for missing...
   if action == "missing" and mediatype not in ["songs", "movies", "tvshows", "seasons", "episodes"]:
     gLogger.err("Error: media class [%s] is not currently supported by missing" % mediatype, newLine=True)
@@ -3645,20 +3656,37 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     data = filteredData
 
   # Add movie file members to sets when dumping
-  if action == "dump" and mediatype == "sets" and gConfig.ADD_SET_MEMBERS and data:
-    gLogger.progress("Loading Sets members...")
-    (s, t, i, fdata) = jcomms.getData(action, "sets-members", filter, extraFields, lastRun=lastRun, secondaryFields=None)
-    if fdata and "result" in fdata and s in fdata["result"]:
-      set_files = {}
-      for movie in fdata["result"][s]:
-        set_name = movie["set"]
-        if set_name:
-          del movie["set"]
-          if "label" in movie: del movie["label"]
-          if set_name not in set_files: set_files[set_name] = []
-          set_files[set_name].append(movie)
-      for set in data:
-        set["tc.members"] = set_files.get(set["title"], [])
+  if action == "dump" and data:
+    if mediatype == "sets" and gConfig.ADD_SET_MEMBERS:
+      gLogger.progress("Loading Sets members...")
+      (s, t, i, fdata) = jcomms.getData(action, "sets-members", filter, extraFields, lastRun=lastRun, secondaryFields=None)
+      if fdata and "result" in fdata and s in fdata["result"]:
+        set_files = {}
+        for movie in fdata["result"][s]:
+          set_name = movie["set"]
+          if set_name:
+            del movie["set"]
+            if "label" in movie: del movie["label"]
+            if set_name not in set_files: set_files[set_name] = []
+            set_files[set_name].append(movie)
+        for set in data:
+          set["tc.members"] = set_files.get(set["title"], [])
+
+    if mediatype == "albums" and gConfig.ADD_SONG_MEMBERS:
+      gLogger.progress("Loading Song members...")
+      (s, t, i, fdata) = jcomms.getData(action, "song-members", filter, extraFields, lastRun=lastRun, secondaryFields=None)
+      if fdata and "result" in fdata and s in fdata["result"]:
+        album_files = {}
+        for album in fdata["result"][s]:
+          album_name = album["album"]
+          if album_name:
+            del album["album"]
+            if "label" in album: del album["label"]
+            if album_name not in album_files: album_files[album_name] = []
+            album_files[album_name].append(album)
+        for album in data:
+          album["tc.members"] = album_files.get(album["title"], [])
+
 
   # Combine PVR channelgroups with PVR channels to create a hierarchical structure that can be parsed
   if mediatype in ["pvr.tv", "pvr.radio"]:
@@ -4343,7 +4371,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     gLogger.progress("")
     for m in mediaitems: gLogger.out("%s\n" % m)
 
-  if rescan:
+  if rescan and mediatype in ["movies", "tags", "sets", "tvshows"] and False:
     TOTALS.TimeStart(mediatype, "Rescan")
     jcomms.rescanDirectories(workItems)
     TOTALS.TimeEnd(mediatype, "Rescan")
@@ -5071,10 +5099,18 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
 
   with database:
     SQL = []
+
+    if database.usejson:
+      ESCAPE_CHAR = "%"
+      ESCAPE = ""
+    else:
+      ESCAPE_CHAR = "`"
+      ESCAPE = " ESCAPE '%s'" % ESCAPE_CHAR
+
     if search != "":
-      SQL.append("WHERE t.url LIKE '%%%s%%' ORDER BY t.cachedurl ASC" % search)
-      if urllib2.quote(search, "()") != search:
-        SQL.append("WHERE t.url LIKE '%%%s%%' ORDER BY t.cachedurl ASC" % urllib2.quote(search, "()"))
+      SQL.append("WHERE t.url LIKE '%s%s%s'%s ORDER BY t.cachedurl ASC" % (ESCAPE_CHAR, search, ESCAPE_CHAR, ESCAPE))
+      if gConfig.SEARCH_ENCODE and urllib2.quote(search, "()") != search:
+        SQL.append("WHERE t.url LIKE '%s%s%s'%s ORDER BY t.cachedurl ASC" % (ESCAPE_CHAR, urllib2.quote(search, "()"), ESCAPE_CHAR, ESCAPE))
     elif filter != "":
       SQL.append("%s " % filter)
 
@@ -5084,8 +5120,13 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
 
     gLogger.progress("Loading database items...")
     dbrows = []
-    for sql in SQL:
-      dbrows.extend(database.getRows(filter=sql, allfields=True))
+
+    if SQL:
+      for sql in SQL:
+        dbrows.extend(database.getRows(filter=sql, allfields=True))
+    else:
+      dbrows.extend(database.getRows(allfields=True))
+
     rpcnt = 100.0
     if len(dbrows) != 0:
       rpcnt = rpcnt / len(dbrows)
@@ -5877,12 +5918,14 @@ def showStatus(idleTime=600):
   STATUS = []
 
   REQUEST = {"method": "XBMC.GetInfoBooleans",
-             "params": { "booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo"] }}
+             "params": { "booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo", "System.HasShutdown", "System.CanSuspend"] }}
   data = jcomms.sendJSON(REQUEST, "libSSaver")
   if "result" in data:
     STATUS.append("Scanning Music: %s" % ("Yes" if data["result"].get("Library.IsScanningMusic", False) else "No"))
     STATUS.append("Scanning Video: %s" % ("Yes" if data["result"].get("Library.IsScanningVideo", False) else "No"))
     STATUS.append("ScreenSaver Active: %s" % ("Yes" if data["result"].get("System.ScreenSaverActive", False) else "No"))
+    STATUS.append("Suspend Supported: %s" % ("Yes" if data["result"].get("System.CanSuspend", False) else "No"))
+    STATUS.append("Idle Timer Enabled: %s" % ("Yes" if data["result"].get("System.HasShutdown", False) else "No"))
 
   property = "System.IdleTime(%s) " % idleTime
   REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
@@ -6293,7 +6336,7 @@ def usage(EXIT_CODE):
   print("  update     Update to new version (if available)")
   print("")
   print("Valid media classes: addons, pvr.tv, pvr.radio, artists, albums, songs, movies, sets, tags, tvshows")
-  print("Valid meta classes:  audio (artists + albums + songs) and video (movies + sets + tvshows) and all (music + video + addons + pvr.tv + pvr.radio)")
+  print("Valid meta classes:  audio (artists + albums + songs) and video (movies + sets + tvshows) and all (audio + video + addons + pvr.tv + pvr.radio)")
   print("Meta classes can be used in place of media classes for: c/C/nc/lc/lnc/j/J/jd/Jd/qa/qax options.")
   print("")
   print("SQL Filter fields:")

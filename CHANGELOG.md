@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 1.5.1 (05/03/2013)
+*Add: Include suspend capability and idle timer state in `status`
+*Add: Include songs as `tc.members` in `jd albums` when `@songmembers=yes`
+*Fix: Remove unsupported class check on `qax` - now runs `qax` on all classes, even if no way to fix them
+
 ##Version 1.5.0 (04/03/2013)
 * Chg: Make rbphdmi aware of Raspberry Pi suspend capability. When used with a suspend-capable Pi, rbphdmi becomes useful only for hooking additional CEC functionality when the user provides their own `@bin.tvservice` proxy. `tvservice --status`, `tvservice --off` and `tvservice --preferred` calls will continue to be performed as the Pi sleeps and wakes, and while these calls should have no effect they will allow users to perform other related CEC processing (eg. switching inputs, powering down the TV, etc.) if desired. If no additional CEC functionality is required, rbphdmi is redundant and should stop being used (use the XBMC built-in shutdown function instead).
 
