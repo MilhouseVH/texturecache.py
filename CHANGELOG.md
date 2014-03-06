@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.5.3 (06/03/2013)
+*Fix: Ignore UnicodeEncodeError exception during normalise when input encoding is unknown/not recognised
+
 ##Version 1.5.2 (05/03/2013)
 *Add: "#"/"!" modifiers on `qa.*` fields, supressing warning whenever field is missing, else warn ("#") or fail ("!") when present but invalid. Other existing modifier is "?", which will warn whenever item is missing, rather than fail.
 *Fix: Remove debug which prevented `qax` from removing any items (sorry)

@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.2"
+    self.VERSION = "1.5.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3252,6 +3252,8 @@ class MyUtility(object):
       try:
         v = bytes(v.encode("iso-8859-1")).decode("utf-8")
       except UnicodeDecodeError:
+        pass
+      except UnicodeEncodeError:
         pass
 
     return v
