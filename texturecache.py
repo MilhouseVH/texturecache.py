@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.3"
+    self.VERSION = "1.5.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -196,6 +196,7 @@ class MyConfiguration(object):
     self.WEB_PORT = self.getValue(config, "webserver.port", "8080")
     self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
     self.RPC_PORT = self.getValue(config, "rpc.port", "9090")
+    self.RPC_IPVERSION = self.getValue(config, "rpc.ipversion", "")
     self.RPC_RETRY = int(self.getValue(config, "rpc.retry", "12"))
     self.RPC_RETRY = 0 if self.RPC_RETRY < 0 else self.RPC_RETRY
 
@@ -615,6 +616,7 @@ class MyConfiguration(object):
     print("  webserver.port = %s" % self.WEB_PORT)
     print("  webserver.ctimeout = %s" % self.WEB_CONNECTTIMEOUT)
     print("  rpc.port = %s" % self.RPC_PORT)
+    print("  rpc.ipversion = %s" % self.RPC_IPVERSION)
     print("  rpc.retry = %s" % self.RPC_RETRY)
     print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
     print("  chunked = %s" % self.BooleanIsYesNo(self.CHUNKED))
@@ -1005,8 +1007,8 @@ class MyHDMIManager(threading.Thread):
     self.EventAdd(name=self.EV_PLAY_STOP, delayTime=onstopdelay, order=1)
     self.EventAdd(name=self.EV_HDMI_OFF,  delayTime=hdmidelay,   order=99)
 
-    self.logger.debug("HDMI Power off delay: %d seconds" % self.EventInterval(self.EV_HDMI_OFF))
-    self.logger.debug("Player OnStop delay : %d seconds" % self.EventInterval(self.EV_PLAY_STOP))
+    self.logger.debug("HDMI Power off delay: %d seconds (ignored when Can Suspend is yes)" % self.EventInterval(self.EV_HDMI_OFF))
+    self.logger.debug("Player OnStop delay : %d seconds (ignored when Can Suspend is yes)" % self.EventInterval(self.EV_PLAY_STOP))
     self.logger.debug("Path to tvservice   : %s" % self.binpath)
 
   def run(self):
@@ -1252,7 +1254,11 @@ class MyHDMIManager(threading.Thread):
       self.logger.debug("No hotplug support - assuming display is powered on")
       return True
 
-    response = subprocess.check_output([self.binpath, "--status"], stderr=subprocess.STDOUT).decode("utf-8")
+    option = "--status"
+    self.logger.log("bin.tvservice (checking if TV is powered on) calling subprocess [%s %s]" % (self.binpath, option))
+    response = subprocess.check_output([self.binpath, option], stderr=subprocess.STDOUT).decode("utf-8")
+    self.logger.log("bin.tvservice response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+
     state = re.search("state (0x[0-9a-f]*) .*", response)
     if state:
       vc_hdmi = int(state.group(1)[-1:], 16)
@@ -1263,12 +1269,17 @@ class MyHDMIManager(threading.Thread):
 
   # HDMI Power: True = ON, False = OFF
   def getHDMIStatus(self):
-    response = subprocess.check_output([self.binpath, "--status"], stderr=subprocess.STDOUT).decode("utf-8")
+    option = "--status"
+    self.logger.log("bin.tvservice (checking HDMI status) calling subprocess [%s %s]" % (self.binpath, option))
+    response = subprocess.check_output([self.binpath, option], stderr=subprocess.STDOUT).decode("utf-8")
+    self.logger.log("bin.tvservice response: [%s]" % (response[:-1] if response.endswith("\n") else response))
     return response.find("TV is off") == -1
 
   def setHDMIState(self, state):
     option = "--preferred" if state else "--off"
+    self.logger.log("bin.tvservice (enabling/disabling HDMI) calling subprocess [%s %s]" % (self.binpath, option))
     response = subprocess.check_output([self.binpath, option], stderr=subprocess.STDOUT).decode("utf-8")
+    self.logger.log("bin.tvservice response: [%s]" % (response[:-1] if response.endswith("\n") else response))
 
   def disable_hdmi(self):
     if not self.getDisplayStatus():
@@ -1531,10 +1542,21 @@ class MyJSONComms(object):
 
   def getSocket(self):
     if not self.mysocket:
-      self.mysocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-      self.mysocket.settimeout(self.connecttimeout)
-      self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
-      self.mysocket.settimeout(None)
+      useipv = int(self.config.RPC_IPVERSION) if self.config.RPC_IPVERSION else None
+      for ipversion in [socket.AF_INET6, socket.AF_INET]:
+        if useipv and useipv == 4 and ipversion != socket.AF_INET: continue
+        if useipv and useipv == 6 and ipversion != socket.AF_INET6: continue
+        self.mysocket = socket.socket(ipversion, socket.SOCK_STREAM)
+        self.mysocket.settimeout(self.connecttimeout)
+        try:
+          self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
+          self.mysocket.settimeout(None)
+          self.logger.log("RPC connection established with IPv%s" % ("4" if ipversion == socket.AF_INET else "6"))
+          return self.mysocket
+        except:
+          pass
+      else:
+        raise
     return self.mysocket
 
   # Use a secondary socket object for simple lookups to avoid having to handle
