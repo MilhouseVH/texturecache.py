@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.4"
+    self.VERSION = "1.5.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4412,7 +4412,7 @@ def splitModifierToken(field):
     m = field[:1]
     return (field[1:], m, (m in ["#", "!"]), (False if (m == "?" or m == "#") else True))
   else:
-    return (field, "", False, False)
+    return (field, "", False, True)
 
 def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, season=None):
   gLogger.reset()

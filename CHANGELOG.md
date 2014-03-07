@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.5.5 (06/03/2013)
+*Fix: Incorrect interpretation of warn/fail modifier on qa token when no modifier present (defaulted to warn, should have been fail).
+
 ##Version 1.5.4 (06/03/2013)
 *Add: IPv6 support. When connecting to JSON, IPv6 will be attempted first, followed by IPv4. If you wish to use only a specific version, set `rpc.ipversion=4` or `rpc.ipversion=6` and only that version will be attempted. Default is no value for this property.
 *Add: Extra logging added to `rbphdmi` to record calls to @bin.tvservice and response received
