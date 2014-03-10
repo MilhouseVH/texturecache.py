@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.6"
+    self.VERSION = "1.5.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1506,6 +1506,17 @@ class MyDB(object):
 
     self.logger.out(line)
 
+  def getTextureFolders(self):
+    # One extr folder (!) which is used to try and identify non-standard folders
+    return ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","!"]
+
+  def getTextureFolderFilter(self, folder):
+    if folder == "!":
+      # Everything other than the regular folders
+      return "WHERE (cachedurl < '0' or cachedurl > ':') and (cachedurl < 'a' or cachedurl > 'g')"
+    else:
+      return "WHERE cachedurl LIKE '%s/%%'" % folder
+
 #
 # Handle all JSON RPC communication.
 #
@@ -2694,6 +2705,9 @@ class MyJSONComms(object):
     group = False
     f = 0
     for token in PATTERN.split(filter)[1::2]:
+      #Unescape any escaped apostrophe
+      token = token.replace("''","'")
+
       if token.startswith("("):
         group = False
         token = token[1:]
@@ -2738,18 +2752,17 @@ class MyJSONComms(object):
         elif fields[1] == "<=":
           fields[1] = "lessthanequal"
         elif fields[1].lower() == "like":
-          # If fields2 is url encoded, just use "contains", otherwise % signs indicate operator
-          if urllib2.unquote(fields[2]) != fields[2]:
+          if re.match("^%.*%$", fields[2]):
             fields[1] = "contains"
+            fields[2] = fields[2][1:-1]
+          elif re.match("^%.*", fields[2]):
+            fields[1] = "endswith"
+            fields[2] = fields[2][1:]
+          elif re.match("^.*%", fields[2]):
+            fields[1] = "startswith"
+            fields[2] = fields[2][:-1]
           else:
-            if re.match("^%.*%", fields[2]):
-              fields[1] = "contains"
-            elif re.match("^%.*", fields[2]):
-              fields[1] = "endswith"
-            elif re.match("^.*%", fields[2]):
-              fields[1] = "startswith"
-            else:
-              fields[1] = "is"
+            fields[1] = "is"
         else:
           fields[1] = "is"
           pass
@@ -4044,22 +4057,21 @@ def matchTextures_chunked(mediatype, mediaitems, jcomms, database, force, nodown
   for inum, item in enumerate(mediaitems):
     url_to_index[item.decoded_filename] = inum
 
-  TEXTUREDB = ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"]
-
   dbindex = 0
   dbmax = 0
 
   with database:
-    for fnum, folder in enumerate(TEXTUREDB):
+    folders = database.getTextureFolders()
 
+    for fnum, folder in enumerate(folders):
       # Once all library items have been matched, no need to continue querying textures db
       if unmatched == 0: break
 
       gLogger.progress("Loading Texture DB: Chunk %2d of %d [unmatched %d: matched %d, skipped %d] (%d of %d)" %
-        (fnum+1, len(TEXTUREDB), unmatched, matched, skipped, dbindex, dbmax))
+        (fnum+1, len(folders), unmatched, matched, skipped, dbindex, dbmax))
 
       dbfiles = []
-      for r in database.getRows("WHERE cachedurl LIKE '%s/%%'" % folder, allfields=False):
+      for r in database.getRows(database.getTextureFolderFilter(folder), allfields=False):
         dbfiles.append(r)
 
       dbindex = 0
@@ -4069,7 +4081,7 @@ def matchTextures_chunked(mediatype, mediaitems, jcomms, database, force, nodown
         dbindex += 1
 
         gLogger.progress("Loading Texture DB: Chunk %2d of %d [unmatched %d: matched %d, skipped %d] (%d of %d)" %
-          (fnum+1, len(TEXTUREDB), unmatched, matched, skipped, dbindex, dbmax), every=50, finalItem=(dbindex==dbmax))
+          (fnum+1, len(folders), unmatched, matched, skipped, dbindex, dbmax), every=50, finalItem=(dbindex==dbmax))
 
         inum = url_to_index.get(dbrow["url"], None)
         if inum != None:
@@ -5138,17 +5150,19 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
   with database:
     SQL = []
 
-    if database.usejson:
-      ESCAPE_CHAR = "%"
-      ESCAPE = ""
-    else:
-      ESCAPE_CHAR = "`"
-      ESCAPE = " ESCAPE '%s'" % ESCAPE_CHAR
+    ESCAPE_CHAR = "`" if not database.usejson else ""
+    ESCAPE = " ESCAPE '%s'" % ESCAPE_CHAR if ESCAPE_CHAR else ""
 
     if search != "":
-      SQL.append("WHERE t.url LIKE '%s%s%s'%s ORDER BY t.cachedurl ASC" % (ESCAPE_CHAR, search, ESCAPE_CHAR, ESCAPE))
-      if gConfig.SEARCH_ENCODE and urllib2.quote(search, "()") != search:
-        SQL.append("WHERE t.url LIKE '%s%s%s'%s ORDER BY t.cachedurl ASC" % (ESCAPE_CHAR, urllib2.quote(search, "()"), ESCAPE_CHAR, ESCAPE))
+      SQL.append("WHERE t.url LIKE '%%%s%%' ORDER BY t.cachedurl ASC" % search.replace("'","''"))
+
+      # Aide-memoire: Why we have to do the following nonsense: http://trac.xbmc.org/ticket/14905
+      if gConfig.SEARCH_ENCODE:
+        search2 = urllib2.quote(search, "()")
+        if search2 != search:
+          if ESCAPE_CHAR:
+            search2 = search2.replace("%", "%s%%" % ESCAPE_CHAR)
+          SQL.append("WHERE t.url LIKE '%%%s%%'%s ORDER BY t.cachedurl ASC" % (search2, ESCAPE))
     elif filter != "":
       SQL.append("%s " % filter)
 
@@ -5161,9 +5175,13 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
 
     if SQL:
       for sql in SQL:
-        dbrows.extend(database.getRows(filter=sql, allfields=True))
+        rows = database.getRows(filter=sql, allfields=True)
+        gLogger.log("EXECUTED SQL: Queried %d rows" % len(rows))
+        dbrows.extend(rows)
     else:
-      dbrows.extend(database.getRows(allfields=True))
+      rows = database.getRows(allfields=True)
+      gLogger.log("EXECUTED SQL: Queried %d rows" % len(rows))
+      dbrows.extend(rows)
 
     rpcnt = 100.0
     if len(dbrows) != 0:
@@ -5366,27 +5384,24 @@ def pruneCache_fast(database, libraryFiles, localfiles, re_search):
 def pruneCache_chunked(database, libraryFiles, localfiles, re_search):
   gLogger.progress("Loading Texture DB items...")
 
-  # One extr folder which is used to try and identify non-standard folders
-  TEXTUREDB = ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","!"]
-
   with database:
-    for fnum, folder in enumerate(TEXTUREDB):
-      if folder == "!":
-        # Everything other than the regular folders
-        filter = "WHERE (cachedurl < '0' or cachedurl > ':') and (cachedurl < 'a' or cachedurl > 'g')"
-      else:
-        filter = "WHERE cachedurl LIKE '%s/%%'" % folder
+    folders = database.getTextureFolders()
 
-      gLogger.progress("Loading Texture DB: Chunk %2d of %d..." % (fnum+1, len(TEXTUREDB)))
+    for fnum, folder in enumerate(folders):
+      gLogger.progress("Loading Texture DB: Chunk %2d of %d..." % (fnum+1, len(folders)))
 
       dbfiles = []
-      dbrows = database.getRows(filter, allfields=True)
-      j = len(dbrows)
+      dbrows = database.getRows(database.getTextureFolderFilter(folder), allfields=True)
+
       i = 0
+      j = len(dbrows)
+
       for dbrow in dbrows:
         i += 1
+
         gLogger.progress("Processing artwork: Chunk %2d of %d (%d%%)" %
-          (fnum+1, len(TEXTUREDB), (100 * i / j)), every=25, finalItem=(i == j))
+          (fnum+1, len(folders), (100 * i / j)), every=25, finalItem=(i == j))
+
         pruneCache_processrow(dbrow, libraryFiles, localfiles, re_search)
 
   gLogger.progress("")

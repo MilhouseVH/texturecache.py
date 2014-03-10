@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.5.7 (10/03/2013)
+*Fix: Correctly escape meta-characters during LIKE when querying SQLite db during search (`s`)
+*Chg: Move TextureDB folder processing to common functions
+
 ##Version 1.5.6 (10/03/2013)
 *Fix: Trap exception when attempt to create IPv6 socket fails. Creating an IPv6 socket succeeds on some systems such as Ubuntu and OpenELEC - even if a subsequent IPv6 connection isn't possible - but not others (Raspbian, Xbian). Closes issue #12
 *Fix: Allow some pattern properties with default values to be set to an undefined value instead, if desired.
