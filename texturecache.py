@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.5"
+    self.VERSION = "1.5.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -232,7 +232,7 @@ class MyConfiguration(object):
       temp = int(self.getValue(config, "download.threads.%s" % x, self.DOWNLOAD_THREADS_DEFAULT))
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
 
-    self.SINGLETHREAD_URLS = self.getPatternFromList(config, "singlethread.urls", serial_urls)
+    self.SINGLETHREAD_URLS = self.getPatternFromList(config, "singlethread.urls", serial_urls, allowundefined=True)
 
     self.XTRAJSON = {}
     self.QA_FIELDS = {}
@@ -293,7 +293,7 @@ class MyConfiguration(object):
     self.QADATE = adate.strftime("%Y-%m-%d")
 
     self.QA_FILE = self.getBoolean(config, "qafile", "no")
-    self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls)
+    self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls, allowundefined=True)
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
     (self.QA_NFO_REFRESH, self.qa_nfo_refresh_date, self.qa_nfo_refresh_date_fmt) = self.getRelativeDateAndFormat(config, "qa.nfo.refresh", "")
@@ -314,7 +314,7 @@ class MyConfiguration(object):
     self.LOGDCACHE = self.getBoolean(config, "logfile.dcache", "no")
 
     self.CACHE_ARTWORK = self.getSimpleList(config, "cache.artwork", "")
-    self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls)
+    self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls, allowundefined=True)
     self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", "")
 
     # Fix patterns as we now strip image:// from the urls, so we need to remove
@@ -481,8 +481,8 @@ class MyConfiguration(object):
     temp = self.getValue(config, aKey, default).lower()
     return temp in ["yes", "true"]
 
-  def getSimpleList(self, config, aKey, default=""):
-    aStr = self.getValue(config, aKey, default)
+  def getSimpleList(self, config, aKey, default="", allowundefined=False):
+    aStr = self.getValue(config, aKey, default, allowundefined)
 
     newlist = []
 
@@ -493,17 +493,17 @@ class MyConfiguration(object):
 
     return newlist
 
-  def getFileExtList(self, config, aKey, default=""):
+  def getFileExtList(self, config, aKey, default="", allowundefined=False):
     newList = []
-    for x in [x.lower() for x in self.getSimpleList(config, aKey, default)]:
+    for x in [x.lower() for x in self.getSimpleList(config, aKey, default, allowundefined)]:
       if not x.startswith("."):
         x = ".%s" % x
       if x not in newList:
         newList.append(x)
     return newList
 
-  def getPatternFromList(self, config, aKey, default=""):
-    aList = self.getValue(config, aKey, default)
+  def getPatternFromList(self, config, aKey, default="", allowundefined=False):
+    aList = self.getValue(config, aKey, default, allowundefined)
 
     if aList and aList.startswith("+"):
       aList = aList[1:]
@@ -518,8 +518,8 @@ class MyConfiguration(object):
     for r in aPattern: t.append(r.pattern)
     return ", ".join(t)
 
-  def getRelativeDateAndFormat(self, config, key, default):
-    adate = self.getValue(config, key, default)
+  def getRelativeDateAndFormat(self, config, key, default, allowundefined=False):
+    adate = self.getValue(config, key, default, allowundefined)
     if adate:
       if adate.lower() == "today":
         t = datetime.date.today()
@@ -1546,9 +1546,9 @@ class MyJSONComms(object):
       for ipversion in [socket.AF_INET6, socket.AF_INET]:
         if useipv and useipv == 4 and ipversion != socket.AF_INET: continue
         if useipv and useipv == 6 and ipversion != socket.AF_INET6: continue
-        self.mysocket = socket.socket(ipversion, socket.SOCK_STREAM)
-        self.mysocket.settimeout(self.connecttimeout)
         try:
+          self.mysocket = socket.socket(ipversion, socket.SOCK_STREAM)
+          self.mysocket.settimeout(self.connecttimeout)
           self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
           self.mysocket.settimeout(None)
           self.logger.log("RPC connection established with IPv%s" % ("4" if ipversion == socket.AF_INET else "6"))
@@ -6322,7 +6322,7 @@ def usage(EXIT_CODE):
   print("  F          Same as f, but doesn't include database rows")
   print("  d          Delete rows with matching ids, along with associated cached images")
   print("  c          Re-cache missing artwork. Class can be movies, tags, sets, tvshows, artists, albums or songs.")
-  print("  C          Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Filter mandatory.")
+  print("  C          Re-cache artwork even when it exists. Class can be movies, tags, sets, tvshows, artists, albums or songs. Class and filter both mandatory unless allow.recacheall=yes.")
   print("  nc         Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
   print("  lc         Like c, but only for content added since the modification date of the file specficied in property lastrunfile")
   print("  lnc        Like nc, but only for content added since the modification date of the file specficied in property lastrunfile")
