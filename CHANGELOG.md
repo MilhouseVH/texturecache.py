@@ -1,5 +1,12 @@
 #Changelog
 
+##Version 1.5.8 (14/03/2013)
+*Chg: Only FAIL artwork during QA if the artwork exists locally so that the failed artwork will be replaced by the local artwork when removing and re-scraping during `qax`, otherwise the missing/invalid artwork will only be flagged as WARN. This new behaviour is intended to prevent the unnecessary removal and re-scraping of items (movies, episodes) due to failed artwork when the artwork is unlikely to be rescraped correctly once the item has been removed.
+
+Disable this new default behaviour with `qa.fail.checkexists=no` to re-instate pre-v1.5.8 behaviour, in which case any artwork item that fails QA (either because it is not present in the media library, or the url fails due to a `qa.fail.urls` pattern) will trigger a rescrape during `qax` even if the artwork doesn't exist locally which may result in artwork not being re-scraped at all, or the invalid artwork simply being reloaded thus rendering the remove & rescrape a waste of time.
+
+Standard artwork naming conventions supported for movies (poster, fanart, clearart, clearlogo, discart etc., with/without movie-name prefix) and tvshow episodes (<episodename>-thumb.jpg). 
+
 ##Version 1.5.7 (10/03/2013)
 *Fix: Correctly escape meta-characters during LIKE when querying SQLite db during search (`s`)
 *Chg: Move TextureDB folder processing to common functions

@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.7"
+    self.VERSION = "1.5.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -293,6 +293,7 @@ class MyConfiguration(object):
     self.QADATE = adate.strftime("%Y-%m-%d")
 
     self.QA_FILE = self.getBoolean(config, "qafile", "no")
+    self.QA_FAIL_CHECKEXISTS = self.getBoolean(config, "qa.fail.checkexists", "yes")
     self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls, allowundefined=True)
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
@@ -646,6 +647,7 @@ class MyConfiguration(object):
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
     print("  qa.nfo.refresh = %s%s" % (self.NoneIsBlank(self.QA_NFO_REFRESH), " (%s)" % self.qa_nfo_refresh_date_fmt if self.qa_nfo_refresh_date_fmt else ""))
+    print("  qa.fail.checkexists = %s" % self.BooleanIsYesNo(self.QA_FAIL_CHECKEXISTS))
     print("  qa.fail.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_FAIL_TYPES)))
     print("  qa.warn.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_WARN_TYPES)))
 
@@ -4333,14 +4335,29 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
         artwork = item.get(j, "")
       if artwork == "":
         if not MOD_MISSING_SILENT:
-          missing["missing %s" % j] = MOD_MISSING_WARN_FAIL
+          if MOD_MISSING_WARN_FAIL:
+            if gConfig.QA_FAIL_CHECKEXISTS and "file" in item:
+              if qa_check_artfile_exists(jcomms, mediatype, item, i):
+                missing["missing %s, local is available" % j] = True
+              else:
+                missing["missing %s, local not found" % j] = False
+            else:
+              missing["missing %s" % j] = True
+          else:
+            missing["missing %s" % j] = False
       else:
         decoded_url = MyUtility.normalise(artwork, strip=True)
         FAILED = False
-        if gConfig.QA_FAIL_TYPES:
+        if gConfig.QA_FAIL_TYPES and MOD_MISSING_WARN_FAIL:
           for qafailtype in gConfig.QA_FAIL_TYPES:
             if qafailtype.search(decoded_url):
-              missing["URL %s %s" % (j, qafailtype.pattern)] = True
+              if gConfig.QA_FAIL_CHECKEXISTS and "file" in item:
+                if qa_check_artfile_exists(jcomms, mediatype, item, i):
+                  missing["URL %s %s, local is available" % (j, qafailtype.pattern)] = True
+                else:
+                  missing["URL %s %s, local not found" % (j, qafailtype.pattern)] = False
+              else:
+                missing["URL %s %s" % (j, qafailtype.pattern)] = True
               FAILED = True
               break
         if not FAILED and gConfig.QA_WARN_TYPES:
@@ -4418,6 +4435,55 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
     TOTALS.TimeStart(mediatype, "Rescan")
     jcomms.rescanDirectories(workItems)
     TOTALS.TimeEnd(mediatype, "Rescan")
+
+# Return True if an artwork item can be matched, this means we can
+# FAIL the item and remove/re-scrape. If no artwork exists, then just
+# WARN because removing/rescraping won't serve any purpose.
+def qa_check_artfile_exists(jcomms, mediatype, item, artwork):
+  if "file" not in item:
+    return False
+
+  dir = os.path.dirname(item["file"])
+  data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
+  files = data.get("result", {}).get("files", [])
+
+  if files:
+    for art in get_qa_artworkcandidates(mediatype, item, artwork):
+      for file in files:
+        if file["filetype"] == "file" and file["file"] == art:
+          return True
+
+  return False
+
+# Construct a list of potential artwork candidates
+# based on file name and artwork type.
+def get_qa_artworkcandidates(mediatype, item, artwork):
+  art = []
+  types = []
+
+  filename = item["file"]
+  fname = os.path.splitext(filename)[0]
+  parent = os.path.dirname(filename)
+  fs_bs = "\\" if filename.find("\\") != -1 else "/"
+
+  types.append(artwork)
+
+  if artwork == "poster":
+    types.append("thumb")
+  elif artwork == "clearlogo":
+    types.append("logo")
+  elif artwork == "discart":
+    types.append("disc")
+
+  for t in types:
+    art.append("%s-%s.jpg" % (fname, t))
+    art.append("%s%s%s.jpg" % (parent, fs_bs, t))
+    if mediatype in ["albums", "songs"] and t == "thumbnail":
+      art.append("%s.jpg" % (fname))
+      art.append("%s%s%s.jpg" % (parent, fs_bs, "folder"))
+      art.append("%s%s%s.jpg" % (parent, fs_bs, "cover"))
+
+  return art
 
 def splitModifierToken(field):
   if field and field[:1] in ["?", "#", "!"]:
