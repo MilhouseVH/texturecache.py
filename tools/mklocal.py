@@ -68,9 +68,7 @@ class MyUtility(object):
   def fromUnicode2(value):
     if not MyUtility.isPython3:
       try:
-        print(value)
         value = bytes(value.encode("utf-8"))
-        print(value)
       except UnicodeDecodeError:
         pass
 
