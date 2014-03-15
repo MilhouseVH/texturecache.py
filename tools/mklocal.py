@@ -321,7 +321,13 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
     artpath_m = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None), singleFolder=False)
     artpath_s = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None), singleFolder=True)
 
-    newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath_m, artpath_s)
+    if COMMON_DIR and mediatype == "movie":
+      (fpath, fname) = os.path.split(artpath_m)
+      artpath_c = "%s%s%s%s%s" % (LOCAL_DIR, COMMON_DIR, mediatype, getSlash(LOCAL_DIR), fname)
+    else:
+      artpath_c = None
+
+    newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath_m, artpath_s, artpath_c)
 
     if not newname and oldname:
       debug2(artitem["type"], "Assigning null value to library item")
@@ -345,7 +351,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   return workitem
 
-def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname_multi, pathname_single):
+def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname_multi, pathname_single, pathname_common):
   debug(1, "artwork type [%s] known by XBMC as [%s]" % (atype, currentname))
 
   # See if we already have a file of the desired artwork type, either in
@@ -362,6 +368,14 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
         return target
 
   # Next, check folder using multi-file naming convention
+  for source_type in [".png", ".jpg"]:
+    target = "%s%s" % (pathname_common, source_type)
+    if os.path.exists(target):
+      debug2(atype, "Found pre-existing common local file:", target)
+      target = pathToXBMC(target)
+      debug2(atype, "Converting common local filename to XBMC path:", target)
+      return target
+
   for source_type in [".png", ".jpg"]:
     target = "%s%s" % (pathname_multi, source_type)
     if os.path.exists(target):
@@ -384,7 +398,10 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
   # We're going to create a new file.
   # We have a remote source (currentname) and a partial
   # name for the target - need to append the file format type.
-  pathname = pathname_single if args.singlefolders else pathname_multi
+  if pathname_common:
+    pathname = pathname_common
+  else:
+    pathname = pathname_single if args.singlefolders else pathname_multi
   target = "%s%s" % (pathname, os.path.splitext(currentname)[1].lower())
 
   # Download the new artwork and convert the name of the new file
@@ -513,7 +530,7 @@ def getJSONdata(args):
   return jdata
 
 def showConfig(args, download_items, season_items, episode_items):
-  global LOCAL_DIR, LOCAL_ALT, XBMC_PATH
+  global LOCAL_DIR, LOCAL_ALT, XBMC_PATH, COMMON_DIR
 
   def _blank(value):
     return (value if value else "Not specified")
@@ -523,6 +540,7 @@ def showConfig(args, download_items, season_items, episode_items):
   printerr("  Local Path    : %s" % _blank(LOCAL_DIR))
   printerr("  Alt Local     : %s" % _blank(LOCAL_ALT))
   printerr("  XBMC Path     : %s" % _blank(XBMC_PATH))
+  printerr("  Common Path   : %s" % _blank(COMMON_DIR))
   printerr("  Read Only     : %s" % ("Yes" if args.readonly else "No"))
   printerr("  Dry Run       : %s" % ("Yes" if args.dryrun else "No"))
   printerr("  Single Folder : %s" % ("Yes" if args.singlefolders else "No"))
@@ -560,7 +578,7 @@ def listToString(aList, translate=False):
   return tmpStr
 
 def init():
-  global NOT_AVAILABLE_CACHE, LOCAL_DIR, LOCAL_ALT, XBMC_PATH, VERBOSE
+  global NOT_AVAILABLE_CACHE, LOCAL_DIR, LOCAL_ALT, XBMC_PATH, COMMON_DIR, VERBOSE
 
   if sys.version_info >= (3, 1):
     sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
@@ -600,6 +618,9 @@ def init():
                       help="Output a data structure suitable for consumption by texturecache.py [test]set, \
                             used to update an XBMC media library converting remote urls into \
                             local urls. Written to stdout if FILENAME is - or not specified")
+
+  parser.add_argument("-C", "--common", nargs="?", metavar="FILENAME", \
+                      help="Read artwork from, or write to, a common artwork folder parented by --local")
 
   parser.add_argument("--dryrun", action="store_true", \
                       help="Don't create anything (although downloads will be attempted)")
@@ -655,6 +676,9 @@ def init():
 
   XBMC_PATH = args.prefix
   if XBMC_PATH and XBMC_PATH[-1] not in ["/", "\\"]: XBMC_PATH += getSlash(XBMC_PATH)
+
+  COMMON_DIR = args.common
+  if COMMON_DIR and COMMON_DIR[-1] not in ["/", "\\"]: COMMON_DIR += getSlash(LOCAL_DIR)
 
   # Disable downloading if output path not set, or prefix not known
   # as then impossible to create valid output filenames

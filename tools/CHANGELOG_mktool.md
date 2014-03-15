@@ -1,6 +1,8 @@
 
 #Changelog
 
+* Add: --common folder for movies - read or write artwork into a common folder.
+
 ## 18/01/2014
 * Add: `nokeep` option - don't keep artwork that cannot be matched to pre-existing local artwork
 
