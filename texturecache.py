@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.8"
+    self.VERSION = "1.5.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -218,6 +218,9 @@ class MyConfiguration(object):
       self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace("\n", "")
     else:
       self.WEB_AUTH_TOKEN = None
+
+    self.QUERY_SEASONS = self.getBoolean(config, "query.seasons", "yes")
+    self.QUERY_EPISODES = self.getBoolean(config, "query.episodes", "yes") if self.QUERY_SEASONS else False
 
     self.DOWNLOAD_THREADS_DEFAULT = int(self.getValue(config, "download.threads", "2"))
     self.DOWNLOAD_RETRY = int(self.getValue(config, "download.retry", "3"))
@@ -622,6 +625,8 @@ class MyConfiguration(object):
     print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
     print("  chunked = %s" % self.BooleanIsYesNo(self.CHUNKED))
     print("  modifieddate.mdy = %s" % self.BooleanIsYesNo(self.MDATE_MDY))
+    print("  query.seasons = %s" % self.BooleanIsYesNo(self.QUERY_SEASONS))
+    print("  query.episodes = %s" % self.BooleanIsYesNo(self.QUERY_EPISODES))
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
     print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
     print("  download.retry = %d" % self.DOWNLOAD_RETRY)
@@ -3747,7 +3752,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
                         "channels": channels})
     data = pvrdata
 
-  if mediatype == "tvshows":
+  if mediatype == "tvshows" and gConfig.QUERY_SEASONS:
     for tvshow in data:
       title = tvshow["title"]
       gLogger.progress("Loading TV Show: %s..." % title)
@@ -3765,12 +3770,13 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
         gLogger.progress("Loading TV Show: %s, Season %d..." % (title, seasonid))
 
-        (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, tvshow=tvshow, tvseason=season,
-                                             lastRun=lastRun, secondaryFields=secondaryFields, uniquecast=UCAST)
-        if not "result" in data3: return
-        limits = data3["result"]["limits"]
-        if limits["total"] == 0: continue
-        season[s3] = data3["result"][s3]
+        if gConfig.QUERY_EPISODES:
+          (s3, t3, i3, data3) = jcomms.getData(action, "episodes", filter, extraFields, tvshow=tvshow, tvseason=season,
+                                               lastRun=lastRun, secondaryFields=secondaryFields, uniquecast=UCAST)
+          if not "result" in data3: return
+          limits = data3["result"]["limits"]
+          if limits["total"] == 0: continue
+          season[s3] = data3["result"][s3]
 
   del UCAST
 

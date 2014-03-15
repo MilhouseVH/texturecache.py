@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.5.9 (15/03/2013)
+*Add: `query.seasons` and `query.episodes` properties to speed up tvshow querying (caching, dumping, qa etc.) by not loading seasons and/or episodes when not required. Whenever `query.seasons` is disabled, `query.episodes` will be automatically disabled however disabling only `query.episodes` will return the tv show "header" plus the season details for each tv show. By default both properties are enabled.
+
 ##Version 1.5.8 (14/03/2013)
 *Chg: Only FAIL artwork during QA if the artwork exists locally so that the failed artwork will be replaced by the local artwork when removing and re-scraping during `qax`, otherwise the missing/invalid artwork will only be flagged as WARN. This new behaviour is intended to prevent the unnecessary removal and re-scraping of items (movies, episodes) due to failed artwork when the artwork is unlikely to be rescraped correctly once the item has been removed.
 
