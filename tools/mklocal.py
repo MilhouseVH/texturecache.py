@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.2.0
+#version 0.2.1
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -43,14 +43,60 @@ if sys.version_info >= (3, 0):
 else:
   import urllib2
 
+# Helper class...
+class MyUtility(object):
+  isPython3 = (sys.version_info >= (3, 0))
+
+  # Convert filename into consistent utf-8
+  # representation for both Python2 and Python3
+  @staticmethod
+  def toutf8(value):
+    if not value: return value
+
+    if not MyUtility.isPython3:
+      try:
+        value = value.encode("utf-8")
+      except UnicodeDecodeError:
+        pass
+      except UnicodeEncodeError:
+        pass
+
+    return value
+
+  # Quote unquoted filename
+  @staticmethod
+  def fromUnicode2(value):
+    if not MyUtility.isPython3:
+      try:
+        print(value)
+        value = bytes(value.encode("utf-8"))
+        print(value)
+      except UnicodeDecodeError:
+        pass
+
+    return value
+
+  @staticmethod
+  def toUnicode(value):
+    if MyUtility.isPython3: return value
+
+    if isinstance(value, basestring):
+      if not isinstance(value, unicode):
+        try:
+          value = unicode(value, encoding="utf-8", errors="ignore")
+        except UnicodeDecodeError:
+          pass
+
+    return value
+
 def printout(msg, newline=True):
   endchar = "\n" if newline else ""
-  print(msg, file=sys.stdout, end=endchar)
+  print(MyUtility.toUnicode(msg), file=sys.stdout, end=endchar)
   sys.stderr.flush()
 
 def printerr(msg, newline=True):
   endchar = "\n" if newline else ""
-  print(msg, file=sys.stderr, end=endchar)
+  print(MyUtility.toUnicode(msg), file=sys.stderr, end=endchar)
   sys.stderr.flush()
 
 def info(args, msg, atype, title, reason = None, url = None, target = None):
@@ -297,6 +343,8 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   filename = os.path.splitext(pathToLocal(mediafile))[0]
 
+  filename = MyUtility.toutf8(filename)
+
   debug(1, "local root name would be [%s]" % (filename))
 
   # seasonid requires JSON API v6.10.0+
@@ -310,7 +358,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   for artitem in download_items:
     oldname = art.get(artitem["type"], None)
-    if oldname: oldname = oldname[8:-1]
+    if oldname: oldname = MyUtility.toutf8(oldname[8:-1])
 
     label = "art.%s" % artitem["type"]
 

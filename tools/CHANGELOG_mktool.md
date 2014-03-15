@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 15/03/2014
+* Fix: Filename encoding issue with foreign characters.
+
 ## 18/01/2014
 * Add: `nokeep` option - don't keep artwork that cannot be matched to pre-existing local artwork
 
