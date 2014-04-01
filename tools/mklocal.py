@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.2.1
+#version 0.2.2
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -107,7 +107,8 @@ def info(args, msg, atype, title, reason = None, url = None, target = None):
     line = "%s%-15s - %-10s - %-45s -> %s" % (line, msg, atype.center(10), addEllipsis(45, title), target)
   else:
     line = "%s%-15s - %-10s - %s" % (line, msg, atype.center(10), title)
-  printerr(line)
+
+  printout(line) if args.info else printerr(line)
 
 def warning(args, msg, atype, title, reason = None, url = None, target = None):
   if not args.quiet:
@@ -372,11 +373,15 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
     if not newname and oldname:
       debug2(artitem["type"], "Assigning null value to library item")
       workitem["items"][label] = None
+      if args.info:
+        info(args, "Removing", artitem["type"], mediatitle)
     else:
       if newname and newname != oldname:
         debug2(artitem["type"], "Changing library value to:", newname)
         workitem["items"][label] = newname
         keepitem["items"][label] = newname
+        if args.info:
+          info(args, "Replacing", artitem["type"], mediatitle)
       else:
         debug2(artitem["type"], "No library change required, keeping:", oldname)
         keepitem["items"][label] = newname
@@ -679,6 +684,9 @@ def init():
 
   parser.add_argument("-nk", "--nokeep", action="store_true", \
                       help="Don't keep artwork if not able to match with pre-existing local artwork")
+
+  parser.add_argument("--info", action="store_true", \
+                      help="Display informational output to stdout")
 
   group = parser.add_mutually_exclusive_group()
   group.add_argument("-q", "--quiet", action="store_true", \

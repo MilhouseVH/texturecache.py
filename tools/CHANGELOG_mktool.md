@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 17/03/2014
+* Add: `--info` argument to redirect informational data to stdout instead of stderr
+
 ## 15/03/2014
 * Fix: Filename encoding issue with foreign characters.
 

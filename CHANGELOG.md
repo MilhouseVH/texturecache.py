@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.0 (01/04/2013)
+*Add: Show feedback whenever a media item is removed during `aclean`/`vclean` - if possible, displaying title or just library id.
+
 ##Version 1.5.9 (15/03/2013)
 *Add: `query.seasons` and `query.episodes` properties to speed up tvshow querying (caching, dumping, qa etc.) by not loading seasons and/or episodes when not required. Whenever `query.seasons` is disabled, `query.episodes` will be automatically disabled however disabling only `query.episodes` will return the tv show "header" plus the season details for each tv show. By default both properties are enabled.
 

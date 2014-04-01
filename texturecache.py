@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.5.9"
+    self.VERSION = "1.6.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1883,6 +1883,24 @@ class MyJSONComms(object):
     return True if method.endswith("Library.OnScanFinished") else False
 
   def jsonWaitForCleanFinished(self, id, method, params):
+    if method.endswith("Library.OnRemove") and "data" in params:
+      if "item" in params["data"]:
+        item = params["data"]["item"]
+      elif "type" in params["data"]:
+        item = params["data"]
+      else:
+        item = None
+
+      if item:
+        iType = item["type"]
+        libraryId = item["id"]
+        title = self.getTitleForLibraryItem(iType, libraryId)
+
+        if title:
+          self.logger.out("Cleaning Library: %-9s %5d [%s]\n" % (iType + "id", libraryId, title))
+        else:
+          self.logger.out("Cleaning Library: %-9s %5d\n" % (iType + "id", libraryId))
+
     return True if method.endswith("Library.OnCleanFinished") else False
 
   def addProperties(self, request, fields):
