@@ -94,6 +94,8 @@ wget https://raw.github.com/MilhouseVH/texturecache.py/master/texturecache.py -O
 chmod +x ./texturecache.py
 ```
 
+If you experience a certificate error, try adding "--no-check-certificate" to the wget command line.
+
 If you are using OpenELEC which has a pretty basic wget that doesn't support https downloads, instead use `curl`:
 
 ####Code:
