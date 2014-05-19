@@ -90,7 +90,7 @@ Download the single Python file required from github. A default properties file 
 To download the script at the command line:
 ####Code:
 ```
-wget https://raw.github.com/MilhouseVH/texturecache.py/master/texturecache.py -O texturecache.py
+wget https://raw.githubusercontent.com/MilhouseVH/texturecache.py/master/texturecache.py -O texturecache.py
 chmod +x ./texturecache.py
 ```
 
@@ -100,7 +100,7 @@ If you are using OpenELEC which has a pretty basic wget that doesn't support htt
 
 ####Code:
 ```
-curl https://raw.github.com/MilhouseVH/texturecache.py/master/texturecache.py -o texturecache.py
+curl https://raw.githubusercontent.com/MilhouseVH/texturecache.py/master/texturecache.py -o texturecache.py
 chmod +x ./texturecache.py
 ```
 
