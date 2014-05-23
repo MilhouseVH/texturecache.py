@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.1 (23/05/2013)
+* Add support to `rbphdmi` for `vcgencmd display_power` which allows HDMI to be disabled and enabled without requiring a restart of xbmc.bin. Requires firmware from 23 May 2014 onwards. If the path to `vcgencmd` can't be determined automatically then set `@bin.vcgencmd` with a valid path (defaults to `/usr/bin/vcgencmd` but uses `which` to determine a working alternative as long as its on `$PATH`). Optionally set `@bin.ceccontrol` to the path of a script that will be called with "on" and "off" arguments after HDMI is enabled or disabled - the default value for this property is not defined.
+
 ##Version 1.6.0 (01/04/2013)
 *Add: Show feedback whenever a media item is removed during `aclean`/`vclean` - if possible, displaying title or just library id.
 
