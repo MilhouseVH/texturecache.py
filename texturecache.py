@@ -57,11 +57,10 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.6.1"
+    self.VERSION = "1.6.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
-    self.ANALYTICS_SPAM = "http://goo.gl/5F5QjX"
 
     self.DEBUG = True if os.environ.get("PYTHONDEBUG", "n").lower()=="y" else False
 
@@ -1021,8 +1020,8 @@ class MyHDMIManager(threading.Thread):
     self.EventAdd(name=self.EV_PLAY_STOP, delayTime=onstopdelay, order=1)
     self.EventAdd(name=self.EV_HDMI_OFF,  delayTime=hdmidelay,   order=99)
 
-    self.logger.debug("HDMI Power off delay: %d seconds (ignored when Can Suspend is yes)" % self.EventInterval(self.EV_HDMI_OFF))
-    self.logger.debug("Player OnStop delay : %d seconds (ignored when Can Suspend is yes)" % self.EventInterval(self.EV_PLAY_STOP))
+    self.logger.debug("HDMI Power off delay: %d seconds (ignored when CanSuspend is yes)" % self.EventInterval(self.EV_HDMI_OFF))
+    self.logger.debug("Player OnStop delay : %d seconds (ignored when CanSuspend is yes)" % self.EventInterval(self.EV_PLAY_STOP))
     self.logger.debug("Path to tvservice   : %s" % self.bin_tvservice)
     self.logger.debug("Path to vcgencmd    : %s" % self.bin_vcgencmd)
     self.logger.debug("Path to ceccontrol  : %s" % self.bin_ceccontrol)
@@ -1062,26 +1061,26 @@ class MyHDMIManager(threading.Thread):
           self.logger.debug("HDMI power management thread - initialising XBMC and HDMI state")
 
           clientState = self.getXBMCStatus()
-          hdmi_on = self.getHDMIStatus()
+          hdmi_on = self.getHDMIState()
 
           screensaver_active = clientState["screensaver.active"]
           player_active = clientState["players.active"]
           library_active = (clientState["scanning.music"] or clientState["scanning.video"])
 
           # If the Pi can suspend, don't schedule the EV_HDMI_OFF event or restart XBMC
-          # to re-init the HDMI. Instead, just log various events, and call tvservice
-          # whenever sleeping or waking, in case anyone wants to hook the tvservice
-          # calls for additional CEC functionality.
+          # to re-init the HDMI. Instead, just log various events and call ceccontrol
+          # whenever sleeping or waking.
           self.cansuspend = clientState["cansuspend"]
 
           # If firmware supports ability to disable HDMI power, then use "vcgencmd display_power 0|1"
-          # to control HDMI rather than tvservice.bin
-          self.candisable = clientState["vcgencmd display_power"]
+          # to control HDMI rather than tvservice.
+          self.candisable = clientState["vcgencmd.display_power"]
 
           if hdmi_on == False:
             hdmi_status = "off"
           elif self.candisable and not self.getPowerState():
             hdmi_status = "disabled"
+            hdmi_on = False
           else:
             hdmi_status = "on"
 
@@ -1111,10 +1110,10 @@ class MyHDMIManager(threading.Thread):
             if self.EventEnabled(self.EV_HDMI_OFF):
               self.EventStop(self.EV_HDMI_OFF)
               self.logger.debug("Scheduled HDMI power-off cancelled")
-            elif self.candisable:
-              hdmi_on = self.enable_hdmi()
             else:
-              self.sendXBMCExit()
+              hdmi_on = self.enable_hdmi()
+              if not self.candisable:
+                self.sendXBMCExit()
 
         elif method == "Player.OnStop":
           self.EventSet(self.EV_PLAY_STOP)
@@ -1135,18 +1134,18 @@ class MyHDMIManager(threading.Thread):
 
         elif method == "System.OnSleep":
           self.logger.debug("Client is now suspended")
-          # HDMI already disabled, but calls to tvservice could be used to hook CEC functionality
-          hdmi_on = self.disable_hdmi()
+          # HDMI already disabled, but may need to process CEC functionality
+          self.callCECControl("off")
 
         elif method == "System.OnWake":
           self.logger.debug("Client has resumed")
-          # HDMI already enabled, but calls to tvservice could be used to hook CEC functionality
-          hdmi_on = self.enable_hdmi()
+          # HDMI already enabled, but may need to process CEC functionality
+          self.callCECControl("on")
 
         elif method == "System.OnQuit":
+          self.EventsStopAll()
           if not hdmi_on:
             hdmi_on = self.enable_hdmi()
-          self.EventsStopAll()
 
       except Queue.Empty as e:
         pass
@@ -1174,7 +1173,7 @@ class MyHDMIManager(threading.Thread):
             elif event == self.EV_HDMI_OFF:
               if player_active or library_active:
                 if not self.EventOverdue(event, now):
-                  self.logger.debug("HDMI power-off timeout reached - waiting for player and library to become inactive")
+                  self.logger.debug("HDMI power-off timeout reached - waiting for player and/or library to become inactive")
               else:
                 hdmi_on = self.disable_hdmi()
                 self.EventStop(self.EV_HDMI_OFF)
@@ -1264,14 +1263,16 @@ class MyHDMIManager(threading.Thread):
     for s in REQUEST["params"]["properties"]:
       statuses[s] = values.get(s, False)
 
-    statuses["vcgencmd display_power"] = False
+    svalue = False
     if self.bin_vcgencmd:
       try:
-        response = subprocess.check_output([self.bin_vcgencmd, "commands"], stderr=subprocess.STDOUT).decode("utf-8")[:-1]
+        response = subprocess.check_output([self.bin_vcgencmd, "commands"], stderr=subprocess.STDOUT).decode("utf-8")
+        response = response[:-1] if response.endswith("\n") else response
         if response.find("display_power") != -1:
-          statuses["vcgencmd display_power"] = True
+          svalue = True
       except:
         pass
+    statuses["vcgencmd.display_power"] = svalue
 
     return statuses
 
@@ -1299,7 +1300,8 @@ class MyHDMIManager(threading.Thread):
     option = "--status"
     self.logger.log("bin.tvservice (checking if TV is powered on) calling subprocess [%s %s]" % (self.bin_tvservice, option))
     response = subprocess.check_output([self.bin_tvservice, option], stderr=subprocess.STDOUT).decode("utf-8")
-    self.logger.log("bin.tvservice response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+    response = response[:-1] if response.endswith("\n") else response
+    self.logger.log("bin.tvservice response: [%s]" % response)
 
     state = re.search("state (0x[0-9a-f]*) .*", response)
     if state:
@@ -1310,36 +1312,44 @@ class MyHDMIManager(threading.Thread):
     return tv_on
 
   # HDMI Power: True = ON, False = OFF
-  def getHDMIStatus(self):
+  def getHDMIState(self):
     option = "--status"
     self.logger.log("bin.tvservice (checking HDMI status) calling subprocess [%s %s]" % (self.bin_tvservice, option))
     response = subprocess.check_output([self.bin_tvservice, option], stderr=subprocess.STDOUT).decode("utf-8")
-    self.logger.log("bin.tvservice response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+    response = response[:-1] if response.endswith("\n") else response
+    self.logger.log("bin.tvservice response: [%s]" % response)
     return response.find("TV is off") == -1
 
   def setHDMIState(self, state):
     option = "--preferred" if state else "--off"
     self.logger.log("bin.tvservice (enabling/disabling HDMI) calling subprocess [%s %s]" % (self.bin_tvservice, option))
     response = subprocess.check_output([self.bin_tvservice, option], stderr=subprocess.STDOUT).decode("utf-8")
-    self.logger.log("bin.tvservice response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+    response = response[:-1] if response.endswith("\n") else response
+    self.logger.log("bin.tvservice response: [%s]" % response)
+    return self.getHDMIState()
 
   def getPowerState(self):
     self.logger.log("bin.vcgencmd (checking HDMI power status) calling subprocess [%s %s]" % (self.bin_vcgencmd, "display_power"))
-    response = subprocess.check_output([self.bin_vcgencmd, "display_power"], stderr=subprocess.STDOUT).decode("utf-8")[:-1]
-    self.logger.log("bin.vcgencmd response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+    response = subprocess.check_output([self.bin_vcgencmd, "display_power"], stderr=subprocess.STDOUT).decode("utf-8")
+    response = response[:-1] if response.endswith("\n") else response
+    self.logger.log("bin.vcgencmd response: [%s]" % response)
     return response.endswith("=1")
 
   def setPowerState(self, enabled):
     option = "1" if enabled else "0"
     self.logger.log("bin.vcgencmd (enabling/disabling HDMI power) calling subprocess [%s %s %s]" % (self.bin_vcgencmd, "display_power", option))
     response = subprocess.check_output([self.bin_vcgencmd, "display_power", option], stderr=subprocess.STDOUT).decode("utf-8")
-    self.logger.log("bin.vcgencmd response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+    response = response[:-1] if response.endswith("\n") else response
+    self.logger.log("bin.vcgencmd response: [%s]" % response)
+    return response.endswith("=1")
 
   def callCECControl(self, option):
     if self.bin_ceccontrol:
+      self.logger.debug("Executing CEC Control script [%s]" % option)
       self.logger.log("bin.ceccontrol calling subprocess [%s %s]" % (self.bin_ceccontrol, option))
       response = subprocess.check_output([self.bin_ceccontrol, option], stderr=subprocess.STDOUT).decode("utf-8")
-      self.logger.log("bin.ceccontrol response: [%s]" % (response[:-1] if response.endswith("\n") else response))
+      response = response[:-1] if response.endswith("\n") else response
+      self.logger.log("bin.ceccontrol response: [%s]" % response)
 
   def disable_hdmi(self):
     if not self.getDisplayStatus():
@@ -1347,35 +1357,30 @@ class MyHDMIManager(threading.Thread):
       return True
 
     if self.candisable:
-      self.setPowerState(False)
-      self.logger.debug("HDMI is now off")
-      self.callCECControl("off")
-      return False
+      ison = self.setPowerState(False)
+    else:
+      ison = self.setHDMIState(False)
 
-    self.setHDMIState(False)
-    ison = self.getHDMIStatus()
     if not ison:
       self.logger.debug("HDMI is now off")
+      self.callCECControl("off")
     else:
       self.logger.debug("HDMI failed to power off")
-    self.callCECControl("off")
+
     return ison
 
   def enable_hdmi(self):
     if self.candisable:
-      self.setPowerState(True)
-      self.logger.debug("HDMI is now on")
-      self.callCECControl("on")
-      return True
+      ison = self.setPowerState(True)
+    else:
+      ison = self.setHDMIState(True)
 
-    self.setHDMIState(True)
-
-    ison = self.getHDMIStatus()
     if ison:
       self.logger.debug("HDMI is now on")
+      self.callCECControl("on")
     else:
       self.logger.debug("HDMI failed to power on")
-    self.callCECControl("on")
+
     return ison
 
 #
@@ -6562,7 +6567,9 @@ def findexepath(cmd, path):
     return path
   else:
     try:
-      return subprocess.check_output(["which", cmd], stderr=subprocess.STDOUT)[:-1]
+      response = subprocess.check_output(["which", cmd], stderr=subprocess.STDOUT)
+      response = response[:-1] if response.endswith("\n") else response
+      return response
     except:
       return None
 
@@ -6861,15 +6868,7 @@ def getLatestVersion(argv):
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
-  # Someone is running 15 db requests on a Pi every 15 minutes, 24x7,
-  # skewing the analytics rendering them mostly useless.
-  # Send such requests to the "spam" analytics URL instead.
-  spamtastic = (USAGE in ["db"] and PLATFORM == "Linux ARM")
-  if spamtastic:
-    analytics_url = gConfig.ANALYTICS_SPAM
-    USAGE = argv[0]
-  else:
-    analytics_url = gConfig.ANALYTICS_GOOD
+  analytics_url = gConfig.ANALYTICS_GOOD
 
   HEADERS = []
   HEADERS.append(("User-agent", user_agent))
