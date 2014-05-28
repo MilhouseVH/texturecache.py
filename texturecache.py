@@ -57,7 +57,7 @@ else:
 class MyConfiguration(object):
   def __init__( self, argv ):
 
-    self.VERSION = "1.6.2"
+    self.VERSION = "1.6.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -397,6 +397,8 @@ class MyConfiguration(object):
 
     self.SEARCH_ENCODE = self.getBoolean(config, "encode", "yes")
 
+    self.POSTER_WIDTH = int(self.getValue(config, "posterwidth", "5"))
+
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
     self.JSON_VER_STR = "v%d.%d.%d" % (major, minor, patch)
@@ -695,6 +697,7 @@ class MyConfiguration(object):
     print("  hdmi.force.hotplug = %s" % self.BooleanIsYesNo(self.FORCE_HOTPLUG))
     print("  dcache.size = %d" % self.DCACHE_SIZE)
     print("  dcache.agelimit = %d" % self.DCACHE_AGELIMIT)
+    print("  posterwidth = %d" % self.POSTER_WIDTH)
 
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
@@ -6333,13 +6336,13 @@ def StressTest(viewtype, numitems, pause, repeat, cooldown):
 
   COMMANDS = "executeaction firstpage pause 1.5 "
   if viewtype == "thumbnail":
-    TOTAL_ROWS = int(MOVES/5)
-    LAST_COLS = MOVES % 5
+    TOTAL_ROWS = int(MOVES/gConfig.POSTER_WIDTH)
+    LAST_COLS = MOVES % gConfig.POSTER_WIDTH
     d=""
     if TOTAL_ROWS > 0:
       for i in range(0, TOTAL_ROWS):
         d = "left" if d == "right" else "right"
-        COMMANDS = "%s%s" % (COMMANDS, st_move_horizontal(d, 4, pause))
+        COMMANDS = "%s%s" % (COMMANDS, st_move_horizontal(d, (gConfig.POSTER_WIDTH - 1), pause))
         if i < TOTAL_ROWS or LAST_COLS >= 0:
           COMMANDS = "%s%s" % (COMMANDS, st_move_down(pause))
 

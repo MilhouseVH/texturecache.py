@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.3 (28/05/2013)
+*Add: New property `@posterwidth`, to control number of horizontal posters in `stress-test` thumbnail view. Default value is 5. Some skins however have 7 posters across.
+
 ##Version 1.6.2 (24/05/2013)
 *Chg: Whenever the screensaver is deactivated and xbmc.bin is to be restarted, enable HDMI (with @bin.tvservice) and - if required - call @bin.ceccontrol _before_ the Application.Quit() message is sent. This allows @bin.ceccontrol to communicate with XBMC if such communication is necessary, which would be impossible if xbmc.bin had already been shut down...
 
