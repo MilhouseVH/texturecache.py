@@ -246,7 +246,7 @@ Or when removing artwork that is no longer needed, simply let texturecache.py wo
 #####Delete artwork that has not been accessed after a particular date
 ####Code:
 ```
-./texturecache.py x "where lastusetime <= '2013-03-05'
+./texturecache.py x "where lastusetime <= '2013-03-05'"
 ```
 
 or hasn't been accessed more than once:
