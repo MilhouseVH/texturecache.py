@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.6.4 (01/06/2013)
+*Chg: Some cosmetic PEP8 source code changes
+*Add: Allow configuration to be read from `~/.config/texturecache.cfg` if a suitable configuration is not found in the current working directory or the script directory. Fixes issue #18.
+
 ##Version 1.6.3 (28/05/2013)
 *Add: New property `@posterwidth`, to control number of horizontal posters in `stress-test` thumbnail view. Default value is 5. Some skins however have 7 posters across.
 

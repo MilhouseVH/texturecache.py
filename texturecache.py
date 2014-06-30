@@ -55,9 +55,9 @@ else:
 # Config class. Will be a global object.
 #
 class MyConfiguration(object):
-  def __init__( self, argv ):
+  def __init__(self, argv):
 
-    self.VERSION = "1.6.3"
+    self.VERSION = "1.6.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -83,8 +83,9 @@ class MyConfiguration(object):
                                   "setseason":    (6, 10, 0),
                                   "setmovieset":  (6, 12, 0),
                                   "filternullval":(6, 13, 1),
-                                  "isodates":     (6, 13, 2)
-                                  }
+                                  "isodates":     (6, 13, 2),
+                                  "dpmsnotify":   (6, 16, 0)
+                                 }
 
     self.SetJSONVersion(0, 0, 0)
 
@@ -120,6 +121,8 @@ class MyConfiguration(object):
       self.FILENAME = "%s%s%s" % (os.getcwd(), os.sep, self.CONFIG_NAME)
       if not os.path.exists(self.FILENAME):
         self.FILENAME = "%s%s%s" % (os.path.dirname(os.path.abspath(__file__)), os.sep, self.CONFIG_NAME)
+        if not os.path.exists(self.FILENAME):
+          self.FILENAME = os.path.expanduser("~/.config/%s" % self.CONFIG_NAME)
 
     cfg = StringIO.StringIO()
     cfg.write("[%s]\n" % self.GLOBAL_SECTION)
@@ -288,7 +291,7 @@ class MyConfiguration(object):
           temp = "%s%s " % (temp2, temp.strip())
           self.QA_FIELDS[key] = temp
         else:
-          self.QA_FIELDS[key] = temp if temp != None else self.QA_FIELDS.get(key, None)
+          self.QA_FIELDS[key] = temp if temp is not None else self.QA_FIELDS.get(key, None)
 
     self.QAPERIOD = int(self.getValue(config, "qaperiod", "30"))
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
@@ -422,6 +425,9 @@ class MyConfiguration(object):
     # https://github.com/xbmc/xbmc/commit/20717c1b0cc2e5b35996be52cabd7267e0799995
     self.JSON_HAS_ISO_DATES = self.HasJSONCapability("isodates")
 
+    # https://github.com/xbmc/xbmc/pull/4766
+    self.JSON_HAS_DPMS_NOTIFY = self.HasJSONCapability("dpmsnotify")
+
   def HasJSONCapability(self, feature):
     if feature not in self.JSON_VER_CAPABILITIES:
       raise ValueError("Invalid JSON capability request for feature [%s]" % feature)
@@ -475,10 +481,10 @@ class MyConfiguration(object):
           # If value being undefined is valid, return None for undefined values
           if not value and allowundefined: return None
         except ConfigParser.NoOptionError:
-          if default == None and not allowNone:
+          if default is None and not allowNone:
             raise ConfigParser.NoOptionError(aKey, "%s (or global section)" % self.THIS_SECTION)
       else:
-        if default == None and not allowNone:
+        if default is None and not allowNone:
           raise ConfigParser.NoOptionError(aKey, self.GLOBAL_SECTION)
 
     return value if value else default
@@ -568,13 +574,13 @@ class MyConfiguration(object):
 
     return newlist
 
-  def getFilePath( self, filename = "" ):
+  def getFilePath(self, filename=""):
     if os.path.isabs(self.THUMBNAILS):
       return os.path.join(self.THUMBNAILS, filename)
     else:
       return os.path.join(self.XBMC_BASE, self.THUMBNAILS, filename)
 
-  def getDBPath( self ):
+  def getDBPath(self):
     if os.path.isabs(self.TEXTUREDB):
       return self.TEXTUREDB
     else:
@@ -712,7 +718,7 @@ class MyConfiguration(object):
 # Prefix logfilename with + to enable flushing after each write.
 #
 class MyLogger():
-  def __init__( self ):
+  def __init__(self):
     self.lastlen = 0
     self.now = 0
     self.LOGGING = False
@@ -731,7 +737,7 @@ class MyLogger():
       sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
       sys.stderr = codecs.getwriter("utf-8")(sys.stderr)
 
-  def __del__( self ):
+  def __del__(self):
     if self.LOGFILE: self.LOGFILE.close()
 
   def setLogFile(self, filename):
@@ -750,7 +756,7 @@ class MyLogger():
           self.LOGFILE.close()
           self.LOGFILE = None
 
-  def progress(self, data, every=0, finalItem = False, newLine=False, noBlank=False):
+  def progress(self, data, every=0, finalItem=False, newLine=False, noBlank=False):
     with threading.Lock():
       if every != 0 and not finalItem:
         self.now += 1
@@ -814,13 +820,13 @@ class MyLogger():
         if self.LOGGING:
           self.log("[DEBUG] %s" % data, jsonrequest=jsonrequest)
 
-  def log(self, data, jsonrequest = None, maxLen=0):
+  def log(self, data, jsonrequest=None, maxLen=0):
     if self.LOGGING:
       with threading.Lock():
         udata = MyUtility.toUnicode(data)
 
         t = threading.current_thread().name
-        if jsonrequest == None:
+        if jsonrequest is None:
           d = udata
           if maxLen != 0 and not self.VERBOSE and len(d) > maxLen:
             d = "%s (truncated)" % d[:maxLen]
@@ -834,13 +840,13 @@ class MyLogger():
 
   # Use this method for large unicode data - tries to minimize
   # creation of additional temporary buffers through concatenation.
-  def log2(self, prefix, udata, jsonrequest = None, maxLen=0):
+  def log2(self, prefix, udata, jsonrequest=None, maxLen=0):
     if self.LOGGING:
       with threading.Lock():
         t = threading.current_thread().name
         self.LOGFILE.write("%s:%-10s: %s" % (datetime.datetime.now(), t, prefix))
 
-        if jsonrequest == None:
+        if jsonrequest is None:
           if maxLen != 0 and not self.VERBOSE and len(udata) > maxLen:
             d = "%s (truncated)" % udata[:maxLen]
             self.LOGFILE.write(d)
@@ -1260,7 +1266,7 @@ class MyHDMIManager(threading.Thread):
     statuses["players.active"] = (values != [])
 
     REQUEST = {"method": "System.GetProperties",
-               "params": { "properties": ["canshutdown", "cansuspend", "canreboot", "canhibernate"] }}
+               "params": {"properties": ["canshutdown", "cansuspend", "canreboot", "canhibernate"]}}
     data = jcomms.sendJSON(REQUEST, "libProperties", checkResult=False)
     values = data.get("result", {})
     for s in REQUEST["params"]["properties"]:
@@ -1517,7 +1523,7 @@ class MyDB(object):
 
     if not cachedURL and id > 0:
       row = self.getSingleRow("WHERE id = %d" % id)
-      if row == None:
+      if row is None:
         self.logger.out("id %s is not valid\n" % (self.config.IDFORMAT % int(id)))
         return
       else:
@@ -1570,7 +1576,7 @@ class MyDB(object):
 
     return rows[0] if rows != [] else None
 
-  def removeNonAscii(self, s, replaceWith = ""):
+  def removeNonAscii(self, s, replaceWith=""):
     if replaceWith == "":
       return  "".join([x if ord(x) < 128 else ("%%%02x" % ord(x)) for x in s])
     else:
@@ -1670,7 +1676,7 @@ class MyJSONComms(object):
       if self.config.DEBUG: self.myweb.set_debuglevel(1)
     return self.myweb
 
-  def sendWeb(self, request_type, url, request=None, headers={}, readAmount = 0, timeout=15.0, rawData=False):
+  def sendWeb(self, request_type, url, request=None, headers={}, readAmount=0, timeout=15.0, rawData=False):
     if self.config.WEB_AUTH_TOKEN:
       headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
 
@@ -1678,7 +1684,7 @@ class MyJSONComms(object):
 
     web.request(request_type, url, request, headers)
 
-    if timeout == None: web.sock.setblocking(1)
+    if timeout is None: web.sock.setblocking(1)
     else: web.sock.settimeout(timeout)
 
     try:
@@ -1982,7 +1988,7 @@ class MyJSONComms(object):
   def addProperties(self, request, fields):
     if not "properties" in request["params"]: return
     aList = request["params"]["properties"]
-    if fields != None:
+    if fields is not None:
       for f in [f.strip() for f in fields.split(",")]:
         if f != "" and not f in aList:
           aList.append(f)
@@ -1991,7 +1997,7 @@ class MyJSONComms(object):
   def addFilter(self, request, newFilter, condition="and"):
     filter = request["params"]
     if "filter" in filter:
-       filter["filter"] = { condition: [ filter["filter"], newFilter ] }
+       filter["filter"] = {condition: [filter["filter"], newFilter]}
     else:
        filter["filter"] = newFilter
     request["params"] = filter
@@ -2012,7 +2018,7 @@ class MyJSONComms(object):
     for directory in sorted(workItems):
       (mediatype, dpath) = directory.split(";")
 
-      for disc_folder in [ ".BDMV$", ".VIDEO_TS$" ]:
+      for disc_folder in [".BDMV$", ".VIDEO_TS$"]:
         re_match = re.search(disc_folder, dpath, flags=re.IGNORECASE)
         if re_match:
           dpath = dpath[:re_match.start()]
@@ -2070,7 +2076,7 @@ class MyJSONComms(object):
 
       # Fix null being returned for "files" on some systems...
       if "result" in data and "files" in data["result"]:
-        if data["result"]["files"] == None:
+        if data["result"]["files"] is None:
           data["result"]["files"] = []
 
         for f in data["result"]["files"]:
@@ -2205,7 +2211,7 @@ class MyJSONComms(object):
 
   def getDownloadURL(self, filename):
     REQUEST = {"method":"Files.PrepareDownload",
-               "params":{"path": filename }}
+               "params":{"path": filename}}
 
     data = self.sendJSON(REQUEST, "preparedl")
 
@@ -2220,7 +2226,7 @@ class MyJSONComms(object):
   # Get file details from a directory lookup, this prevents errors on XBMC when
   # the file doesn't exist (unless the directory doesn't exist), and also allows the
   # query results to be cached for use by subsequent file requests in the same directory.
-  def getFileDetails(self, filename, properties = ["file", "lastmodified", "size"]):
+  def getFileDetails(self, filename, properties=["file", "lastmodified", "size"]):
     data = self.getDirectoryList(os.path.dirname(filename), mediatype="files", properties=properties)
 
     if "result" in data:
@@ -2587,7 +2593,7 @@ class MyJSONComms(object):
 
     if mediatype in ["movies", "tags", "episodes"]:
       if lastRun and self.config.LASTRUNFILE_DATETIME:
-        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATETIME })
+        self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.LASTRUNFILE_DATETIME})
 
     # Add extra required fields/propreties based on action to be performed
 
@@ -2608,7 +2614,7 @@ class MyJSONComms(object):
       for unwanted in ["artist", "art", "fanart", "thumbnail"]:
         if unwanted in REQUEST["params"]["properties"]:
           REQUEST["params"]["properties"].remove(unwanted)
-      if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
+      if mediatype in ["songs", "movies", "tvshows", "episodes"]:
         self.addProperties(REQUEST, "file")
 
     elif action == "watched" and mediatype in ["movies", "episodes"]:
@@ -2623,14 +2629,14 @@ class MyJSONComms(object):
       if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
           self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate})
 
-      if mediatype in ["songs", "movies", "tags", "tvshows", "episodes" ]:
+      if mediatype in ["songs", "movies", "tags", "tvshows", "episodes"]:
         self.addProperties(REQUEST, "file")
 
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("zero", EXTRA)))
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", EXTRA)))
 
     elif action == "dump":
-      if mediatype in ["songs", "movies", "tvshows", "episodes" ]:
+      if mediatype in ["songs", "movies", "tvshows", "episodes"]:
         self.addProperties(REQUEST, "file")
       if "extrajson.%s" % EXTRA in self.config.XTRAJSON:
         extraFields = self.config.XTRAJSON["extrajson.%s" % EXTRA] if EXTRA != "" else None
@@ -2748,7 +2754,7 @@ class MyJSONComms(object):
       cast = []
       for i in mediaitem["cast"]:
         if "thumbnail" in i:
-          if uniquecast != None:
+          if uniquecast is not None:
             if i["thumbnail"] not in uniquecast:
               uniquecast[i["thumbnail"]] = True
               cast.append(i)
@@ -3019,7 +3025,7 @@ class MyTotals(object):
           return True
     return False
 
-  def init(self, name = ""):
+  def init(self, name=""):
     with threading.Lock():
       tname = threading.current_thread().name if name == "" else name
       self.THREADS[tname] = 0
@@ -3178,7 +3184,7 @@ class MyTotals(object):
       for i in sortedItems:
         i = i[0]
         if a == "TOTAL":
-          value = "%d" % items[i] if items[i] != None else "-"
+          value = "%d" % items[i] if items[i] is not None else "-"
         elif a == DOWNLOAD_LABEL:
           if i in self.TOTALS[a] and self.TOTALS[a][i] != 0:
             value = self.secondsToTime(self.TOTALS[a][i])
@@ -3187,7 +3193,7 @@ class MyTotals(object):
         elif i in self.TOTALS[a]:
           ivalue = self.TOTALS[a][i]
           value = "%d" % ivalue
-          if items[i] == None: items[i] = 0
+          if items[i] is None: items[i] = 0
           items[i] += ivalue
           self.TOTALS[a]["TOTAL"] += ivalue
         else:
@@ -3322,20 +3328,20 @@ class MyWatchedItem(object):
     # 2 = Out of Date - Media Library has been updated since backup list created
     self.state = 0
 
-    if self.episode_year == None: self.episode_year = ""
+    if self.episode_year is None: self.episode_year = ""
 
   def __str__(self):
     return "['%s', %d, '%s', '%s', %d, '%s, %s']" % \
             (self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, self.resume)
 
   def getList(self):
-    return [ self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, self.resume ]
+    return [self.mtype, self.libraryid, self.name, self.episode_year, self.playcount, self.lastplayed, self.resume]
 
   def match(self, mediatype, name, episode_year):
     if mediatype != self.mtype: return False
 
     xepisode_year = episode_year
-    if xepisode_year == None: xepisode_year = ""
+    if xepisode_year is None: xepisode_year = ""
 
     return (self.name == name and self.episode_year == xepisode_year)
 
@@ -3557,7 +3563,7 @@ class MyUtility(object):
 
   @staticmethod
   def is_cache_item_stale(config, jcomms, mediaitem):
-    if config.cache_refresh_date == None: return False
+    if config.cache_refresh_date is None: return False
     if mediaitem.decoded_filename.startswith("http://"): return False
 
     # Only check file details for the following media types
@@ -3778,7 +3784,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
           _data.append({"type": subtype, section_name: data["result"][section_name]})
     title_name = "type"
     section_name = mediatype
-    data["result"] = { section_name: _data}
+    data["result"] = {section_name: _data}
   else:
     (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields,
                                                                lastRun=lastRun, secondaryFields=secondaryFields, uniquecast=UCAST)
@@ -4186,7 +4192,7 @@ def matchTextures_chunked(mediatype, mediaitems, jcomms, database, force, nodown
           (fnum+1, len(folders), unmatched, matched, skipped, dbindex, dbmax), every=50, finalItem=(dbindex==dbmax))
 
         inum = url_to_index.get(dbrow["url"], None)
-        if inum != None:
+        if inum is not None:
           item = mediaitems[inum]
           if item.status == MyMediaItem.STATUS_UNKNOWN:
             unmatched -= 1
@@ -4243,10 +4249,10 @@ def matchTextures_item_row(mediatype, jcomms, item, dbrow, force, nodownload):
 # Iterate over all the elements, seeking out artwork to be stored in a list.
 # Use recursion to process season and episode sub-elements.
 #
-def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName = None, season = None, pvrGroup = None):
+def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id_name, showName=None, season=None, pvrGroup=None):
   gLogger.reset()
 
-  SEASON_ALL = (showName != None and season == None)
+  SEASON_ALL = (showName is not None and season is None)
 
   for item in data:
     if title_name in item: title = item[title_name]
@@ -4355,7 +4361,7 @@ def evaluateURL(imgtype, url, imagecache):
 def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=None, mitems=None, showName=None, season=None, pvrGroup=None):
   gLogger.reset()
 
-  if mitems == None:
+  if mitems is None:
       TOTALS.TimeStart(mediatype, "Parse")
       workItems= {}
       mediaitems = []
@@ -4371,7 +4377,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
 
   if mediatype in ["movies", "tags", "episodes"]:
     check_file = gConfig.QA_FILE
-    nfo_file = (gConfig.qa_nfo_refresh_date != None)
+    nfo_file = (gConfig.qa_nfo_refresh_date is not None)
 
   zero_items.extend(gConfig.getQAFields("zero", mediatype, stripModifier=False))
   blank_items.extend(gConfig.getQAFields("blank", mediatype, stripModifier=False))
@@ -4526,7 +4532,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
         libraryids.append(libraryid)
         workItems[dir] = libraryids
 
-  if mitems == None:
+  if mitems is None:
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     for m in mediaitems: gLogger.out("%s\n" % m)
@@ -4595,7 +4601,7 @@ def splitModifierToken(field):
 def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, season=None):
   gLogger.reset()
 
-  if showName == None:
+  if showName is None:
     TOTALS.TimeStart(mediatype, "Parse")
 
   for item in data:
@@ -4634,7 +4640,7 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
       missingFiles("episodes", item["episodes"], fileList, "label", "episodeid", showName=showName, season=title)
       season = None
 
-  if showName == None:
+  if showName is None:
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     if fileList != []:
@@ -4644,7 +4650,7 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
 def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=None, showName=None, season=None, pvrGroup=None):
   gLogger.reset()
 
-  if mitems == None:
+  if mitems is None:
       TOTALS.TimeStart(mediatype, "Parse")
       workItems= {}
       mediaitems = []
@@ -4686,9 +4692,9 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
         temp = item
         for f in field_split:
           temp = searchItem(temp, f)
-          if temp == None: break
+          if temp is None: break
 
-        if temp != None:
+        if temp is not None:
           if type(temp) is list:
             for t in temp:
               MATCHED = evaluateCondition(t, condition, value)
@@ -4716,7 +4722,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
         if matched == False: MATCHED = False
       elif logic == "or":
         if matched == True: MATCHED = True
-      elif logic == None:
+      elif logic is None:
         MATCHED = matched
       else:
         MATCHED = False
@@ -4746,7 +4752,7 @@ def queryLibrary(mediatype, query, data, title_name, id_name, work=None, mitems=
       queryLibrary("genres", query, item["genres"], "label", "genreid", \
               work=workItems, mitems=mediaitems, showName=title)
 
-  if mitems == None:
+  if mitems is None:
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     for m in mediaitems:
@@ -4852,8 +4858,8 @@ def parseQuery(query):
 def watchedWrite(filename, mediaitems):
   MYLIST = []
   for m in mediaitems:
-    MYLIST.append({ "type": m.mtype, "name": m.name, "episode_year": m.episode_year,
-                    "playcount": m.playcount, "lastplayed": m.lastplayed, "resume": m.resume })
+    MYLIST.append({"type": m.mtype, "name": m.name, "episode_year": m.episode_year,
+                   "playcount": m.playcount, "lastplayed": m.lastplayed, "resume": m.resume})
 
   try:
     OUTPUTFILE = codecs.open(filename, "wb", encoding="utf-8")
@@ -4882,7 +4888,7 @@ def watchedRead(filename, mediaitems):
 def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mitems=None, showName=None, season=None):
   gLogger.reset()
 
-  if mitems == None:
+  if mitems is None:
       TOTALS.TimeStart(mediatype, "Parse")
       workItems= {}
       mediaitems = []
@@ -4924,7 +4930,7 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
               work=workItems, mitems=mediaitems, showName=showName, season=title)
       season = None
 
-  if mitems == None:
+  if mitems is None:
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     watchedWrite(filename, mediaitems)
@@ -4932,7 +4938,7 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
 def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=None, mitems=None, showName=None, season=None):
   gLogger.reset()
 
-  if mitems == None:
+  if mitems is None:
       TOTALS.TimeStart(mediatype, "Parse")
       workItems= {}
       mediaitems = {}
@@ -4985,7 +4991,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
               work=workItems, mitems=mediaitems, showName=showName, season=title)
       season = None
 
-  if mitems == None:
+  if mitems is None:
     TOTALS.TimeEnd(mediatype, "Parse")
     gLogger.progress("")
     RESTORED = UNCHANGED = UNMATCHED = ERROR = 0
@@ -5016,11 +5022,11 @@ def watchedItemUpdate(jcomms, mediaitem, shortName):
     method = "VideoLibrary.SetEpisodeDetails"
     mediaid = "episodeid"
 
-  REQUEST = { "method": method,
-              "params": {mediaid: mediaitem.libraryid,
-                         "playcount": mediaitem.playcount,
-                         "lastplayed": mediaitem.lastplayed
-                         }}
+  REQUEST = {"method": method,
+             "params": {mediaid: mediaitem.libraryid,
+                        "playcount": mediaitem.playcount,
+                        "lastplayed": mediaitem.lastplayed
+                       }}
 
   if gConfig.JSON_HAS_SETRESUME:
     REQUEST["params"]["resume"] = {"position": mediaitem.resume["position"]}
@@ -5260,7 +5266,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum,
     if bKEY:
       KEY = pair
     else:
-      if pair == None:
+      if pair is None:
         pairs[KEY] = None
       elif type(pair) is list:
         pairs[KEY] = []
@@ -5273,10 +5279,10 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum,
       else:
         pairs[KEY] = getIntFloatStr(KEY, pair) if typeconversion else pair
 
-      if (pairs[KEY] == None or pairs[KEY] == "") and \
+      if (pairs[KEY] is None or pairs[KEY] == "") and \
          (KEY.startswith("art.") or KEY in ["fanart", "thumbnail", "thumb"]) and \
          not gConfig.JSON_HAS_SETNULL:
-        value = "null" if pairs[KEY] == None else "\"%s\"" % pairs[KEY]
+        value = "null" if pairs[KEY] is None else "\"%s\"" % pairs[KEY]
         gLogger.out("WARNING: Cannot set null/empty string value on field with " \
                     "JSON API %s - ignoring %s %6d (%s = %s)" % \
                     (gConfig.JSON_VER_STR, idname, libraryid, KEY, value), newLine=True, log=True)
@@ -5389,7 +5395,7 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
       gLogger.progress("Matching row ids: %s\n" % " ".join("%d" % r["textureid"] for r in ROWS))
 
 # Delete row by id, and corresponding file item
-def sqlDelete( ids=[] ):
+def sqlDelete(ids=[]):
   database = MyDB(gConfig, gLogger)
   with database:
     for id in ids:
@@ -5678,7 +5684,7 @@ def getAllFiles(keyFunction):
 
               {"method":"Addons.GetAddons",
                "params":{"properties":["name", "thumbnail", "fanart"]}}
-             ]
+            ]
 
   for r in REQUEST:
     mediatype = re.sub(".*\.Get(.*)","\\1",r["method"])
@@ -5945,7 +5951,7 @@ def get_mangled_artwork(jcomms):
               {"method":"VideoLibrary.GetMovieSets",
                "params":{"sort": {"order": "ascending", "method": "title"},
                          "properties":["title", "art"]}}
-             ]
+            ]
 
   for r in REQUEST:
     mediatype = re.sub(".*\.Get(.*)","\\1",r["method"])
@@ -6137,7 +6143,7 @@ def showStatus(idleTime=600):
   STATUS = []
 
   REQUEST = {"method": "XBMC.GetInfoBooleans",
-             "params": { "booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo", "System.HasShutdown", "System.CanSuspend"] }}
+             "params": {"booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo", "System.HasShutdown", "System.CanSuspend"]}}
   data = jcomms.sendJSON(REQUEST, "libSSaver")
   if "result" in data:
     STATUS.append("Scanning Music: %s" % ("Yes" if data["result"].get("Library.IsScanningMusic", False) else "No"))
@@ -6147,7 +6153,7 @@ def showStatus(idleTime=600):
     STATUS.append("Idle Timer Enabled: %s" % ("Yes" if data["result"].get("System.HasShutdown", False) else "No"))
 
   property = "System.IdleTime(%s) " % idleTime
-  REQUEST = {"method": "XBMC.GetInfoBooleans", "params": { "booleans": [property] }}
+  REQUEST = {"method": "XBMC.GetInfoBooleans", "params": {"booleans": [property]}}
   data = jcomms.sendJSON(REQUEST, "libIdleTime")
   if "result" in data:
     STATUS.append("System Idle > %ss: %s" % (idleTime, ("Yes" if data["result"].get(property, False) else "No")))
@@ -6157,48 +6163,48 @@ def showStatus(idleTime=600):
   REQUEST = {"method":"Player.GetActivePlayers"}
   data = jcomms.sendJSON(REQUEST, "libGetPlayers")
   if "result" in data:
-    for player in data["result"]:
-      if "playerid" in player:
-        pType = player["type"]
-        pId = player["playerid"]
-        STATUS.append("Player: %s" % pType.capitalize())
-
-        REQUEST = {"method": "Player.GetItem", "params": {"playerid": pId}}
-        data = jcomms.sendJSON(REQUEST, "libGetItem")
-
-        if "result" in data and "item" in data["result"]:
-          item = data["result"]["item"]
-          iType = item.get("type", None)
-          libraryId = item.get("id", None)
-
-          if libraryId == None and "label" in item:
-            title = item["label"]
-          elif iType == "song":
-            title = jcomms.getSongName(libraryId)
-          elif iType == "movie":
-            title = jcomms.getMovieName(libraryId)
-          elif iType == "episode":
-            title = jcomms.getEpisodeName(libraryId)
-          elif iType == "musicvideo":
-            title = jcomms.getMusicVideoName(libraryId)
-          else:
-            title = None
-
-          STATUS.append("Activity: %s" % iType.capitalize())
-          STATUS.append("Title: %s" % title)
-
-          REQUEST = {"method": "Player.GetProperties", "params": {"playerid": pId, "properties": ["percentage", "time", "totaltime"]}}
-          data = jcomms.sendJSON(REQUEST, "libGetProps")
-          if "result" in data:
-            eTime = getSeconds(data["result"].get("time",0))
-            tTime = getSeconds(data["result"].get("totaltime",0))
-            elapsed = getHMS(eTime)
-            pcnt = data["result"].get("percentage", 0)
-            remaining = getHMS(tTime - eTime)
-            STATUS.append("Progress: %s (%4.2f%%, %s remaining)" % (elapsed, pcnt, remaining))
-
     if data["result"] == []:
       STATUS.append("Player: None")
+    else:
+      for player in data["result"]:
+        if "playerid" in player:
+          pType = player["type"]
+          pId = player["playerid"]
+          STATUS.append("Player: %s" % pType.capitalize())
+
+          REQUEST = {"method": "Player.GetItem", "params": {"playerid": pId}}
+          data = jcomms.sendJSON(REQUEST, "libGetItem")
+
+          if "result" in data and "item" in data["result"]:
+            item = data["result"]["item"]
+            iType = item.get("type", None)
+            libraryId = item.get("id", None)
+
+            if libraryId is None and "label" in item:
+              title = item["label"]
+            elif iType == "song":
+              title = jcomms.getSongName(libraryId)
+            elif iType == "movie":
+              title = jcomms.getMovieName(libraryId)
+            elif iType == "episode":
+              title = jcomms.getEpisodeName(libraryId)
+            elif iType == "musicvideo":
+              title = jcomms.getMusicVideoName(libraryId)
+            else:
+              title = None
+
+            STATUS.append("Activity: %s" % iType.capitalize())
+            STATUS.append("Title: %s" % title)
+
+            REQUEST = {"method": "Player.GetProperties", "params": {"playerid": pId, "properties": ["percentage", "time", "totaltime"]}}
+            data = jcomms.sendJSON(REQUEST, "libGetProps", checkResult=False)
+            if "result" in data:
+              eTime = getSeconds(data["result"].get("time",0))
+              tTime = getSeconds(data["result"].get("totaltime",0))
+              elapsed = getHMS(eTime)
+              pcnt = data["result"].get("percentage", 0)
+              remaining = getHMS(tTime - eTime)
+              STATUS.append("Progress: %s (%4.2f%%, %s remaining)" % (elapsed, pcnt, remaining))
 
   if STATUS != []:
     for x in STATUS:
@@ -6479,7 +6485,7 @@ def usage(EXIT_CODE):
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
           imdb movies [filter] | \
-          purge hashed;unhashed;all pattern [pattern [pattern ]] | \
+          purge hashed;unhashed;all pattern [pattern [pattern]] | \
           purgetest hashed;unhashed;all pattern [pattern [pattern]] | \
           fixurls | \
           remove mediatype libraryid | watched class backup <filename> | \
@@ -6688,7 +6694,7 @@ def checkConfig(option):
           jsonGotVersion = jsonGotVersion["major"]
 
       REQUEST = {"method": "XBMC.GetInfoBooleans",
-                 "params": { "booleans": ["System.GetBool(pvrmanager.enabled)"] }}
+                 "params": {"booleans": ["System.GetBool(pvrmanager.enabled)"]}}
       data = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
       gConfig.HAS_PVR = ("result" in data and data["result"].get("System.GetBool(pvrmanager.enabled)", False))
 
@@ -6811,7 +6817,7 @@ def checkConfig(option):
 
   return True
 
-def checkUpdate(argv, forcedCheck = False):
+def checkUpdate(argv, forcedCheck=False):
   (remoteVersion, remoteHash) = getLatestVersion(argv)
 
   if forcedCheck:
@@ -6883,7 +6889,7 @@ def getLatestVersion(argv):
   (remoteVersion, remoteHash) = getLatestVersion_ex(analytics_url, headers = HEADERS)
 
   # If the Analytics call fails, go direct to github
-  if remoteVersion == None or remoteHash == None:
+  if remoteVersion is None or remoteHash is None:
     (remoteVersion, remoteHash) = getLatestVersion_ex("%s/%s" % (gConfig.GITHUB, "VERSION"))
 
   return (remoteVersion, remoteHash)
