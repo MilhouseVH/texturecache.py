@@ -1,62 +1,62 @@
 #Changelog
 
 ##Version 1.6.5 (01/07/2014)
-*Chg: Eliminate repeated JSON or SQLite DB connect/disconnects in cache threads when removing textures by relocating getDB() call outside of main loop
-*Add: Allow creation of uniquely named logfiles with `@logfile.unique=yes`, adding a random suffix to log file names. Default is `@logfile.unique=no`.
+* Chg: Eliminate repeated JSON or SQLite DB connect/disconnects in cache threads when removing textures by relocating getDB() call outside of main loop
+* Add: Allow creation of uniquely named logfiles with `@logfile.unique=yes`, adding a random suffix to log file names. Default is `@logfile.unique=no`.
 
 ##Version 1.6.4 (30/06/2014)
-*Chg: Some cosmetic PEP8 source code changes
-*Add: Allow configuration to be read from `~/.config/texturecache.cfg` if a suitable configuration is not found in the current working directory or the script directory. Fixes issue #18.
+* Chg: Some cosmetic PEP8 source code changes
+* Add: Allow configuration to be read from `~/.config/texturecache.cfg` if a suitable configuration is not found in the current working directory or the script directory. Fixes issue #18.
 
 ##Version 1.6.3 (28/05/2014)
-*Add: New property `@posterwidth`, to control number of horizontal posters in `stress-test` thumbnail view. Default value is 5. Some skins however have 7 posters across.
+* Add: New property `@posterwidth`, to control number of horizontal posters in `stress-test` thumbnail view. Default value is 5. Some skins however have 7 posters across.
 
 ##Version 1.6.2 (24/05/2014)
-*Chg: Whenever the screensaver is deactivated and xbmc.bin is to be restarted, enable HDMI (with @bin.tvservice) and - if required - call @bin.ceccontrol _before_ the Application.Quit() message is sent. This allows @bin.ceccontrol to communicate with XBMC if such communication is necessary, which would be impossible if xbmc.bin had already been shut down...
+* Chg: Whenever the screensaver is deactivated and xbmc.bin is to be restarted, enable HDMI (with @bin.tvservice) and - if required - call @bin.ceccontrol _before_ the Application.Quit() message is sent. This allows @bin.ceccontrol to communicate with XBMC if such communication is necessary, which would be impossible if xbmc.bin had already been shut down...
 
 ##Version 1.6.1 (23/05/2014)
-*Add: Add support to `rbphdmi` for `vcgencmd display_power` which allows HDMI to be disabled and enabled without requiring a restart of xbmc.bin. Requires firmware from 23 May 2014 onwards. If the path to `vcgencmd` can't be determined automatically then set `@bin.vcgencmd` with a valid path (defaults to `/usr/bin/vcgencmd` but uses `which` to determine a working alternative as long as its on `$PATH`). Optionally set `@bin.ceccontrol` to the path of a script that will be called with "on" and "off" arguments after HDMI is enabled or disabled - the default value for this property is not defined.
+* Add: Add support to `rbphdmi` for `vcgencmd display_power` which allows HDMI to be disabled and enabled without requiring a restart of xbmc.bin. Requires firmware from 23 May 2014 onwards. If the path to `vcgencmd` can't be determined automatically then set `@bin.vcgencmd` with a valid path (defaults to `/usr/bin/vcgencmd` but uses `which` to determine a working alternative as long as its on `$PATH`). Optionally set `@bin.ceccontrol` to the path of a script that will be called with "on" and "off" arguments after HDMI is enabled or disabled - the default value for this property is not defined.
 
 ##Version 1.6.0 (01/04/2014)
 *Add: Show feedback whenever a media item is removed during `aclean`/`vclean` - if possible, displaying title or just library id.
 
 ##Version 1.5.9 (15/03/2014)
-*Add: `query.seasons` and `query.episodes` properties to speed up tvshow querying (caching, dumping, qa etc.) by not loading seasons and/or episodes when not required. Whenever `query.seasons` is disabled, `query.episodes` will be automatically disabled however disabling only `query.episodes` will return the tv show "header" plus the season details for each tv show. By default both properties are enabled.
+* Add: `query.seasons` and `query.episodes` properties to speed up tvshow querying (caching, dumping, qa etc.) by not loading seasons and/or episodes when not required. Whenever `query.seasons` is disabled, `query.episodes` will be automatically disabled however disabling only `query.episodes` will return the tv show "header" plus the season details for each tv show. By default both properties are enabled.
 
 ##Version 1.5.8 (14/03/2014)
-*Chg: Only FAIL artwork during QA if the artwork exists locally so that the failed artwork will be replaced by the local artwork when removing and re-scraping during `qax`, otherwise the missing/invalid artwork will only be flagged as WARN. This new behaviour is intended to prevent the unnecessary removal and re-scraping of items (movies, episodes) due to failed artwork when the artwork is unlikely to be rescraped correctly once the item has been removed.
+* Chg: Only FAIL artwork during QA if the artwork exists locally so that the failed artwork will be replaced by the local artwork when removing and re-scraping during `qax`, otherwise the missing/invalid artwork will only be flagged as WARN. This new behaviour is intended to prevent the unnecessary removal and re-scraping of items (movies, episodes) due to failed artwork when the artwork is unlikely to be rescraped correctly once the item has been removed.
 
 Disable this new default behaviour with `qa.fail.checkexists=no` to re-instate pre-v1.5.8 behaviour, in which case any artwork item that fails QA (either because it is not present in the media library, or the url fails due to a `qa.fail.urls` pattern) will trigger a rescrape during `qax` even if the artwork doesn't exist locally which may result in artwork not being re-scraped at all, or the invalid artwork simply being reloaded thus rendering the remove & rescrape a waste of time.
 
 Standard artwork naming conventions supported for movies (poster, fanart, clearart, clearlogo, discart etc., with/without movie-name prefix) and tvshow episodes (<episodename>-thumb.jpg). 
 
 ##Version 1.5.7 (10/03/2014)
-*Fix: Correctly escape meta-characters during LIKE when querying SQLite db during search (`s`)
-*Chg: Move TextureDB folder processing to common functions
+* Fix: Correctly escape meta-characters during LIKE when querying SQLite db during search (`s`)
+* Chg: Move TextureDB folder processing to common functions
 
 ##Version 1.5.6 (10/03/2014)
-*Fix: Trap exception when attempt to create IPv6 socket fails. Creating an IPv6 socket succeeds on some systems such as Ubuntu and OpenELEC - even if a subsequent IPv6 connection isn't possible - but not others (Raspbian, Xbian). Closes issue #12
-*Fix: Allow some pattern properties with default values to be set to an undefined value instead, if desired.
-*Fix: Cosmetic "usage" wording regarding allow.recacheall.
+* Fix: Trap exception when attempt to create IPv6 socket fails. Creating an IPv6 socket succeeds on some systems such as Ubuntu and OpenELEC - even if a subsequent IPv6 connection isn't possible - but not others (Raspbian, Xbian). Closes issue #12
+* Fix: Allow some pattern properties with default values to be set to an undefined value instead, if desired.
+* Fix: Cosmetic "usage" wording regarding allow.recacheall.
 
 ##Version 1.5.5 (06/03/2014)
-*Fix: Incorrect interpretation of warn/fail modifier on qa token when no modifier present (defaulted to warn, should have been fail).
+* Fix: Incorrect interpretation of warn/fail modifier on qa token when no modifier present (defaulted to warn, should have been fail).
 
 ##Version 1.5.4 (06/03/2014)
-*Add: IPv6 support. When connecting to JSON, IPv6 will be attempted first, followed by IPv4. If you wish to use only a specific version, set `rpc.ipversion=4` or `rpc.ipversion=6` and only that version will be attempted. Default is no value for this property.
-*Add: Extra logging added to `rbphdmi` to record calls to @bin.tvservice and response received
+* Add: IPv6 support. When connecting to JSON, IPv6 will be attempted first, followed by IPv4. If you wish to use only a specific version, set `rpc.ipversion=4` or `rpc.ipversion=6` and only that version will be attempted. Default is no value for this property.
+* Add: Extra logging added to `rbphdmi` to record calls to @bin.tvservice and response received
 
 ##Version 1.5.3 (06/03/2014)
-*Fix: Ignore UnicodeEncodeError exception during normalise when input encoding is unknown/not recognised
+* Fix: Ignore UnicodeEncodeError exception during normalise when input encoding is unknown/not recognised
 
 ##Version 1.5.2 (05/03/2014)
-*Add: "#"/"!" modifiers on `qa.*` fields, supressing warning whenever field is missing, else warn ("#") or fail ("!") when present but invalid. Other existing modifier is "?", which will warn whenever item is missing, rather than fail.
-*Fix: Remove debug which prevented `qax` from removing any items (sorry)
+* Add: "#"/"!" modifiers on `qa.*` fields, supressing warning whenever field is missing, else warn ("#") or fail ("!") when present but invalid. Other existing modifier is "?", which will warn whenever item is missing, rather than fail.
+* Fix: Remove debug which prevented `qax` from removing any items (sorry)
 
 ##Version 1.5.1 (05/03/2014)
-*Add: Include suspend capability and idle timer state in `status`
-*Add: Include songs as `tc.members` in `jd albums` when `@songmembers=yes`
-*Fix: Remove unsupported class check on `qax` - now runs `qax` on all classes, even if no way to fix them
+* Add: Include suspend capability and idle timer state in `status`
+* Add: Include songs as `tc.members` in `jd albums` when `@songmembers=yes`
+* Fix: Remove unsupported class check on `qax` - now runs `qax` on all classes, even if no way to fix them
 
 ##Version 1.5.0 (04/03/2014)
 * Chg: Make rbphdmi aware of Raspberry Pi suspend capability. When used with a suspend-capable Pi, rbphdmi becomes useful only for hooking additional CEC functionality when the user provides their own `@bin.tvservice` proxy. `tvservice --status`, `tvservice --off` and `tvservice --preferred` calls will continue to be performed as the Pi sleeps and wakes, and while these calls should have no effect they will allow users to perform other related CEC processing (eg. switching inputs, powering down the TV, etc.) if desired. If no additional CEC functionality is required, rbphdmi is redundant and should stop being used (use the XBMC built-in shutdown function instead).
