@@ -1,75 +1,79 @@
 #Changelog
 
-##Version 1.6.4 (01/06/2013)
+##Version 1.6.5 (01/07/2014)
+*Chg: Eliminate repeated JSON or SQLite DB connect/disconnects in cache threads when removing textures by relocating getDB() call outside of main loop
+*Add: Allow creation of uniquely named logfiles with `@logfile.unique=yes`, adding a random suffix to log file names. Default is `@logfile.unique=no`.
+
+##Version 1.6.4 (30/06/2014)
 *Chg: Some cosmetic PEP8 source code changes
 *Add: Allow configuration to be read from `~/.config/texturecache.cfg` if a suitable configuration is not found in the current working directory or the script directory. Fixes issue #18.
 
-##Version 1.6.3 (28/05/2013)
+##Version 1.6.3 (28/05/2014)
 *Add: New property `@posterwidth`, to control number of horizontal posters in `stress-test` thumbnail view. Default value is 5. Some skins however have 7 posters across.
 
-##Version 1.6.2 (24/05/2013)
+##Version 1.6.2 (24/05/2014)
 *Chg: Whenever the screensaver is deactivated and xbmc.bin is to be restarted, enable HDMI (with @bin.tvservice) and - if required - call @bin.ceccontrol _before_ the Application.Quit() message is sent. This allows @bin.ceccontrol to communicate with XBMC if such communication is necessary, which would be impossible if xbmc.bin had already been shut down...
 
-##Version 1.6.1 (23/05/2013)
+##Version 1.6.1 (23/05/2014)
 *Add: Add support to `rbphdmi` for `vcgencmd display_power` which allows HDMI to be disabled and enabled without requiring a restart of xbmc.bin. Requires firmware from 23 May 2014 onwards. If the path to `vcgencmd` can't be determined automatically then set `@bin.vcgencmd` with a valid path (defaults to `/usr/bin/vcgencmd` but uses `which` to determine a working alternative as long as its on `$PATH`). Optionally set `@bin.ceccontrol` to the path of a script that will be called with "on" and "off" arguments after HDMI is enabled or disabled - the default value for this property is not defined.
 
-##Version 1.6.0 (01/04/2013)
+##Version 1.6.0 (01/04/2014)
 *Add: Show feedback whenever a media item is removed during `aclean`/`vclean` - if possible, displaying title or just library id.
 
-##Version 1.5.9 (15/03/2013)
+##Version 1.5.9 (15/03/2014)
 *Add: `query.seasons` and `query.episodes` properties to speed up tvshow querying (caching, dumping, qa etc.) by not loading seasons and/or episodes when not required. Whenever `query.seasons` is disabled, `query.episodes` will be automatically disabled however disabling only `query.episodes` will return the tv show "header" plus the season details for each tv show. By default both properties are enabled.
 
-##Version 1.5.8 (14/03/2013)
+##Version 1.5.8 (14/03/2014)
 *Chg: Only FAIL artwork during QA if the artwork exists locally so that the failed artwork will be replaced by the local artwork when removing and re-scraping during `qax`, otherwise the missing/invalid artwork will only be flagged as WARN. This new behaviour is intended to prevent the unnecessary removal and re-scraping of items (movies, episodes) due to failed artwork when the artwork is unlikely to be rescraped correctly once the item has been removed.
 
 Disable this new default behaviour with `qa.fail.checkexists=no` to re-instate pre-v1.5.8 behaviour, in which case any artwork item that fails QA (either because it is not present in the media library, or the url fails due to a `qa.fail.urls` pattern) will trigger a rescrape during `qax` even if the artwork doesn't exist locally which may result in artwork not being re-scraped at all, or the invalid artwork simply being reloaded thus rendering the remove & rescrape a waste of time.
 
 Standard artwork naming conventions supported for movies (poster, fanart, clearart, clearlogo, discart etc., with/without movie-name prefix) and tvshow episodes (<episodename>-thumb.jpg). 
 
-##Version 1.5.7 (10/03/2013)
+##Version 1.5.7 (10/03/2014)
 *Fix: Correctly escape meta-characters during LIKE when querying SQLite db during search (`s`)
 *Chg: Move TextureDB folder processing to common functions
 
-##Version 1.5.6 (10/03/2013)
+##Version 1.5.6 (10/03/2014)
 *Fix: Trap exception when attempt to create IPv6 socket fails. Creating an IPv6 socket succeeds on some systems such as Ubuntu and OpenELEC - even if a subsequent IPv6 connection isn't possible - but not others (Raspbian, Xbian). Closes issue #12
 *Fix: Allow some pattern properties with default values to be set to an undefined value instead, if desired.
 *Fix: Cosmetic "usage" wording regarding allow.recacheall.
 
-##Version 1.5.5 (06/03/2013)
+##Version 1.5.5 (06/03/2014)
 *Fix: Incorrect interpretation of warn/fail modifier on qa token when no modifier present (defaulted to warn, should have been fail).
 
-##Version 1.5.4 (06/03/2013)
+##Version 1.5.4 (06/03/2014)
 *Add: IPv6 support. When connecting to JSON, IPv6 will be attempted first, followed by IPv4. If you wish to use only a specific version, set `rpc.ipversion=4` or `rpc.ipversion=6` and only that version will be attempted. Default is no value for this property.
 *Add: Extra logging added to `rbphdmi` to record calls to @bin.tvservice and response received
 
-##Version 1.5.3 (06/03/2013)
+##Version 1.5.3 (06/03/2014)
 *Fix: Ignore UnicodeEncodeError exception during normalise when input encoding is unknown/not recognised
 
-##Version 1.5.2 (05/03/2013)
+##Version 1.5.2 (05/03/2014)
 *Add: "#"/"!" modifiers on `qa.*` fields, supressing warning whenever field is missing, else warn ("#") or fail ("!") when present but invalid. Other existing modifier is "?", which will warn whenever item is missing, rather than fail.
 *Fix: Remove debug which prevented `qax` from removing any items (sorry)
 
-##Version 1.5.1 (05/03/2013)
+##Version 1.5.1 (05/03/2014)
 *Add: Include suspend capability and idle timer state in `status`
 *Add: Include songs as `tc.members` in `jd albums` when `@songmembers=yes`
 *Fix: Remove unsupported class check on `qax` - now runs `qax` on all classes, even if no way to fix them
 
-##Version 1.5.0 (04/03/2013)
+##Version 1.5.0 (04/03/2014)
 * Chg: Make rbphdmi aware of Raspberry Pi suspend capability. When used with a suspend-capable Pi, rbphdmi becomes useful only for hooking additional CEC functionality when the user provides their own `@bin.tvservice` proxy. `tvservice --status`, `tvservice --off` and `tvservice --preferred` calls will continue to be performed as the Pi sleeps and wakes, and while these calls should have no effect they will allow users to perform other related CEC processing (eg. switching inputs, powering down the TV, etc.) if desired. If no additional CEC functionality is required, rbphdmi is redundant and should stop being used (use the XBMC built-in shutdown function instead).
 
-##Version 1.4.9 (03/03/2013)
+##Version 1.4.9 (03/03/2014)
 * Fix: datetime.strftime(%s) isn't supported by Windows...
 
-##Version 1.4.8 (02/03/2013)
+##Version 1.4.8 (02/03/2014)
 * Cosmetic - ensure certain types during `set` are always string
 
-##Version 1.4.7 (24/02/2013)
+##Version 1.4.7 (24/02/2014)
 * Add: Send GUI notification with `notify` option, eg. `notify "Title" "Message"`. Optionally, the display time (in milliseconds, default 5000) can be specified, as well as the location of a suitable image file (which must be accessible to the XBMC client)
 
-##Version 1.4.6 (14/02/2013)
+##Version 1.4.6 (14/02/2014)
 * Add: If an unhandled exception occurs and logging is enabled (`@logfile`), write the exception details to the log file.
 
-##Version 1.4.5 (10/02/2013)
+##Version 1.4.5 (10/02/2014)
 * Fix: Improve memory efficiency of JSON GetDirectory processing by limiting the directory cache to a fixed size - thanks @theowiesengrund for helping with testing
 * Fix: Significantly improve memory efficiency of cast thumbnail processing - thanks @theowiesengrund for helping with testing
 
@@ -85,10 +89,10 @@ Standard artwork naming conventions supported for movies (poster, fanart, cleara
 * Add: When filtering media library results, the default filter field is usually `title` (eg. `movies avatar` or `albums mothership`). However should you wish to filter on an alternate field then specify the field name in the `@filter` property, eg. `movies cameron @filter=director` or `albums "the beatles" @filter=artist`
 * Add: Specify alternate filter operator, the default opertator being `contains`. Use `@filter.operator=<operator>` where `<operator>` is any one of the [standard filter operators](http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6#List.Filter.Operators). For example, `jd movies 21 @filter.operator=is` would return details only for the movie named "21", and not also "21 Jump Street" as would be the case when using the default `contains` operator.
 
-##Version 1.4.4 (28/01/2013)
+##Version 1.4.4 (28/01/2014)
 * Fix: Cosmetics
 
-##Version 1.4.3 (28/01/2013)
+##Version 1.4.3 (28/01/2014)
 * Add: Implement chunked queries to reduce memory consumption on client and server (which are often the same device). In testing, chunked queries significantly reduced XBMC memory consumption, by as much as 80MB or more (a big deal on a Pi with under 200MB free). This change will ensure that queries use a relatively fixed (and small) amount of server memory when responding to chunked queries, rather than unpredictable and sometimes very large amounts of memory when responding to unconstrained queries (for example when retrieving all movies with all cast members, or the entire texture cache database).
 
  Media library queries will be chunked using JSON API limits (start/end), with the chunk size varying according to the anticipated complexity of the query, eg. when caching cast thumbs a smaller chunk size will be used due to the significant increase in data per movie.
@@ -103,52 +107,52 @@ Standard artwork naming conventions supported for movies (poster, fanart, cleara
 
 * Add: `readfile` option to return content of the named file, outputting contents to stdout when the output filename is `-` (not suitable for binary data) or the named output file (which is suitable for binary data)
 
-##Version 1.4.2 (25/01/2013)
+##Version 1.4.2 (25/01/2014)
 * Fix: Using wrong type - list not dict - when directory not found
 
-##Version 1.4.1 (25/01/2013)
+##Version 1.4.1 (25/01/2014)
 * Fix: Typo
 
-##Version 1.4.0 (25/01/2013)
+##Version 1.4.0 (25/01/2014)
 * Add: For use with `C` and `nc` options, `@cache.refresh=YYYY-MM-DD HH:MM:SS|today|#`, to re-cache (`C`) or list (`nc`) stale cache items. Stale cache items are those local artwork files that have been modified since the specified date. Remote and inaccessible artwork will not classed as stale and instead ignored (skipped).
 * Chg: `dbjson` will now default to `no` when the script is running on localhost, and `yes` when `xbmc.host` is a remote client.
 
-##Version 1.3.9 (23/01/2013)
+##Version 1.3.9 (23/01/2014)
 * Chg: Display current mute state (muted/unmuted) and volume level when no value passed to `volume` option
 
-##Version 1.3.8 (21/01/2013)
+##Version 1.3.8 (21/01/2014)
 * Add: Configuration property `rpc.retry` to control how many attempts are made to reconnect to XBMC RPC server when XBMC has restarted. Default is 12. If set to 0, no attempts will be made to reconnect and the script will exit immediately.
 
-##Version 1.3.7 (18/01/2013)
+##Version 1.3.7 (18/01/2014)
 * Fix: Incorrect type conversion during `set`
 
-##Version 1.3.6 (17/01/2013)
+##Version 1.3.6 (17/01/2014)
 * Chg: Support relative date periods for `qa.nfo.refresh`, eg. `qa.nfo.refresh=7` would be 7 days prior to today (from 00:00:00). `0` is therefore equivalent to `today`. View the computed date/time in `config`.
 
-##Version 1.3.5 (15/01/2013)
+##Version 1.3.5 (15/01/2014)
 * Add: `@qa.nfo.refresh="YYYY-MM-DD HH:MM:SS"`, or `qa.nfo.refresh=today` (time == 00:00:00). During `qax`, any movie/episode whose NFO has a modification date more recent than the specified date/time, will be re-scraped. Prior to JSON API v6.13.2, the lastmodified date [is ambiguous](http://trac.xbmc.org/ticket/14836) so prior to v6.13.2 it may be necessary to specify `@modifieddate.mdy=yes` if US-format (mm/dd/yyyy) last modified dates are being used - default is `no`, for dd/mm/yyyy dates.
 * Add: `volume` option - set volume level `0`-`100`, `mute`, `unmute` eg. `volume mute`
 * Chg: Clearly differentiate between QA failures (which will prompt a refresh during `qax`) and warnings (which won't prompt a refresh)
 
-##Version 1.3.4 (11/01/2013)
+##Version 1.3.4 (11/01/2014)
 * Chg: Ignore "total" property when setting resume point - not required and probably a little pointless so leave it out.
 
-##Version 1.3.3 (08/01/2013)
+##Version 1.3.3 (08/01/2014)
 * Chg: Allow full size pictures to be retained in cache when pruning, by enabling option `prune.retain.pictures`.
 
-##Version 1.3.2 (07/01/2013)
+##Version 1.3.2 (07/01/2014)
 * Chg: Add `horizontal` and `vertical` as synonyms for `listright` and `listdown`.
 
-##Version 1.3.1 (07/01/2013)
+##Version 1.3.1 (07/01/2014)
 * Add: cooldown period to `stress-test`
 
-##Version 1.3.0 (07/01/2013)
+##Version 1.3.0 (07/01/2014)
 * Add: `stress-test` option to iterate over GUI items in various skin views (`thumbnail`, `listright` and `listdown`) with customisable pauses and repeats
 
-##Version 1.2.9 (07/01/2013)
+##Version 1.2.9 (07/01/2014)
 * Add: When pruning (`p`/`P`), now also consider available picture sources containing artwork and retain associated folder and picture previews. Disable this behaviour with `@prune.retain.previews=no` and all previews associated with your pictures will be removed when pruning
 
-##Version 1.2.8 (07/01/2013)
+##Version 1.2.8 (07/01/2014)
 * Fix: Truncation of (photo thumbnail) url while querying texture cache database.with JSON as these urls don't have a trailing forward-slash
 * Fix: Normalise (decode) urls when using SQLite. Photo thumbnail urls are stored in image:// encoded form within Textures##.db
 

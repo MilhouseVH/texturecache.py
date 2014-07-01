@@ -35,6 +35,7 @@ import socket, base64, hashlib
 import threading, random
 import errno, codecs
 import subprocess
+import tempfile
 
 try:
   import json
@@ -57,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.6.4"
+    self.VERSION = "1.6.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -317,6 +318,7 @@ class MyConfiguration(object):
 
     self.LOGFILE = self.getValue(config, "logfile", "")
     self.LOGVERBOSE = self.getBoolean(config, "logfile.verbose", "yes")
+    self.LOGUNIQUE = self.getBoolean(config, "logfile.unique", "no")
     self.LOGDCACHE = self.getBoolean(config, "logfile.dcache", "no")
 
     self.CACHE_ARTWORK = self.getSimpleList(config, "cache.artwork", "")
@@ -681,6 +683,7 @@ class MyConfiguration(object):
     print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
+    print("  logfile.unique = %s" % self.BooleanIsYesNo(self.LOGUNIQUE))
     print("  logfile.dcache = %s" % self.BooleanIsYesNo(self.LOGDCACHE))
     print("  checkupdate = %s" % self.BooleanIsYesNo(self.CHECKUPDATE))
     print("  autoupdate = %s" % self.BooleanIsYesNo(self.AUTOUPDATE))
@@ -740,16 +743,22 @@ class MyLogger():
   def __del__(self):
     if self.LOGFILE: self.LOGFILE.close()
 
-  def setLogFile(self, filename):
+  def setLogFile(self, config=None):
     with threading.Lock():
-      if filename:
-        self.LOGFLUSH = filename.startswith("+")
-        if self.LOGFLUSH: filename = filename[1:]
-        try:
-          self.LOGFILE = codecs.open(filename, "w", encoding="utf-8")
-          self.LOGGING = True
-        except:
-          raise IOError("Unable to open logfile for writing!")
+      if config:
+        if not self.LOGGING:
+          filename = config.LOGFILE
+          self.LOGFLUSH = filename.startswith("+")
+          if self.LOGFLUSH: filename = filename[1:]
+          try:
+            if config.LOGUNIQUE:
+              t = tempfile.mkstemp(prefix="%s." % os.path.basename(filename), suffix="", dir=os.path.dirname(filename))
+              filename = t[1]
+              os.close(t[0])
+            self.LOGFILE = codecs.open(filename, "w", encoding="utf-8")
+            self.LOGGING = True
+          except:
+            raise IOError("Unable to open logfile for writing!")
       else:
         self.LOGGING = False
         if self.LOGFILE:
@@ -923,18 +932,19 @@ class MyImageLoader(threading.Thread):
                        self.totals.getPerformance(wqs)))
 
   def run(self):
-    while not stopped.is_set():
-      self.showProgress()
+    with self.database:
+      while not stopped.is_set():
+        self.showProgress()
 
-      item = self.work_queue.get()
+        item = self.work_queue.get()
 
-      if not self.loadImage(item) and not item.missingOK:
-        self.error_queue.put(item)
+        if not self.loadImage(item) and not item.missingOK:
+          self.error_queue.put(item)
 
-      self.work_queue.task_done()
+        self.work_queue.task_done()
 
-      if self.work_queue.empty():
-        break
+        if self.work_queue.empty():
+          break
 
     self.showProgress(ignoreSelf=True)
 
@@ -962,8 +972,7 @@ class MyImageLoader(threading.Thread):
         if item.dbid != 0 and self.force:
           self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]"
                           % (item.dbid, item.cachedurl, item.decoded_filename))
-          with self.database:
-            self.database.deleteItem(item.dbid, item.cachedurl)
+          self.database.deleteItem(item.dbid, item.cachedurl)
           self.totals.bump("Deleted", item.itype)
           PERFORM_DOWNLOAD = True
       if self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD:
@@ -3211,11 +3220,12 @@ class MyTotals(object):
 
     if len(self.THREADS_HIST) != 0:
       tcount = 0
+      pcount = 1 if self.PCOUNT == 0 else self.PCOUNT
       for tname in self.THREADS_HIST:
         if not tname.startswith("Main"):
           tcount += 1
       print("  Threads Used: %d" % tcount)
-      print("   Min/Avg/Max: %3.2f / %3.2f / %3.2f" % (self.PMIN, self.PAVG/self.PCOUNT, self.PMAX))
+      print("   Min/Avg/Max: %3.2f / %3.2f / %3.2f" % (self.PMIN, self.PAVG/pcount, self.PMAX))
       print("")
 
     print("       Loading: %s" % self.secondsToTime(self.TimeDuration("Load")))
@@ -6597,7 +6607,7 @@ def loadConfig(argv):
   gLogger.VERBOSE = gConfig.LOGVERBOSE
   gLogger.OPTION = argv[0] if len(argv) != 0 else ""
 
-  gLogger.setLogFile(gConfig.LOGFILE)
+  gLogger.setLogFile(gConfig)
 
   gLogger.log("Command line args: %s" % sys.argv)
   gLogger.log("Current version #: v%s" % gConfig.VERSION)
