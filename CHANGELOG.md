@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.6 (01/07/2014)
+* Fix: Fix for crash when logfile not set.
+
 ##Version 1.6.5 (01/07/2014)
 * Chg: Eliminate repeated JSON or SQLite DB connect/disconnects in cache threads when removing textures by relocating getDB() call outside of main loop
 * Add: Allow creation of uniquely named logfiles with `@logfile.unique=yes`, adding a random suffix to log file names. Default is `@logfile.unique=no`.

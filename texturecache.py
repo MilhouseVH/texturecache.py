@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.6.5"
+    self.VERSION = "1.6.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -745,7 +745,7 @@ class MyLogger():
 
   def setLogFile(self, config=None):
     with threading.Lock():
-      if config:
+      if config and config.LOGFILE:
         if not self.LOGGING:
           filename = config.LOGFILE
           self.LOGFLUSH = filename.startswith("+")
