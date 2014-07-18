@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.7 (18/07/2014)
+* Chg: Don't perform auto-update if running from a read-only filesystem
+
 ##Version 1.6.6 (01/07/2014)
 * Fix: Fix for crash when logfile not set.
 

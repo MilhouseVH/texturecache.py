@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.6.6"
+    self.VERSION = "1.6.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -7012,7 +7012,10 @@ def main(argv):
 
   if gConfig.CHECKUPDATE and argv[0] not in ["version", "update", "fupdate"]:
     if gConfig.AUTOUPDATE:
-      autoUpdate(argv)
+      path = os.path.realpath(__file__)
+      dir = os.path.dirname(path)
+      if os.access(dir, os.W_OK):
+        autoUpdate(argv)
     else:
       checkUpdate(argv)
 
