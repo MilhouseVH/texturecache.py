@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.8 (26/07/2014)
+* Fix: Correct `qa`/`qax` processing when processing blank fields, as warnings were being incorrectly suppressed, eg. `plot`.
+
 ##Version 1.6.7 (18/07/2014)
 * Chg: Don't perform auto-update if running from a read-only filesystem
 

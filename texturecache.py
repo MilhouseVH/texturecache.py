@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.6.7"
+    self.VERSION = "1.6.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -243,7 +243,7 @@ class MyConfiguration(object):
     self.XTRAJSON = {}
     self.QA_FIELDS = {}
 
-    # Modifiers - both convey optionality:
+    # Modifiers - all are optional:
     #    ? - warn instead of fail when item is missing (or present in fail/warn pattern)
     #    # - don't warn when missing, warn otherwise (unless art present in fail list, then fail)
     #    ! - don't warn when missing, fail otherwise (unless art present in warn list, then warn)
@@ -570,9 +570,11 @@ class MyConfiguration(object):
       for item in [item.strip() for item in aStr.split(",")]:
         if item != "":
           if stripModifier and item[:1] in ["?", "#", "!"]:
-            newlist.append(item[1:])
+            newitem = item[1:]
           else:
-            newlist.append(item)
+            newitem = item
+          if newitem and newitem not in newlist:
+            newlist.append(newitem)
 
     return newlist
 
@@ -4440,7 +4442,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               break
         else:
           ismissing = (item[j] == "" or item[j] == [] or item[j] == [""])
-      if ismissing and MOD_MISSING_SILENT:
+      if ismissing and not MOD_MISSING_SILENT:
         missing["missing %s" % j] = MOD_MISSING_WARN_FAIL
 
     for i in art_items:
