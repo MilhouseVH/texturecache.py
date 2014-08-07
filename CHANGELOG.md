@@ -1,6 +1,9 @@
 #Changelog
 
-##Version 1.6.9 (26/07/2014)
+##Version 1.7.0 (07/08/2014)
+* Fix: Empty set in `set`
+
+##Version 1.6.9 (07/08/2014)
 * Fix: Detect unicode strings correctly in `set`
 
 ##Version 1.6.8 (26/07/2014)
