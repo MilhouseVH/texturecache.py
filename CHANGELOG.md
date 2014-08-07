@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.6.9 (26/07/2014)
+* Fix: Detect unicode strings correctly in `set`
+
 ##Version 1.6.8 (26/07/2014)
 * Fix: Correct `qa`/`qax` processing when processing blank fields, as warnings were being incorrectly suppressed, eg. `plot`.
 

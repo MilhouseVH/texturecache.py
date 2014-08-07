@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.6.8"
+    self.VERSION = "1.6.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -5284,7 +5284,7 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum,
         pairs[KEY] = []
         for item in pair:
           if item: pairs[KEY].append(getIntFloatStr(KEY, item) if typeconversion else item)
-      elif type(pair) is str and pair.startswith("[") and pair.endswith("]"):
+      elif (isinstance(pair, basestring)) and pair.startswith("[") and pair.endswith("]"):
         pairs[KEY] = []
         for item in [x.strip() for x in pair[1:-1].split(",")]:
           if item: pairs[KEY].append(getIntFloatStr(KEY, item) if typeconversion else item)
