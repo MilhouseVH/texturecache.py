@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.7.1 (16/08/2014)
+* Fix: Stop interpreting 0 as null in `set`
+
 ##Version 1.7.0 (07/08/2014)
 * Fix: Empty set in `set`
 

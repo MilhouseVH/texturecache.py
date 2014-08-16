@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.0"
+    self.VERSION = "1.7.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -5312,10 +5312,10 @@ def setDetails_worker(jcomms, mtype, libraryid, kvpairs, title, dryRun, itemnum,
       i += 1
       if not field in R: R[field] = {}
       if i == fc:
-        if pairs[pair] or pairs[pair] == []:
-          R[field] = pairs[pair]
-        else:
+        if pairs[pair] is None or pairs[pair] == "":
           R[field] = None
+        else:
+          R[field] = pairs[pair]
       R = R[field]
 
   if dryRun:
