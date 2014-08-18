@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.1"
+    self.VERSION = "1.7.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -376,15 +376,7 @@ class MyConfiguration(object):
 
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
-    self.IMDB_FIELDS = "rating, votes"
-    temp = self.getValue(config, "imdb.fields", "")
-    if temp:
-      if temp.startswith("+"):
-        temp = temp[1:]
-        temp2 = self.IMDB_FIELDS
-        if temp2 != "": temp2 = "%s, " % temp2
-        temp = "%s%s " % (temp2, temp.strip())
-      self.IMDB_FIELDS = temp
+    self.IMDB_FIELDS = self.getExRepList(config, "imdb.fields", ["rating", "votes", "top250"], True)
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
     self.BIN_VCGENCMD = self.getValue(config, "bin.vcgencmd", "/usr/bin/vcgencmd", allowundefined=True)
@@ -483,7 +475,7 @@ class MyConfiguration(object):
           # If value being undefined is valid, return None for undefined values
           if not value and allowundefined: return None
         except ConfigParser.NoOptionError:
-          if default is None and not allowNone:
+          if default is None and not allowundefined:
             raise ConfigParser.NoOptionError(aKey, "%s (or global section)" % self.THIS_SECTION)
       else:
         if default is None and not allowNone:
@@ -505,6 +497,8 @@ class MyConfiguration(object):
       for item in [x.strip() for x in aStr.split(",") if x]:
         if item:
           newlist.append(item)
+    elif aStr is None and allowundefined:
+      return default
 
     return newlist
 
@@ -516,6 +510,26 @@ class MyConfiguration(object):
       if x not in newList:
         newList.append(x)
     return newList
+
+  # Return an extended or replacement list
+  def getExRepList(self, config, aKey, initialList=[], allowundefined=False):
+    if self.getValue(config, aKey, "", allowundefined=True) is None:
+      return []
+
+    aList = self.getSimpleList(config, aKey, "", allowundefined)
+    iList = initialList
+
+    if aList:
+      if len(aList) != 0 and aList[0][:1] == "+":
+        aList[0] = aList[0][1:]
+      else:
+        iList = []
+
+    for a in aList:
+      if a not in iList:
+        iList.append(a)
+
+    return iList
 
   def getPatternFromList(self, config, aKey, default="", allowundefined=False):
     aList = self.getValue(config, aKey, default, allowundefined)
@@ -701,7 +715,7 @@ class MyConfiguration(object):
     print("  subtitle.filetypes = %s" % self.NoneIsBlank(", ".join(self.SUBTITLE_FILETYPES_EX)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
-    print("  imdb.fields = %s" % self.NoneIsBlank(self.IMDB_FIELDS))
+    print("  imdb.fields = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS)))
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
     print("  bin.vcgencmd = %s" % self.NoneIsBlank(self.BIN_VCGENCMD))
     print("  bin.ceccontrol = %s" % self.NoneIsBlank(self.BIN_CECCONTROL))
@@ -2619,7 +2633,7 @@ class MyJSONComms(object):
 
     elif action == "imdb":
       self.addProperties(REQUEST, "imdbnumber")
-      self.addProperties(REQUEST, self.config.IMDB_FIELDS)
+      self.addProperties(REQUEST, ",".join(self.config.IMDB_FIELDS))
 
     elif action == "missing":
       for unwanted in ["artist", "art", "fanart", "thumbnail"]:
@@ -3517,6 +3531,42 @@ class MyUtility(object):
       return url.replace("%2f", "%5c")
     else: #fslash < bslash:
       return url.replace("%5c", "%2f")
+
+  @staticmethod
+  def Top250MovieList():
+    try:
+      gLogger.progress("Retrieving Top250 movie rankings...")
+      URL = "http://feeds.s-anand.net/imdbtop250?format=xml"
+      gLogger.log("Top250: Retrieving Top250 Movies from : [%s]" % URL)
+      import xml.etree.ElementTree as ET
+      RE_IMDB = re.compile(".*/(tt[0-9]*)/")
+      rss = urllib2.urlopen(URL)
+      data = rss.read()
+      gLogger.log("Top250: Read %d bytes of data" % len(data))
+      root = ET.fromstring(data)
+      if root.tag == "rss":
+        movies = {}
+        for item in root.iter('item'):
+          movie = {}
+          for field in item:
+            if field.tag in ["title", "link"]:
+              if field.tag == "link":
+                s = RE_IMDB.search(field.text)
+                if s:
+                  movie[field.tag] = s.group(1)
+              else:
+                movie[field.tag] = field.text
+          if "link" in movie:
+            movie["rank"] = len(movies)+1
+            movies[movie["link"]] = movie
+        gLogger.log("Top250: Loaded %d movies" % len(movies))
+        return movies
+      else:
+        gLogger.log("Top250: ERROR - didn't find rss movie feed, skipping Top250 movies")
+        return None
+    except Exception as e:
+      gLogger.log("Top250: ERROR - failed to retrieve RSS Top250 feed: [%s]" % str(e))
+      return None
 
   @staticmethod
   def getIMDBInfo(imdbnumber, plotFull=False, plotOutline=False):
@@ -5099,10 +5149,17 @@ def duplicatesList(mediatype, jcomms, data):
 def updateIMDb(mediatype, jcomms, data):
   worklist = []
 
-  imdbfields = [f.strip() for f in gConfig.IMDB_FIELDS.split(",")]
+  imdbfields = gConfig.IMDB_FIELDS
 
   plotFull    = ("plot" in imdbfields)
   plotOutline = ("plotoutline" in imdbfields)
+  movies250 = MyUtility.Top250MovieList() if "top250" in imdbfields else None
+
+  #We don't need to query omdb if only updating top250
+  needQuery = False
+  for f in imdbfields:
+    if f not in ["top250"]:
+      needQuery = True
 
   for item in data:
     title = item["title"]
@@ -5111,11 +5168,16 @@ def updateIMDb(mediatype, jcomms, data):
 
     gLogger.progress("Querying IMDb: %s..." % title)
 
-    newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline) if imdbnumber else None
+    if needQuery:
+      newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline) if imdbnumber else None
+      if not newimdb or newimdb.get("response", "False") != "True":
+        gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
+        continue
+    else:
+      newimdb = {}
 
-    if not newimdb or newimdb.get("response", "False") != "True":
-      gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
-      continue
+    if movies250:
+      newimdb["top250"] = movies250.get(imdbnumber, {}).get("rank", 0) if imdbnumber is not None else 0
 
     # Truncate rating to 1 decimal place
     if "rating" in imdbfields:

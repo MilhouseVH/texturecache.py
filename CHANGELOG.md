@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.7.2 (18/08/2014)
+* Add: Now support top250 ranking on imdb updates. `votes`, `ratings` and `top250` are the default `imdb.fields`. Adds `ElementTree` dependency, which is only imported when the Top250 list is processed, and if not available then Top250 rankings will be ignored (check logfile for error details).
+
 ##Version 1.7.1 (16/08/2014)
 * Fix: Stop interpreting 0 as null in `set`
 
