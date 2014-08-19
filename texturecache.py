@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.2"
+    self.VERSION = "1.7.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3534,38 +3534,57 @@ class MyUtility(object):
 
   @staticmethod
   def Top250MovieList():
+    gLogger.progress("Retrieving Top250 movie rankings...")
+
     try:
-      gLogger.progress("Retrieving Top250 movie rankings...")
-      URL = "http://feeds.s-anand.net/imdbtop250?format=xml"
-      gLogger.log("Top250: Retrieving Top250 Movies from : [%s]" % URL)
       import xml.etree.ElementTree as ET
-      RE_IMDB = re.compile(".*/(tt[0-9]*)/")
-      rss = urllib2.urlopen(URL)
-      data = rss.read()
+
+      URL = "http://top250.info/charts"
+
+      gLogger.log("Top250: Retrieving Top250 Movies from: [%s]" % URL)
+      html = urllib2.urlopen(URL)
+      data = html .read()
+
       gLogger.log("Top250: Read %d bytes of data" % len(data))
-      root = ET.fromstring(data)
-      if root.tag == "rss":
+
+      tstamp = data.find("<title>")
+      if tstamp  != -1:
+        tstamp += 30
+        gLogger.log("Top250: Data last updated [%s]" % data[tstamp:tstamp+18])
+
+      # Find end of first table, as movie list is in the second table
+      spos = data.find("</table>")
+      epos = data[spos+8:].find("</table>") if spos != -1 else -1
+
+      if spos != -1 and epos != -1:
+        data = data[spos+8:spos+8+epos+8]
+        gLogger.log("Top250: Table data found, %d bytes" % len(data))
+
+        table = ET.fromstring(data)
+
+        RE_IMDB = re.compile("/movie/\?([0-9]*)")
+
         movies = {}
-        for item in root.iter('item'):
+        for row in table:
+          if row.attrib["class"] == "row_header": continue
           movie = {}
-          for field in item:
-            if field.tag in ["title", "link"]:
-              if field.tag == "link":
-                s = RE_IMDB.search(field.text)
-                if s:
-                  movie[field.tag] = s.group(1)
-              else:
-                movie[field.tag] = field.text
+          title = row[2][0][0].text
+          anchor = row[2][0].attrib["href"]
+          s = RE_IMDB.search(anchor)
+          if s:
+            movie["link"] = "tt%s" % s.group(1)
+            movie["title"] = title
           if "link" in movie:
             movie["rank"] = len(movies)+1
             movies[movie["link"]] = movie
+
         gLogger.log("Top250: Loaded %d movies" % len(movies))
         return movies
       else:
-        gLogger.log("Top250: ERROR - didn't find rss movie feed, skipping Top250 movies")
+        gLogger.log("Top250: ERROR - didn't find movie data, skipping Top250 movies")
         return None
     except Exception as e:
-      gLogger.log("Top250: ERROR - failed to retrieve RSS Top250 feed: [%s]" % str(e))
+      gLogger.log("Top250: ERROR - failed to retrieve Top250 movie data: [%s]" % str(e))
       return None
 
   @staticmethod
@@ -5153,13 +5172,15 @@ def updateIMDb(mediatype, jcomms, data):
 
   plotFull    = ("plot" in imdbfields)
   plotOutline = ("plotoutline" in imdbfields)
-  movies250 = MyUtility.Top250MovieList() if "top250" in imdbfields else None
+  movies250   = None
+
+  if "top250" in imdbfields:
+    movies250 = MyUtility.Top250MovieList()
+    if movies250 is None:
+      gLogger.err("WARNING: Failed to obtain Top250 movies, check log for details", newLine=True)
 
   #We don't need to query omdb if only updating top250
-  needQuery = False
-  for f in imdbfields:
-    if f not in ["top250"]:
-      needQuery = True
+  omdbquery = (imdbfields != [] and not (len(imdbfields) == 1 and "top250" in imdbfields))
 
   for item in data:
     title = item["title"]
@@ -5168,7 +5189,7 @@ def updateIMDb(mediatype, jcomms, data):
 
     gLogger.progress("Querying IMDb: %s..." % title)
 
-    if needQuery:
+    if omdbquery:
       newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline) if imdbnumber else None
       if not newimdb or newimdb.get("response", "False") != "True":
         gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
