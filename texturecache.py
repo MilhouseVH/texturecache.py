@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.3"
+    self.VERSION = "1.7.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -73,7 +73,7 @@ class MyConfiguration(object):
 
     # https://github.com/xbmc/xbmc/blob/master/xbmc/settings/AdvancedSettings.cpp
     m_pictureExtensions = ".png|.jpg|.jpeg|.bmp|.gif|.ico|.tif|.tiff|.tga|.pcx|.cbz|.zip|.cbr|.rar|.dng|.nef|.cr2|.crw|.orf|.arw|.erf|.3fr|.dcr|.x3f|.mef|.raf|.mrw|.pef|.sr2|.rss"
-    m_musicExtensions = ".nsv|.m4a|.flac|.aac|.strm|.pls|.rm|.rma|.mpa|.wav|.wma|.ogg|.mp3|.mp2|.m3u|.mod|.amf|.669|.dmf|.dsm|.far|.gdm|.imf|.it|.m15|.med|.okt|.s3m|.stm|.sfx|.ult|.uni|.xm|.sid|.ac3|.dts|.cue|.aif|.aiff|.wpl|.ape|.mac|.mpc|.mp+|.mpp|.shn|.zip|.rar|.wv|.nsf|.spc|.gym|.adx|.dsp|.adp|.ymf|.ast|.afc|.hps|.xsp|.xwav|.waa|.wvs|.wam|.gcm|.idsp|.mpdsp|.mss|.spt|.rsd|.mid|.kar|.sap|.cmc|.cmr|.dmc|.mpt|.mpd|.rmt|.tmc|.tm8|.tm2|.oga|.url|.pxml|.tta|.rss|.cm3|.cms|.dlt|.brstm|.wtv|.mka|.tak"
+    m_musicExtensions = ".nsv|.m4a|.flac|.aac|.strm|.pls|.rm|.rma|.mpa|.wav|.wma|.ogg|.mp3|.mp2|.m3u|.mod|.amf|.669|.dmf|.dsm|.far|.gdm|.imf|.it|.m15|.med|.okt|.s3m|.stm|.sfx|.ult|.uni|.xm|.sid|.ac3|.dts|.cue|.aif|.aiff|.wpl|.ape|.mac|.mpc|.mp+|.mpp|.shn|.zip|.rar|.wv|.nsf|.spc|.gym|.adx|.dsp|.adp|.ymf|.ast|.afc|.hps|.xsp|.xwav|.waa|.wvs|.wam|.gcm|.idsp|.mpdsp|.mss|.spt|.rsd|.mid|.kar|.sap|.cmc|.cmr|.dmc|.mpt|.mpd|.rmt|.tmc|.tm8|.tm2|.oga|.url|.pxml|.tta|.rss|.cm3|.cms|.dlt|.brstm|.wtv|.mka|.tak|.opus|.dff|.dsf"
     m_videoExtensions = ".m4v|.3g2|.3gp|.nsv|.tp|.ts|.ty|.strm|.pls|.rm|.rmvb|.m3u|.m3u8|.ifo|.mov|.qt|.divx|.xvid|.bivx|.vob|.nrg|.img|.iso|.pva|.wmv|.asf|.asx|.ogm|.m2v|.avi|.bin|.dat|.mpg|.mpeg|.mp4|.mkv|.avc|.vp3|.svq3|.nuv|.viv|.dv|.fli|.flv|.rar|.001|.wpl|.zip|.vdr|.dvr-ms|.xsp|.mts|.m2t|.m2ts|.evo|.ogv|.sdp|.avs|.rec|.url|.pxml|.vc1|.h264|.rcv|.rss|.mpls|.webm|.bdmv|.wtv"
     m_subtitlesExtensions = ".utf|.utf8|.utf-8|.sub|.srt|.smi|.rt|.txt|.ssa|.text|.ssa|.aqt|.jss|.ass|.idx|.ifo|.rar|.zip"
 
@@ -377,11 +377,16 @@ class MyConfiguration(object):
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
     self.IMDB_FIELDS = self.getExRepList(config, "imdb.fields", ["rating", "votes", "top250"], True)
+    self.IMDB_TIMEOUT = self.getValue(config, "imdb.timeout", 15.0, allowundefined=True)
+    if self.IMDB_TIMEOUT: self.IMDB_TIMEOUT = float(self.IMDB_TIMEOUT)
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
     self.BIN_VCGENCMD = self.getValue(config, "bin.vcgencmd", "/usr/bin/vcgencmd", allowundefined=True)
     self.BIN_CECCONTROL = self.getValue(config, "bin.ceccontrol", "")
-    self.FORCE_HOTPLUG = self.getBoolean(config, "hdmi.force.hotplug", "no")
+    self.HDMI_FORCE_HOTPLUG = self.getBoolean(config, "hdmi.force.hotplug", "no")
+    self.HDMI_IGNORE_SUSPEND = self.getBoolean(config, "hdmi.ignoresuspend", "no")
+    self.HDMI_IGNORE_DISABLE = self.getBoolean(config, "hdmi.ignoredisable", "no")
+    self.HDMI_IGNORE_PLAYER = self.getBoolean(config, "hdmi.ignoreplayer", "no")
 
     # Use a smaller cache on ARM systems, based on the assumption that ARM systems
     # will have less memory than other platforms
@@ -645,11 +650,11 @@ class MyConfiguration(object):
     print("  thumbnails = %s " % self.THUMBNAILS)
     print("  xbmc.host = %s" % self.XBMC_HOST)
     print("  webserver.port = %s" % self.WEB_PORT)
-    print("  webserver.ctimeout = %s" % self.WEB_CONNECTTIMEOUT)
+    print("  webserver.ctimeout = %s" % self.NoneIsBlank(self.WEB_CONNECTTIMEOUT))
     print("  rpc.port = %s" % self.RPC_PORT)
     print("  rpc.ipversion = %s" % self.RPC_IPVERSION)
     print("  rpc.retry = %s" % self.RPC_RETRY)
-    print("  rpc.ctimeout = %s" % self.RPC_CONNECTTIMEOUT)
+    print("  rpc.ctimeout = %s" % self.NoneIsBlank(self.RPC_CONNECTTIMEOUT))
     print("  chunked = %s" % self.BooleanIsYesNo(self.CHUNKED))
     print("  modifieddate.mdy = %s" % self.BooleanIsYesNo(self.MDATE_MDY))
     print("  query.seasons = %s" % self.BooleanIsYesNo(self.QUERY_SEASONS))
@@ -716,10 +721,14 @@ class MyConfiguration(object):
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("  imdb.fields = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS)))
+    print("  imdb.timeout = %s" % self.NoneIsBlank(self.IMDB_TIMEOUT))
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
     print("  bin.vcgencmd = %s" % self.NoneIsBlank(self.BIN_VCGENCMD))
     print("  bin.ceccontrol = %s" % self.NoneIsBlank(self.BIN_CECCONTROL))
-    print("  hdmi.force.hotplug = %s" % self.BooleanIsYesNo(self.FORCE_HOTPLUG))
+    print("  hdmi.force.hotplug = %s" % self.BooleanIsYesNo(self.HDMI_FORCE_HOTPLUG))
+    print("  hdmi.ignoresuspend = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_SUSPEND))
+    print("  hdmi.ignoredisable = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_DISABLE))
+    print("  hdmi.ignoreplayer = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_PLAYER))
     print("  dcache.size = %d" % self.DCACHE_SIZE)
     print("  dcache.agelimit = %d" % self.DCACHE_AGELIMIT)
     print("  posterwidth = %d" % self.POSTER_WIDTH)
@@ -1037,6 +1046,7 @@ class MyHDMIManager(threading.Thread):
     self.config = config
     self.logger = logger
     self.cmdqueue = cmdqueue
+    self.ignoreplayer = self.config.HDMI_IGNORE_PLAYER
 
     self.bin_tvservice = config.BIN_TVSERVICE
     self.bin_vcgencmd = config.BIN_VCGENCMD if config.BIN_VCGENCMD and os.path.exists(config.BIN_VCGENCMD) else None
@@ -1059,6 +1069,7 @@ class MyHDMIManager(threading.Thread):
     self.logger.debug("Path to tvservice   : %s" % self.bin_tvservice)
     self.logger.debug("Path to vcgencmd    : %s" % self.bin_vcgencmd)
     self.logger.debug("Path to ceccontrol  : %s" % self.bin_ceccontrol)
+    self.logger.debug("Ignore Active Player: %s" % ("Yes" if self.ignoreplayer else "No"))
 
   def run(self):
     try:
@@ -1101,7 +1112,7 @@ class MyHDMIManager(threading.Thread):
           player_active = clientState["players.active"]
           library_active = (clientState["scanning.music"] or clientState["scanning.video"])
 
-          # If the Pi can suspend, don't schedule the EV_HDMI_OFF event or restart XBMC
+          # If the Pi can self-suspend, don't schedule the EV_HDMI_OFF event or restart XBMC
           # to re-init the HDMI. Instead, just log various events and call ceccontrol
           # whenever sleeping or waking.
           self.cansuspend = clientState["cansuspend"]
@@ -1195,7 +1206,7 @@ class MyHDMIManager(threading.Thread):
             self.EventStart(event, now)
             if event == self.EV_HDMI_OFF:
               self.logger.debug("HDMI power off in %d seconds unless cancelled" % int(self.EventInterval(event)))
-              if player_active or library_active:
+              if (player_active and not self.ignoreplayer) or library_active:
                 self.logger.debug("HDMI power-off will not occur until both player and library become inactive")
 
           # Process any expired events
@@ -1205,7 +1216,7 @@ class MyHDMIManager(threading.Thread):
               player_active = False
               self.EventStop(event)
             elif event == self.EV_HDMI_OFF:
-              if player_active or library_active:
+              if (player_active and not self.ignoreplayer) or library_active:
                 if not self.EventOverdue(event, now):
                   self.logger.debug("HDMI power-off timeout reached - waiting for player and/or library to become inactive")
               else:
@@ -1297,6 +1308,8 @@ class MyHDMIManager(threading.Thread):
     for s in REQUEST["params"]["properties"]:
       statuses[s] = values.get(s, False)
 
+    statuses["cansuspend"] = (statuses["cansuspend"] and not self.config.HDMI_IGNORE_SUSPEND)
+
     svalue = False
     if self.bin_vcgencmd:
       try:
@@ -1306,7 +1319,7 @@ class MyHDMIManager(threading.Thread):
           svalue = True
       except:
         pass
-    statuses["vcgencmd.display_power"] = svalue
+    statuses["vcgencmd.display_power"] = (svalue and not self.config.HDMI_IGNORE_DISABLE)
 
     return statuses
 
@@ -1327,7 +1340,7 @@ class MyHDMIManager(threading.Thread):
   # Typical values: 2 = HDMI off; 9 = HDMI on, TV off/standby; 10 (a) = HDMI+TV on
   #
   def getDisplayStatus(self):
-    if self.config.FORCE_HOTPLUG:
+    if self.config.HDMI_FORCE_HOTPLUG:
       self.logger.debug("No hotplug support - assuming display is powered on")
       return True
 
@@ -3543,7 +3556,8 @@ class MyUtility(object):
 
       gLogger.log("Top250: Retrieving Top250 Movies from: [%s]" % URL)
       html = urllib2.urlopen(URL)
-      data = html .read()
+      data = html.read()
+      html.close()
 
       gLogger.log("Top250: Read %d bytes of data" % len(data))
 
@@ -3574,7 +3588,6 @@ class MyUtility(object):
           if s:
             movie["link"] = "tt%s" % s.group(1)
             movie["title"] = title
-          if "link" in movie:
             movie["rank"] = len(movies)+1
             movies[movie["link"]] = movie
 
@@ -3588,19 +3601,19 @@ class MyUtility(object):
       return None
 
   @staticmethod
-  def getIMDBInfo(imdbnumber, plotFull=False, plotOutline=False):
+  def getIMDBInfo(imdbnumber, plotFull=False, plotOutline=False, qtimeout=15.0):
     try:
       base_url = "http://www.omdbapi.com"
 
       if plotOutline or not plotFull:
-        f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber))
+        f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber), timeout=qtimeout)
         data = json.loads(f.read().decode("utf-8"))
         outline = data.get("Plot", None)
       else:
         outline=None
 
       if plotFull:
-        f = urllib2.urlopen("%s?i=%s&plot=full" % (base_url, imdbnumber))
+        f = urllib2.urlopen("%s?i=%s&plot=full" % (base_url, imdbnumber), timeout=qtimeout)
         data = json.loads(f.read().decode("utf-8"))
 
       # Convert omdbapi.com fields to xbmc fields - mostly just a case
@@ -3636,11 +3649,12 @@ class MyUtility(object):
               newdata[newkey] = r
           else:
             newdata[newkey] = data[key]
-        except:
-          pass
+        except Exception as e:
+          gLogger.log("Exception during imdb processing: imdbnumber [%s], key [%s]. msg [%s]" % (imdbnumber, key, str(e)))
       return newdata
-    except urllib2.URLError:
-      return None
+    except (urllib2.URLError, socket.timeout) as e:
+      gLogger.log("Exception during imdb processing: imdbnumber [%s], timeout [%s], msg [%s]" % (imdbnumber, qtimeout, str(e)))
+      return {}
 
   @staticmethod
   def is_cache_item_stale(config, jcomms, mediaitem):
@@ -5190,7 +5204,7 @@ def updateIMDb(mediatype, jcomms, data):
     gLogger.progress("Querying IMDb: %s..." % title)
 
     if omdbquery:
-      newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline) if imdbnumber else None
+      newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline, qtimeout=gConfig.IMDB_TIMEOUT) if imdbnumber else None
       if not newimdb or newimdb.get("response", "False") != "True":
         gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
         continue
@@ -5205,7 +5219,7 @@ def updateIMDb(mediatype, jcomms, data):
       item["rating"] = float("%.1f" % item.get("rating", 0.0))
 
     # Sort genre lists for comparison purposes
-    if "genre" in imdbfields:
+    if "genre" in imdbfields and "genre" in newimdb:
       item["genre"] = sorted(item.get("genre", []))
       newimdb["genre"] = sorted(newimdb.get("genre", []))
 

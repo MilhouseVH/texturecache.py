@@ -1,5 +1,11 @@
 #Changelog
 
+##Version 1.7.4 (01/09/2014)
+* Add: Extra music file types (opus, dff and dsf)
+* Add: Allow `rbphdmi` to disable hdmi when player active, by specifying `@hdmi.ignoreplayer=yes`.
+* Add: Ignore built-in virtual suspend capability with `@hdmi.ignoresuspend=yes` - necessary if rbphdmi to remain in control of suspend HDMI activites.
+* Fix: imdb cosmetics
+
 ##Version 1.7.3 (19/08/2014)
 * Chg: Use alternative source for IMdB Top250 as the RSS feed looks to be stale. Now using [this page](http://top250.info/charts).
 
