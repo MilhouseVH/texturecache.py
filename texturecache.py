@@ -1177,12 +1177,12 @@ class MyHDMIManager(threading.Thread):
           self.logger.debug("Library scan has finished")
           library_active = False
 
-        elif method == "System.OnSleep":
+        elif method == "System.OnSleep" and self.cansuspend:
           self.logger.debug("Client is now suspended")
           # HDMI already disabled, but may need to process CEC functionality
           self.callCECControl("off")
 
-        elif method == "System.OnWake":
+        elif method == "System.OnWake" and self.cansuspend:
           self.logger.debug("Client has resumed")
           # HDMI already enabled, but may need to process CEC functionality
           self.callCECControl("on")
