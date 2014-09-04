@@ -35,7 +35,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
-**[imdb]** Update imdb fields on movies. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest imdb details based on `imdbnumber`. Movies without `imdbnumber` will not be updated. Specify fields to be updated with the property `@imdb.fields` from the following: `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. The default value is `rating, votes`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields=+year,genre` to update ratings, votes, year and genre. See log for old/new values.
+**[imdb]** Update imdb fields on movies. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest imdb details based on `imdbnumber`. Movies without `imdbnumber` will not be updated. Specify fields to be updated with the property `@imdb.fields` from the following: `top250`, `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. The default value is: `rating, votes, top250`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields=+year,genre` to update ratings, votes, top250, year and genre. See log for old/new values.
 
 **[purge hashed|unhashed|all]** Delete cached artwork containing specified patterns, with or without lasthashcheck, or if it doesn't matter `all` eg. `purge unhashed youtube iplayer imdb.com`
 
@@ -78,6 +78,14 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 **[wake]** Use Wake Over LAN to wake a suspended/hibernating remote client. Specify the MAC address of the remote client in the `network.mac` property (ie. `network.mac=xx:xx:xx:xx:xx:xx`). When the client is no longer required, suspend or hibernate it with the `power` option.
 
 **[exec, execw]** Execute the specified addon, with optional parameters. eg. `exec script.artwork.downloader silent=true mediatype=tvshow`. Use `execw` to wait, but this rarely has any effect (possibly not implemented by JSON?)
+
+**[setsetting]** Set the value of the named setting, eg. `setsetting locale.language English`
+**[getsetting]** Get the current value of the named setting, eg. `getsetting locale.language`
+**[getsettings]** View details of all settings, or those where pattern is contained within `id`, eg. `getsettings debug` to view details of all debug-related settings
+
+**[debugon, debugoff]** Enable/Disable debugging
+
+**[config]** View current configuration
 
 **[version]** View current installed version
 

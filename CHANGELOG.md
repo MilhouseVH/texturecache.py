@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.7.5 (05/09/2014)
+* Add: New options `getsettings`, `getsetting`, `setsetting` to remotely view and change Kodi settings
+* Add: New options `debugon` and `debugoff` to remotely enable/disable logging
+
 ##Version 1.7.4 (01/09/2014)
 * Add: Extra music file types (opus, dff and dsf)
 * Add: Allow `rbphdmi` to disable hdmi when player active, by specifying `@hdmi.ignoreplayer=yes`.

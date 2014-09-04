@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.4"
+    self.VERSION = "1.7.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -83,6 +83,7 @@ class MyConfiguration(object):
                                   "removeart":    (6,  9, 1),
                                   "setseason":    (6, 10, 0),
                                   "setmovieset":  (6, 12, 0),
+                                  "setsettings":  (6, 13, 0),
                                   "filternullval":(6, 13, 1),
                                   "isodates":     (6, 13, 2),
                                   "dpmsnotify":   (6, 16, 0)
@@ -6568,6 +6569,35 @@ def ShowGUINotification(title, message, displaytime, image):
 
   MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libNotification")
 
+def setSettingVariable(name, value):
+  REQUEST = {"method": "Settings.SetSettingValue", "params": {"setting":name, "value": value}}
+  MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libSetSetting", checkResult=True)
+
+def getSettingVariable(name):
+  REQUEST = {"method": "Settings.GetSettingValue", "params": {"setting": name}}
+  data = MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libGetSetting", checkResult=True)
+  return data["result"]["value"]
+
+def WriteSetting(name, rawvalue):
+  setSettingVariable(name, eval(rawvalue))
+
+def ReadSetting(name):
+  gLogger.out("%s: %s" % (name, getSettingVariable(name)), newLine=True)
+
+def ReadSettings(pattern = None):
+  REQUEST = {"method": "Settings.GetSettings"}
+  data = MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libSettings", checkResult=True)
+  if pattern:
+    newdata = []
+    for item in data["result"]["settings"]:
+      if item["id"].find(pattern) != -1:
+        newdata.append(item)
+    gLogger.out(json.dumps(newdata, indent=2, ensure_ascii=True, sort_keys=True), newLine=True)
+  else:
+    gLogger.out(json.dumps(data["result"]["settings"], indent=2, ensure_ascii=True, sort_keys=True), newLine=True)
+
+#---
+
 def pprint(msg):
   MAXWIDTH=0
 
@@ -6603,10 +6633,11 @@ def usage(EXIT_CODE):
           sources [media] | sources media [label] | directory path | rdirectory path | readfile infile [outfile ; -] | \
           notify title message [displaytime [image]] | \
           status [idleTime] | monitor | power <state> | exec [params] | execw [params] | wake | \
-          rbphdmi [seconds] | stats [class]* |\
-          input action* [parameter] | screenshot |\
+          rbphdmi [seconds] | stats [class]* | \
+          input action* [parameter] | screenshot | \
           volume [mute;unmute;#] | \
-          stress-test view-type numitems [pause] [repeat] [cooldown] |\
+          stress-test view-type numitems [pause] [repeat] [cooldown] | \
+          setsetting name value | getsetting name | getsettings [pattern] | debugon | debugoff | \
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -6664,6 +6695,13 @@ def usage(EXIT_CODE):
   print("  volume     Set volume level 0-100, mute or unmute, or display current mute state and volume level")
   print(" stress-test Stress GUI by walking over library items. View type: thumbnail, horizontal, vertical. Default pause 0.25, repeat 1, cooldown (in seconds) 0.")
   print("  screenshot Take a screen grab of the current display")
+
+  print("  setsetting Set the value of the named setting, eg. 'setsetting locale.language English'")
+  print("  getsetting Get the current value of the named setting, eg. 'getsetting locale.language'")
+  print(" getsettings View details of all settings, or those where pattern is contained within id, eg. 'getsettings debug' to view details of all debug-related settings")
+  print("  debugon    Enable debugging")
+  print("  debugoff   Disable debugging")
+
   print("")
   print("  config     Show current configuration")
   print("  version    Show current version and check for new version")
@@ -6729,6 +6767,7 @@ def checkConfig(option):
                 "status", "monitor", "power", "rbphdmi", "stats", "input", "screenshot", "stress-test",
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "volume", "readfile", "notify",
+                "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
@@ -6983,6 +7022,7 @@ def getLatestVersion(argv):
                    "vscan", "ascan", "vclean", "aclean",
                    "duplicates", "fixurls", "imdb", "stats",
                    "input", "screenshot", "volume", "readfile", "notify",
+                   "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -7356,6 +7396,25 @@ def main(argv):
     _displaytime= int(argv[3]) if len(argv) >= 4 else None
     _image      = argv[4] if len(argv) >= 5 else None
     ShowGUINotification(_title, _message, _displaytime, _image)
+
+  elif argv[0] == "setsetting" and len(argv) == 3:
+    WriteSetting(argv[1], argv[2])
+
+  elif argv[0] == "getsetting" and len(argv) == 2:
+    ReadSetting(argv[1])
+
+  elif argv[0] == "getsettings" and len(argv) == 1:
+    ReadSettings()
+  elif argv[0] == "getsettings" and len(argv) == 2:
+    ReadSettings(argv[1])
+
+  elif argv[0] == "debugon" and len(argv) == 1:
+    setSettingVariable("debug.showloginfo", True)
+    setSettingVariable("debug.extralogging", True)
+
+  elif argv[0] == "debugoff" and len(argv) == 1:
+    setSettingVariable("debug.showloginfo", False)
+    setSettingVariable("debug.extralogging", False)
 
   else:
     usage(1)
