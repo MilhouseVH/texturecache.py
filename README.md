@@ -85,6 +85,10 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 ##Installation instructions
 
+####Installation from distro packages
+* ![logo](http://www.monitorix.org/imgs/archlinux.png "arch logo")Arch: in the [AUR](https://aur.archlinux.org/packages/xbmc-texturecache).
+
+####Installation from source
 Download the single Python file required from github. A default properties file is available on github, rename this to texturecache.cfg in order to use it.
 
 To download the script at the command line:
@@ -107,9 +111,6 @@ chmod +x ./texturecache.py
 #####ATV2 (iOS) users
 
 Python 2.6+ is required to run this script, and although Python can be installed on iOS using `apt-get install python`, the version installed (typically v2.5.1 - check with `python --version`) is very old and lacks language features required by the script. It is possible to install a more recent [Python 2.7.3 package](http://code.google.com/p/yangapp/downloads/detail?name=python_2.7.3-3_iphoneos-arm.deb&can=2&q=) as follows:
-
-####Installation from distro packages
-* ![logo](http://www.monitorix.org/imgs/archlinux.png "arch logo")Arch: in the [AUR](https://aur.archlinux.org/packages/xbmc-texturecache).
 
 ####Code:
 ```
