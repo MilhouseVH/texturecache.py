@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.5"
+    self.VERSION = "1.7.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -6586,7 +6586,10 @@ def WriteSetting(name, rawvalue):
   setSettingVariable(name, value)
 
 def ReadSetting(name):
-  gLogger.out("%s: %s" % (name, getSettingVariable(name)), newLine=True)
+  try:
+    gLogger.out("%s: %s" % (name, getSettingVariable(name)), newLine=True)
+  except:
+    pass
 
 def ReadSettings(pattern = None):
   REQUEST = {"method": "Settings.GetSettings"}

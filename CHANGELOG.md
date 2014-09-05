@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.7.6 (05/09/2014)
+* Chg: Add error handling when dealing with invalid setting id
+
 ##Version 1.7.5 (05/09/2014)
 * Add: New options `getsettings`, `getsetting`, `setsetting` to remotely view and change Kodi settings
 * Add: New options `debugon` and `debugoff` to remotely enable/disable logging
