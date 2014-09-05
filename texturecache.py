@@ -6579,7 +6579,11 @@ def getSettingVariable(name):
   return data["result"]["value"]
 
 def WriteSetting(name, rawvalue):
-  setSettingVariable(name, eval(rawvalue))
+  try:
+    value = eval(rawvalue)
+  except:
+    value = rawvalue
+  setSettingVariable(name, value)
 
 def ReadSetting(name):
   gLogger.out("%s: %s" % (name, getSettingVariable(name)), newLine=True)
