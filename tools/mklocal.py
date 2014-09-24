@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.2.2
+#version 0.2.3
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -100,13 +100,13 @@ def printerr(msg, newline=True):
 def info(args, msg, atype, title, reason = None, url = None, target = None):
   line = "DRYRUN " if args.dryrun else ""
   if reason or url:
-    line = "%s%-15s - %-10s - %-45s" % (line, msg, atype.center(10), addEllipsis(45, title))
+    line = "%s%-15s - %-10s - %-45s" % (line, msg, atype.center(10), addEllipsis(45, MyUtility.toUnicode(title)))
     if reason: line = "%s [%s]" % (line, reason)
     if url:    line = "%s %s" % (line, url)
   elif target:
-    line = "%s%-15s - %-10s - %-45s -> %s" % (line, msg, atype.center(10), addEllipsis(45, title), target)
+    line = "%s%-15s - %-10s - %-45s -> %s" % (line, msg, atype.center(10), addEllipsis(45, MyUtility.toUnicode(title)), MyUtility.toUnicode(target))
   else:
-    line = "%s%-15s - %-10s - %s" % (line, msg, atype.center(10), title)
+    line = "%s%-15s - %-10s - %s" % (line, msg, atype.center(10), MyUtility.toUnicode(title))
 
   printout(line) if args.info else printerr(line)
 
@@ -119,10 +119,12 @@ def debug(indent, msg):
   if VERBOSE: printerr("##DEBUG## %s%s" % (" "*(indent*2), msg))
 
 def debug2(atype, msg, value1="", value2=""):
-  if value1:
-    debug(2, "[%-10s] %-40s %s%s" % (atype, msg, value1, value2))
-  else:
-    debug(2, "[%-10s] %s" % (atype, msg))
+  global VERBOSE
+  if VERBOSE:
+    if value1:
+      debug(2, "[%-10s] %-40s %s%s" % (atype, msg, MyUtility.toUnicode(value1), MyUtility.toUnicode(value2)))
+    else:
+      debug(2, "[%-10s] %s" % (atype, MyUtility.toUnicode(msg)))
 
 def addEllipsis(maxlen, aStr):
   if len(aStr) <= maxlen: return aStr

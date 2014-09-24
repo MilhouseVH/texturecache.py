@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 24/09/2014
+* Fix: Assume titles and filenames are unicode in diagnostic output
+
 ## 17/03/2014
 * Add: `--info` argument to redirect informational data to stdout instead of stderr
 
