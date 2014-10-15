@@ -85,6 +85,10 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[debugon, debugoff]** Enable/Disable debugging
 
+**[play]** Play specified item (local file, playlist, internet stream etc.)
+**[stop]** Stop playback
+**[pause]** Toggle pause/playback of currently playing media
+
 **[config]** View current configuration
 
 **[version]** View current installed version

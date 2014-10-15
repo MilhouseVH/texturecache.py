@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.6"
+    self.VERSION = "1.7.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -78,15 +78,17 @@ class MyConfiguration(object):
     m_subtitlesExtensions = ".utf|.utf8|.utf-8|.sub|.srt|.smi|.rt|.txt|.ssa|.text|.ssa|.aqt|.jss|.ass|.idx|.ifo|.rar|.zip"
 
     # These features become available with the respective API version
-    self.JSON_VER_CAPABILITIES = {"setresume":    (6,  2, 0),
-                                  "texturedb":    (6,  9, 0),
-                                  "removeart":    (6,  9, 1),
-                                  "setseason":    (6, 10, 0),
-                                  "setmovieset":  (6, 12, 0),
-                                  "setsettings":  (6, 13, 0),
-                                  "filternullval":(6, 13, 1),
-                                  "isodates":     (6, 13, 2),
-                                  "dpmsnotify":   (6, 16, 0)
+    self.JSON_VER_CAPABILITIES = {"setresume":        (6,  2, 0),
+                                  "texturedb":        (6,  9, 0),
+                                  "removeart":        (6,  9, 1),
+                                  "setseason":        (6, 10, 0),
+                                  "setmovieset":      (6, 12, 0),
+                                  "setsettings":      (6, 13, 0),
+                                  "filternullval":    (6, 13, 1),
+                                  "isodates":         (6, 13, 2),
+                                  "dpmsnotify":       (6, 16, 0),
+                                  "openplayercoredef":(6, 18, 3),
+                                  "libshowdialogs":   (6, 19, 0)
                                  }
 
     self.SetJSONVersion(0, 0, 0)
@@ -402,6 +404,9 @@ class MyConfiguration(object):
 
     self.POSTER_WIDTH = int(self.getValue(config, "posterwidth", "5"))
 
+    self.CLEAN_SHOW_DIALOGS = self.getBoolean(config, "clean.showdialogs", "no")
+    self.SCAN_SHOW_DIALOGS = self.getBoolean(config, "scan.showdialogs", "no")
+
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
     self.JSON_VER_STR = "v%d.%d.%d" % (major, minor, patch)
@@ -427,6 +432,12 @@ class MyConfiguration(object):
 
     # https://github.com/xbmc/xbmc/pull/4766
     self.JSON_HAS_DPMS_NOTIFY = self.HasJSONCapability("dpmsnotify")
+
+    # https://github.com/xbmc/xbmc/pull/5324
+    self.JSON_HAS_LIB_SHOWDIALOGS_PARAM = self.HasJSONCapability("libshowdialogs")
+
+    # https://github.com/xbmc/xbmc/pull/5454
+    self.JSON_HAS_OPEN_PLAYERCORE_DEFAULT = self.HasJSONCapability("openplayercoredef")
 
   def HasJSONCapability(self, feature):
     if feature not in self.JSON_VER_CAPABILITIES:
@@ -733,6 +744,8 @@ class MyConfiguration(object):
     print("  dcache.size = %d" % self.DCACHE_SIZE)
     print("  dcache.agelimit = %d" % self.DCACHE_AGELIMIT)
     print("  posterwidth = %d" % self.POSTER_WIDTH)
+    print("  clean.showdialogs = %s" % self.BooleanIsYesNo(self.CLEAN_SHOW_DIALOGS))
+    print("  scan.showdialogs = %s" % self.BooleanIsYesNo(self.SCAN_SHOW_DIALOGS))
 
     print("")
     print("See http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6 for details of available audio/video fields.")
@@ -2095,11 +2108,18 @@ class MyJSONComms(object):
       self.logger.out("Rescanning library...", newLine=True, log=True)
       REQUEST = {"method": scanMethod}
 
+    if self.config.JSON_HAS_LIB_SHOWDIALOGS_PARAM:
+      REQUEST["params"] = {"showdialogs": self.config.SCAN_SHOW_DIALOGS}
+
     self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
 
   def cleanLibrary(self, cleanMethod):
     self.logger.out("Cleaning library...", newLine=True, log=True)
     REQUEST = {"method": cleanMethod}
+
+    if self.config.JSON_HAS_LIB_SHOWDIALOGS_PARAM:
+      REQUEST["params"] = {"showdialogs": self.config.CLEAN_SHOW_DIALOGS}
+
     self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
 
   def getDirectoryList(self, path, mediatype="files", properties=["file","lastmodified"], use_cache=True, timestamp=False):
@@ -6591,8 +6611,8 @@ def ReadSetting(name):
   except:
     pass
 
-def ReadSettings(pattern = None):
-  REQUEST = {"method": "Settings.GetSettings"}
+def ReadSettings(pattern=None):
+  REQUEST = {"method": "Settings.GetSettings", "params": {"level": "expert"}}
   data = MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libSettings", checkResult=True)
   if pattern:
     newdata = []
@@ -6602,6 +6622,44 @@ def ReadSettings(pattern = None):
     gLogger.out(json.dumps(newdata, indent=2, ensure_ascii=True, sort_keys=True), newLine=True)
   else:
     gLogger.out(json.dumps(data["result"]["settings"], indent=2, ensure_ascii=True, sort_keys=True), newLine=True)
+
+def playerPlay(afile, playerid=None):
+  REQUEST = {"method": "Player.Open", "params": {"item": {"file": afile}}}
+  if playerid is not None:
+    playercoreid = playerid
+    if playercoreid == "null":
+      playercoreid = None
+    elif playercoreid == "default":
+      if not gConfig.JSON_HAS_OPEN_PLAYERCORE_DEFAULT:
+        gLogger.err("WARNING: 'default' is not supported by current JSON API", newLine=True)
+        playercoreid = None
+    else:
+      try:
+        playercoreid = int(playerid)
+      except:
+        pass
+    REQUEST["params"]["options"] = {"playercoreid": playercoreid}
+  MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libPlayer", checkResult=True)
+
+def playerStop(playerid=None):
+  doplayeraction("Player.Stop", playerid)
+
+def playerPause(playerid=None):
+  doplayeraction("Player.PlayPause", playerid)
+
+def doplayeraction(action, playerid=None):
+  jcomms = MyJSONComms(gConfig, gLogger)
+
+  if playerid is None:
+    REQUEST = {"method": "Player.GetActivePlayers"}
+    data = jcomms.sendJSON(REQUEST, "libPlayers", checkResult=False)
+    players = data.get("result", [])
+    for player in players:
+      REQUEST = {"method": action, "params": {"playerid": player["playerid"]}}
+      jcomms.sendJSON(REQUEST, "libPlayer", checkResult=True)
+  else:
+    REQUEST = {"method": action, "params": {"playerid": playerid}}
+    jcomms.sendJSON(REQUEST, "libPlayer", checkResult=True)
 
 #---
 
@@ -6645,6 +6703,7 @@ def usage(EXIT_CODE):
           volume [mute;unmute;#] | \
           stress-test view-type numitems [pause] [repeat] [cooldown] | \
           setsetting name value | getsetting name | getsettings [pattern] | debugon | debugoff | \
+          play item [playerid] | stop [playerid] | pause [playerid] | \
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -6708,6 +6767,10 @@ def usage(EXIT_CODE):
   print(" getsettings View details of all settings, or those where pattern is contained within id, eg. 'getsettings debug' to view details of all debug-related settings")
   print("  debugon    Enable debugging")
   print("  debugoff   Disable debugging")
+
+  print("  play       Play the specified item (on the specified player: null, default, #)")
+  print("  stop       Stop playback of the specified player, or all currently active players")
+  print("  pause      Toggle pause/playback of the specified player, or all currently active players")
 
   print("")
   print("  config     Show current configuration")
@@ -6775,6 +6838,7 @@ def checkConfig(option):
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "volume", "readfile", "notify",
                 "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
+                "play", "stop", "pause",
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
@@ -7030,6 +7094,7 @@ def getLatestVersion(argv):
                    "duplicates", "fixurls", "imdb", "stats",
                    "input", "screenshot", "volume", "readfile", "notify",
                    "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
+                   "play", "stop", "pause",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -7422,6 +7487,13 @@ def main(argv):
   elif argv[0] == "debugoff" and len(argv) == 1:
     setSettingVariable("debug.showloginfo", False)
     setSettingVariable("debug.extralogging", False)
+
+  elif argv[0] == "play" and len(argv) in [2, 3]:
+    playerPlay(argv[1], argv[2] if len(argv) == 3 else None)
+  elif argv[0] == "stop" and len(argv) in [1, 2]:
+    playerStop(int(argv[1]) if len(argv) == 2 else None)
+  elif argv[0] == "pause" and len(argv) in [1, 2]:
+    playerPause(int(argv[1]) if len(argv) == 2 else None)
 
   else:
     usage(1)
