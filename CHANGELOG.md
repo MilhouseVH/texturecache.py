@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.7.8 (16/10/2014)
+* Add: `playw` option to wait until playback has ended.
+
 ##Version 1.7.7 (15/10/2014)
 * Add: Support for `@clean.showdialogs` and `@scan.showdialogs`, default `no`. With JSON API 6.19.0, JSON initiated library scans and cleans will not show any GUI progress or dialogs. Enable GUI progress/dialogs by setting these new parameters to `yes`.
 * Add: `play`, `stop` and `pause` options to start, stop and pause media playback

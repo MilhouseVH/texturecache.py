@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.7"
+    self.VERSION = "1.7.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1792,6 +1792,7 @@ class MyJSONComms(object):
     ENDOFDATA = True
     LASTIO = 0
     jdata = {}
+    cbjdata = None
 
     while True:
       if ENDOFDATA:
@@ -1889,6 +1890,8 @@ class MyJSONComms(object):
             # with an id is available.
             if callback:
               if self.handleResponse(id, jdata, callback): break
+              #Save this jdata as it's our original response
+              if cbjdata is None: cbjdata = jdata
             elif "id" in jdata:
               break
 
@@ -1917,6 +1920,7 @@ class MyJSONComms(object):
           self.logger.log("SOCKET IO TIMEOUT EXCEEDED")
           raise socket.error("Socket IO timeout exceeded")
 
+    if cbjdata is not None: jdata = cbjdata
     if checkResult and not "result" in jdata:
       self.logger.out("%s.ERROR: JSON response has no result!\n%s\n" % (id, jdata))
 
@@ -6623,7 +6627,10 @@ def ReadSettings(pattern=None):
   else:
     gLogger.out(json.dumps(data["result"]["settings"], indent=2, ensure_ascii=True, sort_keys=True), newLine=True)
 
-def playerPlay(afile, playerid=None):
+def playerPlay(afile, playerid=None, withWait=False):
+  def _playlisten(id, method, params):
+    return True if method == "Player.OnStop" else False
+
   REQUEST = {"method": "Player.Open", "params": {"item": {"file": afile}}}
   if playerid is not None:
     playercoreid = playerid
@@ -6639,7 +6646,7 @@ def playerPlay(afile, playerid=None):
       except:
         pass
     REQUEST["params"]["options"] = {"playercoreid": playercoreid}
-  MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libPlayer", checkResult=True)
+  MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libPlayer", checkResult=True, callback=_playlisten if withWait else None)
 
 def playerStop(playerid=None):
   doplayeraction("Player.Stop", playerid)
@@ -6703,7 +6710,7 @@ def usage(EXIT_CODE):
           volume [mute;unmute;#] | \
           stress-test view-type numitems [pause] [repeat] [cooldown] | \
           setsetting name value | getsetting name | getsettings [pattern] | debugon | debugoff | \
-          play item [playerid] | stop [playerid] | pause [playerid] | \
+          play item [playerid] | playw item [playerid] | stop [playerid] | pause [playerid] | \
           config | version | update | fupdate")
   print("")
   print("  s          Search url column for partial movie or tvshow title. Case-insensitive.")
@@ -6769,6 +6776,7 @@ def usage(EXIT_CODE):
   print("  debugoff   Disable debugging")
 
   print("  play       Play the specified item (on the specified player: null, default, #)")
+  print("  playw      Play the specified item (on the specified player: null, default, #), and wait until playback ends")
   print("  stop       Stop playback of the specified player, or all currently active players")
   print("  pause      Toggle pause/playback of the specified player, or all currently active players")
 
@@ -6838,7 +6846,7 @@ def checkConfig(option):
                 "exec", "execw", "missing", "watched", "duplicates", "set", "testset",
                 "volume", "readfile", "notify",
                 "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
-                "play", "stop", "pause",
+                "play", "playw", "stop", "pause",
                 "fixurls", "imdb"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
@@ -7094,7 +7102,7 @@ def getLatestVersion(argv):
                    "duplicates", "fixurls", "imdb", "stats",
                    "input", "screenshot", "volume", "readfile", "notify",
                    "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
-                   "play", "stop", "pause",
+                   "play", "playw", "stop", "pause",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
@@ -7489,7 +7497,9 @@ def main(argv):
     setSettingVariable("debug.extralogging", False)
 
   elif argv[0] == "play" and len(argv) in [2, 3]:
-    playerPlay(argv[1], argv[2] if len(argv) == 3 else None)
+    playerPlay(argv[1], argv[2] if len(argv) == 3 else None, False)
+  elif argv[0] == "playw" and len(argv) in [2, 3]:
+    playerPlay(argv[1], argv[2] if len(argv) == 3 else None, True)
   elif argv[0] == "stop" and len(argv) in [1, 2]:
     playerStop(int(argv[1]) if len(argv) == 2 else None)
   elif argv[0] == "pause" and len(argv) in [1, 2]:
