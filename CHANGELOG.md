@@ -1,7 +1,7 @@
 #Changelog
 
 ##Version 1.7.9 (17/10/2014)
-* Chg: When the direct file system access to the Thumbnails folder is available, sanity check Files.PrepareDownload failures to determine if the thumbnail file is missing and if so delete the database row before calling Files.PrepareDownload again. See http://forum.xbmc.org/showthread.php?tid=158373&pid=1815613#pid1815613
+* Chg: When direct file system access to the Thumbnails folder is available, sanity check Files.PrepareDownload failures to determine if the thumbnail file is missing and if so delete the database row before calling Files.PrepareDownload again. See http://forum.xbmc.org/showthread.php?tid=158373&pid=1815613#pid1815613
 
 ##Version 1.7.8 (16/10/2014)
 * Add: `playw` option to wait until playback has ended.
