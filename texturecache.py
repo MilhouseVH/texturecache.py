@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.8"
+    self.VERSION = "1.7.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -197,6 +197,7 @@ class MyConfiguration(object):
     self.XBMC_BASE = self.XBMC_BASE.replace("/", os.sep)
     self.TEXTUREDB = self.TEXTUREDB.replace("/", os.sep)
     self.THUMBNAILS = self.THUMBNAILS.replace("/", os.sep)
+    self.HAS_THUMBNAILS_FS = os.path.exists(self.getFilePath())
 
     self.XBMC_HOST = self.getValue(config, "xbmc.host", "localhost")
     self.WEB_PORT = self.getValue(config, "webserver.port", "8080")
@@ -989,16 +990,22 @@ class MyImageLoader(threading.Thread):
 
     self.totals.stop()
 
-  def loadImage(self, item):
-    ATTEMPT = 1 if self.retry < 1 else self.retry
+  def geturl(self, item):
     PDRETRY = self.retry
-    PERFORM_DOWNLOAD = False
-
-    self.totals.start(item.mtype, item.itype)
 
     # Call Files.PrepareDownload. If failure, retry up to retry times, waiting a short
     # interval between each attempt.
     url = self.json.getDownloadURL(item.filename)
+    rowexists = True
+
+    # If no url, could be because thumbnail is missing but db row exists - if thumbnail
+    # no longer available, then delete the row and try again to obtain url
+    if url is None and not self.config.DOWNLOAD_PREDELETE and item.dbid != 0 and self.force:
+      if self.config.HAS_THUMBNAILS_FS and not os.path.exists(self.config.getFilePath(item.cachedurl)):
+        self.logger.log("Deleting row with missing image from cache - id [%d], cachedurl [%s] for filename [%s]"
+                      % (item.dbid, item.cachedurl, item.decoded_filename))
+        self.database.deleteItem(item.dbid, None)
+        rowexists = False
 
     while PDRETRY > 0 and not url:
       self.logger.log("Retrying getDownloadURL(), %d attempts remaining" % PDRETRY)
@@ -1006,12 +1013,23 @@ class MyImageLoader(threading.Thread):
       PDRETRY -= 1
       url = self.json.getDownloadURL(item.filename)
 
+    return (url, rowexists)
+
+  def loadImage(self, item):
+    ATTEMPT = 1 if self.retry < 1 else self.retry
+    PERFORM_DOWNLOAD = False
+
+    self.totals.start(item.mtype, item.itype)
+
+    (url, rowexists) = self.geturl(item)
+
     if url:
       if not self.config.DOWNLOAD_PREDELETE:
         if item.dbid != 0 and self.force:
-          self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]"
-                          % (item.dbid, item.cachedurl, item.decoded_filename))
-          self.database.deleteItem(item.dbid, item.cachedurl)
+          if rowexists:
+            self.logger.log("Deleting old image from cache with id [%d], cachedurl [%s] for filename [%s]"
+                            % (item.dbid, item.cachedurl, item.decoded_filename))
+            self.database.deleteItem(item.dbid, item.cachedurl)
           self.totals.bump("Deleted", item.itype)
           PERFORM_DOWNLOAD = True
       if self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD:
@@ -1573,7 +1591,7 @@ class MyDB(object):
         self.delRowByID(id)
         return
 
-    if not cachedURL and id > 0:
+    if cachedURL is not None and id > 0:
       row = self.getSingleRow("WHERE id = %d" % id)
       if row is None:
         self.logger.out("id %s is not valid\n" % (self.config.IDFORMAT % int(id)))
@@ -1583,7 +1601,7 @@ class MyDB(object):
     else:
       localFile = cachedURL
 
-    if localFile and os.path.exists(self.config.getFilePath(localFile)):
+    if localFile is not None and os.path.exists(self.config.getFilePath(localFile)):
       os.remove(self.config.getFilePath(localFile))
       self.logger.log("FILE DELETE: Removed cached thumbnail file %s for id %s" % (localFile, (self.config.IDFORMAT % id)))
     else:
@@ -5646,7 +5664,7 @@ def pruneCache(remove_nonlibrary_artwork=False):
     gLogger.out("", newLine=True)
 
   FSIZE = 0
-  GOTSIZE = os.path.exists(gConfig.getFilePath())
+  GOTSIZE = gConfig.HAS_THUMBNAILS_FS
   localfiles.sort(key=lambda row: row["url"])
 
   with database:
@@ -6999,10 +7017,7 @@ def checkConfig(option):
     gLogger.err(MSG)
     return False
 
-  if needFS1 or needFS2:
-    gotFS = os.path.exists(gConfig.getFilePath())
-
-  if (needFS1 or needFS2) and not gotFS:
+  if (needFS1 or needFS2) and not gConfig.HAS_THUMBNAILS_FS:
     MSG = "FATAL: The task you wish to perform requires read/write file\n" \
           "       access to the Thumbnails folder, which is inaccessible.\n\n" \
           "       Specify the location of this folder using the thumbnails property\n" \
