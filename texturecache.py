@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.7.9"
+    self.VERSION = "1.8.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -162,24 +162,8 @@ class MyConfiguration(object):
     self.IDFORMAT = self.getValue(config, "format", "%06d")
     self.FSEP = self.getValue(config, "sep", "|")
 
-    _atv2_path = "/User/Library/Preferences/XBMC/userdata"
-    _macosx_path = "~/Library/Application Support/XBMC/userdata"
-    _android1_path = "Android/data/org.xbmc.xbmc/files/.xbmc/userdata"
-    _android2_path = "/sdcard/%s" % _android1_path
-
-    UD_SYS_DEFAULT = "~/.xbmc/userdata"
-
-    if sys.platform == "win32":
-      UD_SYS_DEFAULT = "%s\\XBMC\\userdata" % os.environ["appdata"]
-    elif sys.platform == "darwin" and os.path.exists(_atv2_path):
-      UD_SYS_DEFAULT = _atv2_path
-    elif sys.platform == "darwin" and os.path.exists(os.path.expanduser(_macosx_path)):
-      UD_SYS_DEFAULT = _macosx_path
-    else:
-      if os.path.exists(_android2_path):
-        UD_SYS_DEFAULT = _android2_path
-      elif os.path.exists(_android1_path):
-        UD_SYS_DEFAULT = _android1_path
+    UD_SYS_DEFAULT = self.getdefaultuserdata("Kodi")
+    if UD_SYS_DEFAULT is None: UD_SYS_DEFAULT = self.getdefaultuserdata("XBMC")
 
     self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", UD_SYS_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
@@ -407,6 +391,35 @@ class MyConfiguration(object):
 
     self.CLEAN_SHOW_DIALOGS = self.getBoolean(config, "clean.showdialogs", "no")
     self.SCAN_SHOW_DIALOGS = self.getBoolean(config, "scan.showdialogs", "no")
+
+  def getdefaultuserdata(self, appid):
+    atv2_path     = "/User/Library/Preferences/%s/userdata" % appid
+    macosx_path   = "~/Library/Application Support/%s/userdata" % appid
+    linux_path    = "~/.%s/userdata" % appid.lower()
+
+    android1_path = "Android/data/org.%s.%s/files/.%s/userdata" % (appid.lower(), appid.lower(), appid.lower())
+    android2_path = "/sdcard/%s" % android1_path
+    firetv_path = "/storage/emulated/0/%s" % android1_path
+
+    if sys.platform == "win32":
+      win32_path = "%s\\%s\\userdata" % (os.environ["appdata"], appid)
+      if os.path.exists(win32_path):
+        return win32_path
+    elif sys.platform == "darwin" and os.path.exists(atv2_path):
+      return atv2_path
+    elif sys.platform == "darwin" and os.path.exists(os.path.expanduser(macosx_path)):
+      return macosx_path
+    else: #Linux/Android
+      if os.path.exists(os.path.expanduser(linux_path)):
+        return linux_path
+      elif os.path.exists(firetv_path):
+        return firetv_path
+      elif os.path.exists(android2_path):
+        return android2_path
+      elif os.path.exists(android1_path):
+        return android1_path
+
+    return None
 
   def SetJSONVersion(self, major, minor, patch):
     self.JSON_VER = (major, minor, patch)
@@ -2131,7 +2144,8 @@ class MyJSONComms(object):
       REQUEST = {"method": scanMethod}
 
     if self.config.JSON_HAS_LIB_SHOWDIALOGS_PARAM:
-      REQUEST["params"] = {"showdialogs": self.config.SCAN_SHOW_DIALOGS}
+      if "params" not in REQUEST: REQUEST["params"] = {}
+      REQUEST["params"].update({"showdialogs": self.config.SCAN_SHOW_DIALOGS})
 
     self.sendJSON(REQUEST, "libRescan", callback=self.jsonWaitForScanFinished, checkResult=False)
 
@@ -7110,6 +7124,8 @@ def getLatestVersion(argv):
     USAGE  = "qa"
   elif argv[0] == "stress-test":
     USAGE  = "stress"
+  elif argv[0] in ["play", "playw", "stop", "pause"]:
+    USAGE  = "transport"
   elif argv[0] in ["query", "missing", "watched",
                    "power", "wake", "status", "monitor", "rbphdmi",
                    "directory", "rdirectory", "sources", "remove",
@@ -7117,7 +7133,6 @@ def getLatestVersion(argv):
                    "duplicates", "fixurls", "imdb", "stats",
                    "input", "screenshot", "volume", "readfile", "notify",
                    "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
-                   "play", "playw", "stop", "pause",
                    "version", "update", "fupdate", "config"]:
     USAGE  = argv[0]
 
