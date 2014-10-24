@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.8.1 (24/10/2014)
+* Chg: Enhance behaviour of `X` and `Xd` so that zero-byte thumbnail files are treated the same as non-existing files, and will be identified (`X`) or removed (`Xd`) along with any corresponding database row
+
 ##Version 1.8.0 (22/10/2014)
 * Fix: Fix scanner directory error introduced by v1.7.7
 * Add: Support for kodi rebranding (default userdata folder)

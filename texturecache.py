@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.0"
+    self.VERSION = "1.8.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -5535,6 +5535,8 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
         if ACTION == "EXISTS":
           if not os.path.exists(gConfig.getFilePath(row["cachedurl"])):
             ROWS.append(row)
+          elif os.path.getsize(gConfig.getFilePath(row["cachedurl"])) == 0:
+            ROWS.append(row)
         elif ACTION == "STATS":
           if os.path.exists(gConfig.getFilePath(row["cachedurl"])):
             FSIZE += os.path.getsize(gConfig.getFilePath(row["cachedurl"]))
@@ -5552,7 +5554,8 @@ def sqlExtract(ACTION="NONE", search="", filter="", delete=False, silent=False):
         database.deleteItem(row["textureid"], row["cachedurl"], warnmissing=False)
         gLogger.progress("")
     elif not silent:
-      for row in ROWS: database.dumpRow(row)
+      for row in ROWS:
+        database.dumpRow(row)
 
     if ACTION == "STATS":
       gLogger.out("\nFile Summary: %s files; Total size: %s KB\n\n" % (format(FCOUNT, ",d"), format(int(FSIZE/1024), ",d")))
