@@ -1,5 +1,18 @@
 #Changelog
 
+##Version 1.8.2 (24/10/2014)
+* Add: Profile support with new properties: `profile.name`, `profile.password`, ``profile.password.encrypted`, ``profile.directory`, `profile.autoload` and `profile.enabled`.
+
+  Specify `profile.directory` relative to the profiles folder, although this property is only required if the directory is not using the same name as the `profile.name`. If direct file system access is required, eg. for Thumbnails or Database folders, the path to be used will be constructed from `userdata`/profiles/`profile.directory`. 
+  
+  `profile.autoload` will control whether profiles are automatically loaded when required - the default value is `yes`. If set to `no` the script will exit with an error message if the currently loaded profile is not the required profile (if the required profile is already loaded the script will complete successfully).
+  
+  If you wish to temporarily disable profile support, for instance to determine the current profile when using `status` or `stats` options (which may otherwise load a new profile before collecting the status/stats), use `@profile.enabled=no` so that all profile loading behaviour is disabled. This may cause unpredictable results depending on the JSON-based option being used, however (no different to previous versions of the script).
+  
+  Specify `yes` for `profile.password.encrypted` if your `profile.password` is the hashed lock code from profiles.xml, otherwise provide a cleartext password and `no` (default) for `profile.password.encrypted`.
+
+* Fix: Use a sane default when userdata is not known. Fixes #24.
+
 ##Version 1.8.1 (24/10/2014)
 * Chg: Enhance behaviour of `X` and `Xd` so that zero-byte thumbnail files are treated the same as non-existing files, and will be identified (`X`) or removed (`Xd`) along with any corresponding database row
 
