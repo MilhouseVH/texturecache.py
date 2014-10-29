@@ -1,6 +1,6 @@
 #Changelog
 
-##Version 1.8.2 (24/10/2014)
+##Version 1.8.2 (29/10/2014)
 * Add: Profile support with new properties: `profile.name`, `profile.password`, ``profile.password.encrypted`, ``profile.directory`, `profile.autoload` and `profile.enabled`.
 
   Specify `profile.directory` relative to the profiles folder, although this property is only required if the directory is not using the same name as the `profile.name`. If direct file system access is required, eg. for Thumbnails or Database folders, the path to be used will be constructed from `userdata`/profiles/`profile.directory`. 
