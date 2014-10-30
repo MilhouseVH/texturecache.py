@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.2"
+    self.VERSION = "1.8.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -79,6 +79,7 @@ class MyConfiguration(object):
 
     # These features become available with the respective API version
     self.JSON_VER_CAPABILITIES = {"setresume":        (6,  2, 0),
+                                  "profilesupport":   (6,  6, 0),
                                   "texturedb":        (6,  9, 0),
                                   "removeart":        (6,  9, 1),
                                   "setseason":        (6, 10, 0),
@@ -171,6 +172,7 @@ class MyConfiguration(object):
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
+    self.CURRENT_PROFILE = {"name": "", "lockmode": 0, "thumbnail": ""} # Not yet known
     self.PROFILE_ENABLED = self.getBoolean(config, "profile.enabled", "yes")
     self.PROFILE_MASTER = self.getValue(config, "profile.master", "Master user")
     self.PROFILE_AUTOLOAD = self.getBoolean(config, "profile.autoload", "yes")
@@ -471,6 +473,9 @@ class MyConfiguration(object):
 
     # https://github.com/xbmc/xbmc/pull/5454
     self.JSON_HAS_OPEN_PLAYERCORE_DEFAULT = self.HasJSONCapability("openplayercoredef")
+
+    # Support profile switching?
+    self.JSON_HAS_PROFILE_SUPPORT = self.HasJSONCapability("profilesupport")
 
     # https://github.com/xbmc/xbmc/pull/????
     self.JSON_HAS_PROFILE_DIRECTORY = self.HasJSONCapability("profiledirectory")
@@ -963,6 +968,7 @@ class MyLogger():
 
   def err(self, data, newLine=False, log=False):
     with threading.Lock():
+      self.progress("")
       udata = MyUtility.toUnicode(data)
       sys.stderr.write("%-s" % udata)
       if newLine:
@@ -6349,7 +6355,8 @@ def showStatus(idleTime=600):
 
   STATUS = []
 
-  STATUS.append("Current Profile: %s" % gConfig.CURRENT_PROFILE["name"])
+  if gConfig.JSON_HAS_PROFILE_SUPPORT:
+    STATUS.append("Current Profile: %s" % gConfig.CURRENT_PROFILE["name"])
 
   REQUEST = {"method": "XBMC.GetInfoBooleans",
              "params": {"booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo", "System.HasShutdown", "System.CanSuspend"]}}
@@ -6480,7 +6487,9 @@ def MediaLibraryStats(media_list):
   # Clean up
   lmedia_list = [m for m in lmedia_list if m not in ["audio", "video"]]
 
-  gLogger.out("%-11s: %s" % ("Profile", gConfig.CURRENT_PROFILE["name"]), newLine=True)
+  if gConfig.JSON_HAS_PROFILE_SUPPORT:
+    gLogger.out("%-11s: %s" % ("Profile", gConfig.CURRENT_PROFILE["name"]), newLine=True)
+
   for m in METHODS:
     media = re.search(".*Get(.*)", m).group(1)
     if not lmedia_list or media.lower() in lmedia_list:
@@ -6940,8 +6949,6 @@ def checkConfig(option):
   # Network MAC
   optMAC = ["wake"]
 
-  ignoreProfile = ["status"]
-
   needWeb    = (option in optWeb)
   needSocket = (option in optSocket)
   needDb     = (option in optDb)
@@ -6949,12 +6956,8 @@ def checkConfig(option):
   needFS2    = (option in optFS2)
   needMAC    = (option in optMAC)
 
-  needProfile= (needSocket and option not in ignoreProfile)
-
   wcomms     = None
   jcomms     = None
-  profile    = {}
-  gConfig.CURRENT_PROFILE = {}
 
   # If we need to work out a value for USEJSONDB, we need to check JSON
   # to determine the current version of JSON API
@@ -7004,31 +7007,20 @@ def checkConfig(option):
                                  jsonGotVersion.get("patch",0))
           jsonGotVersion = jsonGotVersion["major"]
 
-      REQUEST = {"method": "Profiles.GetCurrentProfile", "params": {"properties": ["thumbnail", "lockmode" ]}}
-      if gConfig.JSON_HAS_PROFILE_DIRECTORY:
-        REQUEST["params"]["properties"].extend(["directory"])
-      data = jcomms.sendJSON(REQUEST, "libProfile")
-      profile["name"] = data["result"]["label"]
-      profile["lockmode"] = data["result"]["lockmode"]
-      profile["thumbnail"] = data["result"]["thumbnail"]
-      profile["directory"] = data["result"].get("directory", "")
-      gConfig.CURRENT_PROFILE = profile
-      gLogger.log("CURRENT PROFILE: %s" % profile)
+      if gLogger.VERBOSE and gLogger.LOGGING:
+        gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
 
-      if profile["name"] != gConfig.PROFILE_NAME and gConfig.PROFILE_ENABLED:
-        if switchprofile(profile, jcomms):
-          jcomms.close()
+      if gConfig.JSON_HAS_PROFILE_SUPPORT:
+        gConfig.CURRENT_PROFILE = getcurrentprofile(jcomms)
+        gLogger.log("CURRENT PROFILE: %s" % gConfig.CURRENT_PROFILE)
+        if gConfig.PROFILE_ENABLED and gConfig.CURRENT_PROFILE["name"] != gConfig.PROFILE_NAME:
+          if not switchprofile(jcomms): return False
           jcomms = MyJSONComms(gConfig, gLogger)
-        else:
-          return False
 
       REQUEST = {"method": "XBMC.GetInfoBooleans",
                  "params": {"booleans": ["System.GetBool(pvrmanager.enabled)"]}}
       data = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
       gConfig.HAS_PVR = ("result" in data and data["result"].get("System.GetBool(pvrmanager.enabled)", False))
-
-      if gLogger.VERBOSE and gLogger.LOGGING:
-        gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
 
     except socket.error:
       pass
@@ -7158,38 +7150,46 @@ def loadprofile(jcomms):
   else:
     return True
 
-def switchprofile(profile, jcomms):
-  if profile["name"] == gConfig.PROFILE_NAME:
+def getcurrentprofile(jcomms):
+  REQUEST = {"method": "Profiles.GetCurrentProfile", "params": {"properties": ["thumbnail", "lockmode" ]}}
+  if gConfig.JSON_HAS_PROFILE_DIRECTORY:
+    REQUEST["params"]["properties"].extend(["directory"])
+
+  data = jcomms.sendJSON(REQUEST, "libProfile", ignoreSocketError=True)
+
+  if "result" in data:
+    profile = {}
+    profile["name"] = data["result"]["label"]
+    profile["lockmode"] = data["result"]["lockmode"]
+    profile["thumbnail"] = data["result"]["thumbnail"]
+    profile["directory"] = data["result"].get("directory", "")
+    return profile
+  else:
+    return gConfig.CURRENT_PROFILE
+
+def switchprofile(jcomms):
+  if gConfig.CURRENT_PROFILE["name"] == gConfig.PROFILE_NAME:
     return True
   elif gConfig.PROFILE_AUTOLOAD:
+    gLogger.log("SWITCHING PROFILE FROM \"%s\" to \"%s\"" % (gConfig.CURRENT_PROFILE["name"], gConfig.PROFILE_NAME))
+    gLogger.progress("Switching profile from \"%s\" to \"%s\"..." % (gConfig.CURRENT_PROFILE["name"], gConfig.PROFILE_NAME))
+
     if jcomms is None: jcomms = MyJSONComms(gConfig, gLogger)
 
-    gLogger.progress("Switching profile from \"%s\" to \"%s\"..." % (profile["name"], gConfig.PROFILE_NAME))
-
     if not loadprofile(jcomms):
-      gLogger.progress("")
       gLogger.err("ERROR: Profile \"%s\" is not valid!" % gConfig.PROFILE_NAME, newLine=True)
       return False
 
-    REQUEST = {"method": "Profiles.GetCurrentProfile", "params": {"properties": ["thumbnail", "lockmode" ]}}
-    if gConfig.JSON_HAS_PROFILE_DIRECTORY:
-      REQUEST["params"]["properties"].extend(["directory"])
     i = 0
     bounce = False
     while i <= gConfig.PROFILE_RETRY:
       try:
         i += 1
         time.sleep(1.0)
-        if jcomms: jcomms.close()
-        jcomms = MyJSONComms(gConfig, gLogger, connecttimeout=gConfig.RPC_CONNECTTIMEOUT)
-        data = jcomms.sendJSON(REQUEST, "libProfile", ignoreSocketError=True)
-        profile["name"] = data["result"]["label"]
-        profile["lockmode"] = data["result"]["lockmode"]
-        profile["thumbnail"] = data["result"]["thumbnail"]
-        profile["directory"] = data["result"].get("directory", "")
-        if profile["name"] == gConfig.PROFILE_NAME:
-          gLogger.log("SWITCHED TO PROFILE: %s" % profile)
-          gConfig.CURRENT_PROFILE = profile
+        jcomms = MyJSONComms(gConfig, gLogger, connecttimeout=1.0)
+        gConfig.CURRENT_PROFILE = getcurrentprofile(jcomms)
+        if gConfig.CURRENT_PROFILE["name"] == gConfig.PROFILE_NAME:
+          gLogger.log("SWITCHED TO PROFILE: %s" % gConfig.CURRENT_PROFILE)
           if gConfig.PROFILE_WAIT != 0:
             gLogger.log("Waiting %d seconds for server to stabilise after loading profile..." % gConfig.PROFILE_WAIT)
             time.sleep(gConfig.PROFILE_WAIT)
@@ -7199,6 +7199,7 @@ def switchprofile(profile, jcomms):
           bounce = False
       except Exception as e:
         bounce = True
+        jcomms = None
         pass
     else:
       gLogger.err("Error: Failed to load profile %s" % gConfig.PROFILE_NAME, newLine=True)
