@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.3"
+    self.VERSION = "1.8.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -90,6 +90,7 @@ class MyConfiguration(object):
                                   "dpmsnotify":       (6, 16, 0),
                                   "openplayercoredef":(6, 18, 3),
                                   "libshowdialogs":   (6, 19, 0),
+                                  "exitcode":         (6, 21, 0),
                                   "profiledirectory": (999, 99, 9)
                                  }
 
@@ -392,6 +393,7 @@ class MyConfiguration(object):
     self.HDMI_IGNORE_SUSPEND = self.getBoolean(config, "hdmi.ignoresuspend", "no")
     self.HDMI_IGNORE_DISABLE = self.getBoolean(config, "hdmi.ignoredisable", "no")
     self.HDMI_IGNORE_PLAYER = self.getBoolean(config, "hdmi.ignoreplayer", "no")
+    self.HDMI_IGNORE_LIBRARY = self.getBoolean(config, "hdmi.ignorelibrary", "no")
 
     # Use a smaller cache on ARM systems, based on the assumption that ARM systems
     # will have less memory than other platforms
@@ -468,11 +470,14 @@ class MyConfiguration(object):
     # https://github.com/xbmc/xbmc/pull/4766
     self.JSON_HAS_DPMS_NOTIFY = self.HasJSONCapability("dpmsnotify")
 
+    # https://github.com/xbmc/xbmc/pull/5454
+    self.JSON_HAS_OPEN_PLAYERCORE_DEFAULT = self.HasJSONCapability("openplayercoredef")
+
     # https://github.com/xbmc/xbmc/pull/5324
     self.JSON_HAS_LIB_SHOWDIALOGS_PARAM = self.HasJSONCapability("libshowdialogs")
 
-    # https://github.com/xbmc/xbmc/pull/5454
-    self.JSON_HAS_OPEN_PLAYERCORE_DEFAULT = self.HasJSONCapability("openplayercoredef")
+    #https://github.com/xbmc/xbmc/pull/5786
+    self.JSON_HAS_EXIT_CODE = self.HasJSONCapability("exitcode")
 
     # Support profile switching?
     self.JSON_HAS_PROFILE_SUPPORT = self.HasJSONCapability("profilesupport")
@@ -786,6 +791,7 @@ class MyConfiguration(object):
     print("  hdmi.ignoresuspend = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_SUSPEND))
     print("  hdmi.ignoredisable = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_DISABLE))
     print("  hdmi.ignoreplayer = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_PLAYER))
+    print("  hdmi.ignorelibrary = %s" % self.BooleanIsYesNo(self.HDMI_IGNORE_LIBRARY))
     print("  dcache.size = %d" % self.DCACHE_SIZE)
     print("  dcache.agelimit = %d" % self.DCACHE_AGELIMIT)
     print("  posterwidth = %d" % self.POSTER_WIDTH)
@@ -1134,6 +1140,7 @@ class MyHDMIManager(threading.Thread):
     self.logger = logger
     self.cmdqueue = cmdqueue
     self.ignoreplayer = self.config.HDMI_IGNORE_PLAYER
+    self.ignorelibrary = self.config.HDMI_IGNORE_LIBRARY
 
     self.bin_tvservice = config.BIN_TVSERVICE
     self.bin_vcgencmd = config.BIN_VCGENCMD if config.BIN_VCGENCMD and os.path.exists(config.BIN_VCGENCMD) else None
@@ -1157,6 +1164,7 @@ class MyHDMIManager(threading.Thread):
     self.logger.debug("Path to vcgencmd    : %s" % self.bin_vcgencmd)
     self.logger.debug("Path to ceccontrol  : %s" % self.bin_ceccontrol)
     self.logger.debug("Ignore Active Player: %s" % ("Yes" if self.ignoreplayer else "No"))
+    self.logger.debug("Ignore Library Scan : %s" % ("Yes" if self.ignorelibrary else "No"))
 
   def run(self):
     try:
@@ -1293,7 +1301,7 @@ class MyHDMIManager(threading.Thread):
             self.EventStart(event, now)
             if event == self.EV_HDMI_OFF:
               self.logger.debug("HDMI power off in %d seconds unless cancelled" % int(self.EventInterval(event)))
-              if (player_active and not self.ignoreplayer) or library_active:
+              if (player_active and not self.ignoreplayer) or (library_active and not self.ignorelibrary):
                 self.logger.debug("HDMI power-off will not occur until both player and library become inactive")
 
           # Process any expired events
@@ -1303,7 +1311,7 @@ class MyHDMIManager(threading.Thread):
               player_active = False
               self.EventStop(event)
             elif event == self.EV_HDMI_OFF:
-              if (player_active and not self.ignoreplayer) or library_active:
+              if (player_active and not self.ignoreplayer) or (library_active and not self.ignorelibrary):
                 if not self.EventOverdue(event, now):
                   self.logger.debug("HDMI power-off timeout reached - waiting for player and/or library to become inactive")
               else:
@@ -2023,8 +2031,11 @@ class MyJSONComms(object):
   # Process Notifications, optionally executing a callback function for
   # additional custom processing.
   def handleResponse(self, callingId, jdata, callback):
+    if "error" in jdata:
+      return True
+
     id = jdata["id"] if "id" in jdata else None
-    method = jdata["method"] if "method" in jdata else jdata["result"]
+    method = jdata["method"] if "method" in jdata else jdata.get("result", None)
     params = jdata["params"] if "params" in jdata else None
 
     if callback:
