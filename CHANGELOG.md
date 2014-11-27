@@ -2,6 +2,7 @@
 
 ##Version 1.8.4 (27/11/2014)
 * Add: Support for `@hdmi.ignorelibrary=yes` in `rbphdmi` - see PR #20
+* Add: mk3d video file type support for `missing` option
 
 ##Version 1.8.3 (30/10/2014)
 * Chg: Enable profile support only for JSON v6.6.0+
