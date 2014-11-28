@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.2.3
+#version 0.2.4
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -102,7 +102,7 @@ def info(args, msg, atype, title, reason = None, url = None, target = None):
   if reason or url:
     line = "%s%-15s - %-10s - %-45s" % (line, msg, atype.center(10), addEllipsis(45, MyUtility.toUnicode(title)))
     if reason: line = "%s [%s]" % (line, reason)
-    if url:    line = "%s %s" % (line, url)
+    if url:    line = "%s %s" % (line, MyUtility.toUnicode(url))
   elif target:
     line = "%s%-15s - %-10s - %-45s -> %s" % (line, msg, atype.center(10), addEllipsis(45, MyUtility.toUnicode(title)), MyUtility.toUnicode(target))
   else:

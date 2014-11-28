@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 28/11/2014
+* Fix: Unicode issue when displaying urls
+
 ## 24/09/2014
 * Fix: Assume titles and filenames are unicode in diagnostic output
 
