@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.8.5 (17/12/2014)
+* Fix: Only set `debug.extralogging` for JSON 6.15.3+
+
 ##Version 1.8.4 (27/11/2014)
 * Add: Support for `@hdmi.ignorelibrary=yes` in `rbphdmi` - see PR #20
 * Add: mk3d video file type support for `missing` option

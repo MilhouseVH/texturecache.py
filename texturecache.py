@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.4"
+    self.VERSION = "1.8.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -87,6 +87,7 @@ class MyConfiguration(object):
                                   "setsettings":      (6, 13, 0),
                                   "filternullval":    (6, 13, 1),
                                   "isodates":         (6, 13, 2),
+                                  "debugextralog":    (6, 15, 3),
                                   "dpmsnotify":       (6, 16, 0),
                                   "openplayercoredef":(6, 18, 3),
                                   "libshowdialogs":   (6, 19, 0),
@@ -469,6 +470,9 @@ class MyConfiguration(object):
 
     # https://github.com/xbmc/xbmc/pull/4766
     self.JSON_HAS_DPMS_NOTIFY = self.HasJSONCapability("dpmsnotify")
+
+    # https://github.com/xbmc/xbmc/commit/77812fbc7e35aaea67e5df31a96a932f85595184
+    self.JSON_HAS_DEBUG_EXTRA_LOG = self.HasJSONCapability("debugextralog")
 
     # https://github.com/xbmc/xbmc/pull/5454
     self.JSON_HAS_OPEN_PLAYERCORE_DEFAULT = self.HasJSONCapability("openplayercoredef")
@@ -7669,11 +7673,13 @@ def main(argv):
 
   elif argv[0] == "debugon" and len(argv) == 1:
     setSettingVariable("debug.showloginfo", True)
-    setSettingVariable("debug.extralogging", True)
+    if gConfig.JSON_HAS_DEBUG_EXTRA_LOG:
+      setSettingVariable("debug.extralogging", True)
 
   elif argv[0] == "debugoff" and len(argv) == 1:
     setSettingVariable("debug.showloginfo", False)
-    setSettingVariable("debug.extralogging", False)
+    if gConfig.JSON_HAS_DEBUG_EXTRA_LOG:
+      setSettingVariable("debug.extralogging", False)
 
   elif argv[0] == "play" and len(argv) in [2, 3]:
     playerPlay(argv[1], argv[2] if len(argv) == 3 else None, False)
