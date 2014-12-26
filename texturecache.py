@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.5"
+    self.VERSION = "1.8.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3672,7 +3672,10 @@ class MyUtility(object):
 
       gLogger.log("Top250: Retrieving Top250 Movies from: [%s]" % URL)
       html = urllib2.urlopen(URL)
-      data = html.read()
+      if MyUtility.isPython3:
+        data = html.read().decode('utf-8')
+      else:
+        data = html.read()
       html.close()
 
       gLogger.log("Top250: Read %d bytes of data" % len(data))
@@ -3705,6 +3708,14 @@ class MyUtility(object):
             movie["link"] = "tt%s" % s.group(1)
             movie["title"] = title
             movie["rank"] = len(movies)+1
+            try:
+              movie["rating"] = float("%.1f" % float(row[3].text))
+            except:
+              pass
+            try:
+              movie["votes"] = u"%s" % format(int(row[4].text), ",d")
+            except:
+              pass
             movies[movie["link"]] = movie
 
         gLogger.log("Top250: Loaded %d movies" % len(movies))
@@ -3714,6 +3725,7 @@ class MyUtility(object):
         return None
     except Exception as e:
       gLogger.log("Top250: ERROR - failed to retrieve Top250 movie data: [%s]" % str(e))
+      raise
       return None
 
   @staticmethod
@@ -5309,26 +5321,43 @@ def updateIMDb(mediatype, jcomms, data):
     if movies250 is None:
       gLogger.err("WARNING: Failed to obtain Top250 movies, check log for details", newLine=True)
 
-  #We don't need to query omdb if only updating top250
-  omdbquery = (imdbfields != [] and not (len(imdbfields) == 1 and "top250" in imdbfields))
+  # We don't need to query omdb if only updating top250
+  omdbquery = (imdbfields != ["top250"])
+
+  # Avoid querying omdb if we're only updating fields available from Top250 movie list
+  onlyt250fields = (set(imdbfields).issubset(["top250", "rating", "votes"]))
 
   for item in data:
     title = item["title"]
     libid = item["movieid"]
     imdbnumber = item.get("imdbnumber", "")
 
+    if movies250 and imdbnumber is not None:
+      movie250 = movies250.get(imdbnumber, None)
+      # No need to query omdb if all Top250 fields are available and they're all we need
+      needomdb = not (movie250 and onlyt250fields and ("rank" in movie250 and "rating" in movie250 and "votes" in movie250))
+    else:
+      movie250 = None
+      needomdb = True
+
     gLogger.progress("Querying IMDb: %s..." % title)
 
-    if omdbquery:
+    if omdbquery and needomdb:
+      gLogger.log("Querying omdbapi.com: [%s] (%s)" % (imdbnumber, title))
       newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline, qtimeout=gConfig.IMDB_TIMEOUT) if imdbnumber else None
       if not newimdb or newimdb.get("response", "False") != "True":
         gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
         continue
     else:
+      gLogger.log("Avoided query of omdbapi.com: [%s] (%s)" % (imdbnumber, title))
       newimdb = {}
 
-    if movies250:
-      newimdb["top250"] = movies250.get(imdbnumber, {}).get("rank", 0) if imdbnumber is not None else 0
+    if movie250 is not None:
+      newimdb["top250"] = movie250.get("rank", 0)
+      newimdb["rating"] = movie250.get("rating", newimdb.get("rating",0.0))
+      newimdb["votes"] = movie250.get("votes", newimdb.get("votes",'0'))
+    else:
+      newimdb["top250"] = 0
 
     # Truncate rating to 1 decimal place
     if "rating" in imdbfields:

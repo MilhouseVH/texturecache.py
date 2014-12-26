@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.8.6 (26/12/2014)
+* Chg: `imdb` optimisation - when updating only Top250 fields (`top250`, `ratings`, `votes`) and movie is in Top 250, don't query omdbapi.com
+
 ##Version 1.8.5 (17/12/2014)
 * Fix: Only set `debug.extralogging` for JSON 6.15.3+
 
