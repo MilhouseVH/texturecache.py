@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.6"
+    self.VERSION = "1.8.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3760,7 +3760,7 @@ class MyUtility(object):
             if plotFull:
               newdata["plot"] = data[key]
           # Convert genre to a list
-          elif newkey == "genre":
+          elif newkey in ["genre", "country", "director", "writer"]:
             newdata[newkey] = [g.strip() for g in data[key].split(",")]
           # Year to an int
           elif newkey == "year":

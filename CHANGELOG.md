@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.8.7 (04/01/2015)
+* Fix: `country`, `director`, and `writer` need to be lists in `imdb` results
+
 ##Version 1.8.6 (26/12/2014)
 * Chg: `imdb` optimisation - when updating only Top250 fields (`top250`, `ratings`, `votes`) and movie is in Top 250, don't query omdbapi.com
 
