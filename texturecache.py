@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.7"
+    self.VERSION = "1.8.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -341,6 +341,7 @@ class MyConfiguration(object):
 
     self.PRUNE_RETAIN_PREVIEWS = self.getBoolean(config, "prune.retain.previews", "yes")
     self.PRUNE_RETAIN_PICTURES = self.getBoolean(config, "prune.retain.pictures", "no")
+    self.PRUNE_RETAIN_CHAPTERS = self.getBoolean(config, "prune.retain.chapters", "yes")
 
     self.picture_filetypes    = m_pictureExtensions.split("|")
     self.PICTURE_FILETYPES_EX = self.getFileExtList(config, "picture.filetypes", "")
@@ -768,6 +769,7 @@ class MyConfiguration(object):
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
     print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
+    print("  prune.retain.chapters = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_CHAPTERS))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
     print("  logfile.unique = %s" % self.BooleanIsYesNo(self.LOGUNIQUE))
@@ -5745,7 +5747,8 @@ def orphanCheck(removeOrphans=False):
 def pruneCache(remove_nonlibrary_artwork=False):
 
   localfiles = []
-  libraryFiles = getAllFiles(keyFunction=getKeyFromFilename)
+
+  (libraryFiles, mediaFiles) = getAllFiles(keyFunction=getKeyFromFilename)
 
   re_search = []
   # addon
@@ -5756,9 +5759,9 @@ def pruneCache(remove_nonlibrary_artwork=False):
   database = MyDB(gConfig, gLogger)
 
   if gConfig.CHUNKED:
-    pruneCache_chunked(database, libraryFiles, localfiles, re_search)
+    pruneCache_chunked(database, libraryFiles, mediaFiles, localfiles, re_search)
   else:
-    pruneCache_fast(database, libraryFiles, localfiles, re_search)
+    pruneCache_fast(database, libraryFiles, mediaFiles, localfiles, re_search)
 
   # Prune, with optional remove...
   if localfiles != []:
@@ -5789,7 +5792,7 @@ def pruneCache(remove_nonlibrary_artwork=False):
                   % (format(len(localfiles), ",d")))
 
 
-def pruneCache_fast(database, libraryFiles, localfiles, re_search):
+def pruneCache_fast(database, libraryFiles, mediaFiles, localfiles, re_search):
   gLogger.progress("Loading texture cache...")
 
   dbfiles = {}
@@ -5806,11 +5809,11 @@ def pruneCache_fast(database, libraryFiles, localfiles, re_search):
 
   for rownum, hash in enumerate(dbfiles):
     gLogger.progress("Processing texture cache...%d%%" % (100 * rownum / totalrows), every=25)
-    pruneCache_processrow(dbfiles[hash], libraryFiles, localfiles, re_search)
+    pruneCache_processrow(dbfiles[hash], libraryFiles, mediaFiles, localfiles, re_search)
 
   gLogger.progress("")
 
-def pruneCache_chunked(database, libraryFiles, localfiles, re_search):
+def pruneCache_chunked(database, libraryFiles, mediaFiles, localfiles, re_search):
   gLogger.progress("Loading Texture DB items...")
 
   with database:
@@ -5831,11 +5834,11 @@ def pruneCache_chunked(database, libraryFiles, localfiles, re_search):
         gLogger.progress("Processing artwork: Chunk %2d of %d (%d%%)" %
           (fnum+1, len(folders), (100 * i / j)), every=25, finalItem=(i == j))
 
-        pruneCache_processrow(dbrow, libraryFiles, localfiles, re_search)
+        pruneCache_processrow(dbrow, libraryFiles, mediaFiles, localfiles, re_search)
 
   gLogger.progress("")
 
-def pruneCache_processrow(row, libraryFiles, localfiles, re_search):
+def pruneCache_processrow(row, libraryFiles, mediaFiles, localfiles, re_search):
 
   URL = row["url"]
   isRetained = False
@@ -5852,6 +5855,10 @@ def pruneCache_processrow(row, libraryFiles, localfiles, re_search):
     del libraryFiles[URL]
     return
 
+  if gConfig.PRUNE_RETAIN_CHAPTERS and URL.startswith("chapter://"):
+    if getMediaForChapter(URL) in mediaFiles:
+      return
+
   if re_search:
     # Ignore add-on/mirror related images
     for r in re_search:
@@ -5862,6 +5869,13 @@ def pruneCache_processrow(row, libraryFiles, localfiles, re_search):
   # Not an addon or mirror...
   if not isRetained:
     localfiles.append(row)
+
+def getMediaForChapter(filename):
+  offset = 1
+  while offset < len(filename):
+    if filename[-offset] in ["/", "\\"]: break
+    offset += 1
+  return filename[10:-offset]
 
 def getHash(string):
   string = string.lower()
@@ -5892,7 +5906,8 @@ def getKeyFromFilename(filename):
 def getAllFiles(keyFunction):
   jcomms = MyJSONComms(gConfig, gLogger)
 
-  files = {}
+  afiles = {}
+  mfiles = {}
   UCAST = {}
 
   REQUEST = [
@@ -5918,7 +5933,7 @@ def getAllFiles(keyFunction):
 
               {"method":"VideoLibrary.GetMovies",
                "params":{"sort": {"order": "ascending", "method": "title"},
-                         "properties":["title", "cast", "art"]}},
+                         "properties":["title", "cast", "art", "file"]}},
 
               {"method":"VideoLibrary.GetMovieSets",
                "params":{"sort": {"order": "ascending", "method": "title"},
@@ -5963,19 +5978,21 @@ def getAllFiles(keyFunction):
         for i in data["result"][items]:
           title = i.get("title", i.get("artist", i.get("name", None)))
           gLogger.progress("Loading %s: %s..." % (mediatype, title), every=interval)
-          if "fanart" in i: files[keyFunction(i["fanart"])] = "fanart"
-          if "thumbnail" in i: files[keyFunction(i["thumbnail"])] = "thumbnail"
+          if "fanart" in i: afiles[keyFunction(i["fanart"])] = "fanart"
+          if "thumbnail" in i: afiles[keyFunction(i["thumbnail"])] = "thumbnail"
 
           for a in i.get("art", {}):
-            files[keyFunction(i["art"][a])] = a
+            afiles[keyFunction(i["art"][a])] = a
 
           for c in i.get("cast", []):
             if "thumbnail" in c:
-              files[keyFunction(c["thumbnail"])] = "cast.thumb"
+              afiles[keyFunction(c["thumbnail"])] = "cast.thumb"
 
           if mediatype in ["Artists", "Albums", "Movies"]:
             for file in jcomms.getExtraArt(i):
-              files[keyFunction(file["file"])] = file["type"]
+              afiles[keyFunction(file["file"])] = file["type"]
+
+          if "file" in i: mfiles[i["file"]] = "media"
 
         if title != "": gLogger.progress("Parsing %s: %s..." % (mediatype, title))
 
@@ -5999,14 +6016,14 @@ def getAllFiles(keyFunction):
       tvshowid = tvshow["tvshowid"]
 
       for a in tvshow.get("art", {}):
-        files[keyFunction(tvshow["art"][a])] = a
+        afiles[keyFunction(tvshow["art"][a])] = a
 
       for c in tvshow.get("cast", []):
         if "thumbnail" in c:
-          files[keyFunction(c["thumbnail"])] = "cast.thumb"
+          afiles[keyFunction(c["thumbnail"])] = "cast.thumb"
 
       for file in jcomms.getExtraArt(tvshow):
-        files[keyFunction(file["file"])] = file["type"]
+        afiles[keyFunction(file["file"])] = file["type"]
 
       REQUEST = {"method":"VideoLibrary.GetSeasons",
                  "params":{"tvshowid": tvshowid,
@@ -6029,26 +6046,28 @@ def getAllFiles(keyFunction):
             if SEASON_ALL and a in ["poster", "tvshow.poster", "tvshow.fanart", "tvshow.banner"]:
               SEASON_ALL = False
               (poster_url, fanart_url, banner_url) = jcomms.getSeasonAll(season["art"][a])
-              if poster_url: files[keyFunction(poster_url)] = "poster"
-              if fanart_url: files[keyFunction(fanart_url)] = "fanart"
-              if banner_url: files[keyFunction(banner_url)] = "banner"
-            files[keyFunction(season["art"][a])] = a
+              if poster_url: afiles[keyFunction(poster_url)] = "poster"
+              if fanart_url: afiles[keyFunction(fanart_url)] = "fanart"
+              if banner_url: afiles[keyFunction(banner_url)] = "banner"
+            afiles[keyFunction(season["art"][a])] = a
 
           REQUEST = {"method":"VideoLibrary.GetEpisodes",
                      "params":{"tvshowid": tvshowid, "season": seasonid,
-                               "properties":["cast", "art"]}}
+                               "properties":["cast", "art", "file"]}}
 
           episodedata = jcomms.getDataProxy("episodes", REQUEST, uniquecast=UCAST)
 
           for episode in episodedata["result"]["episodes"]:
             episodeid = episode["episodeid"]
 
+            mfiles[episode["file"]] = "media"
+
             for a in episode.get("art", {}):
-              files[keyFunction(episode["art"][a])] = a
+              afiles[keyFunction(episode["art"][a])] = a
 
             for c in episode.get("cast", []):
               if "thumbnail" in c:
-                files[keyFunction(c["thumbnail"])] = "cast.thumb"
+                afiles[keyFunction(c["thumbnail"])] = "cast.thumb"
 
       # Free memory used to cache any GetDirectory() information
       MyUtility.invalidateDirectoryCache("TVShows")
@@ -6057,7 +6076,7 @@ def getAllFiles(keyFunction):
   gLogger.progress("Loading Pictures...")
   pictures = jcomms.getPictures(addPreviews=gConfig.PRUNE_RETAIN_PREVIEWS, addPictures=gConfig.PRUNE_RETAIN_PICTURES)
   for picture in pictures:
-    files[keyFunction(picture["thumbnail"])] = "thumbnail"
+    afiles[keyFunction(picture["thumbnail"])] = "thumbnail"
   del pictures
   # Free memory used to cache any GetDirectory() information
   MyUtility.invalidateDirectoryCache("Pictures")
@@ -6077,12 +6096,12 @@ def getAllFiles(keyFunction):
           channeldata = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
           if "result" in channeldata:
             for channel in channeldata["result"].get("channels", []):
-              files[keyFunction(channel["thumbnail"])] = "pvr.thumb"
+              afiles[keyFunction(channel["thumbnail"])] = "pvr.thumb"
 
     # Free memory used to cache any GetDirectory() information
     MyUtility.invalidateDirectoryCache("PVR")
 
-  return files
+  return (afiles, mfiles)
 
 def removeMedia(mtype, libraryid):
   MTYPE = {}

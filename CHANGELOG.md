@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.8.8 (01/03/2015)
+* Add: Support "chapter://" thumbnail images when pruning. Remove all chapter thumbnails while pruning with `prune.retain.chapters=no` (default `yes`). Chapter thumbsnails for non-existent media will be pruned regardless.
+
 ##Version 1.8.7 (04/01/2015)
 * Fix: `country`, `director`, and `writer` need to be lists in `imdb` results
 
