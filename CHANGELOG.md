@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.8.9 (06/03/2015)
+* Fix: Once an rpc connection is established continue to use the same IP version (4 or 6) when establishing subsequent connections
+
 ##Version 1.8.8 (01/03/2015)
 * Add: Support "chapter://" thumbnail images when pruning. Remove all chapter thumbnails while pruning with `prune.retain.chapters=no` (default `yes`). Chapter thumbsnails for non-existent media will be pruned regardless.
 

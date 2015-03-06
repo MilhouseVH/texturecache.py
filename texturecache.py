@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.8"
+    self.VERSION = "1.8.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1791,6 +1791,7 @@ class MyJSONComms(object):
           self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
           self.mysocket.settimeout(None)
           self.logger.log("RPC connection established with IPv%s" % ("4" if ipversion == socket.AF_INET else "6"))
+          self.config.RPC_IPVERSION = "4" if ipversion == socket.AF_INET else "6"
           return self.mysocket
         except:
           pass
