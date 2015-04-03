@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 1.9.0 (03/04/2015)
+* Chg: Cosmetic - simplify performance counters
+* Fix: Map JSON Textures API `lastused` to SQL `lastusetime`
+
 ##Version 1.8.9 (06/03/2015)
 * Fix: Once an rpc connection is established continue to use the same IP version (4 or 6) when establishing subsequent connections
 

@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.8.9"
+    self.VERSION = "1.9.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2998,6 +2998,7 @@ class MyJSONComms(object):
       if f == 3:
         if fields[0].startswith("t."): fields[0] = fields[0][2:]
         if fields[0] == "id": fields[0] = "textureid"
+        if fields[0] == "lastusetime": fields[0] = "lastused"
 
         if (fields[2].startswith("'") and fields[2].endswith("'")) or \
            (fields[2].startswith('"') and fields[2].endswith('"')):
@@ -3085,6 +3086,8 @@ class MyJSONComms(object):
       if f == 2:
         if fields[0].startswith("t."): fields[0] = fields[0][2:]
         if fields[0] == "id": fields[0] = "textureid"
+        if fields[0] == "lastusetime": fields[0] = "lastused"
+
         if fields[1].lower().startswith("asc"):
           fields[1] = "ascending"
         else:
@@ -3103,14 +3106,9 @@ class MyJSONComms(object):
       REQUEST["params"]["properties"].extend(["lasthashcheck", "imagehash", "sizes"])
 
     if filter:
-        param = self.parseSQLFilter(filter)
-        if param:
-          REQUEST["params"]["filter"] = param
-
-#    if order:
-#        param = self.parseSQLOrder(order)
-#        if param:
-#          REQUEST["params"]["sort"] = param
+      param = self.parseSQLFilter(filter)
+      if param:
+        REQUEST["params"]["filter"] = param
 
     return self.sendJSON(REQUEST, "libTextures", checkResult=False)
 
@@ -3138,8 +3136,10 @@ class MyTotals(object):
     self.ETIMES = {}
 
     self.THREADS = {}
+
     self.THREADS_HIST = {}
-    self.HISTORY = []
+    self.HISTORY = (0, 0.0)
+    self.MAXSAMPLES = 0
     self.PCOUNT = self.PMIN = self.PAVG = self.PMAX = 0
 
     self.TOTALS = {}
@@ -3204,6 +3204,7 @@ class MyTotals(object):
     with threading.Lock():
       tname = threading.current_thread().name
       ctime = time.time()
+      self.setPerformance(ctime - self.THREADS[tname])
       self.THREADS_HIST[tname] = (self.THREADS[tname], ctime)
       self.THREADS[tname] = 0
       self.ETIMES[mediatype][imgtype][tname] = (self.ETIMES[mediatype][imgtype][tname][0], ctime)
@@ -3218,39 +3219,31 @@ class MyTotals(object):
       if not imgtype in self.TOTALS[action]: self.TOTALS[action][imgtype] = 0
       self.TOTALS[action][imgtype] += 1
 
-  # Calculate average performance per second.
-  # Record history of averages to use as a basic smoothing function
-  # Calculate and store min/max/avg peak performance.
-  def getPerformance(self, remaining):
-
-    active = tmin = tmax = 0
-
+  # Record moving average over MAXSAMPLES
+  # Calculate and store min/max/avg.
+  def setPerformance(self, elapsed):
     with threading.Lock():
-      for t in self.THREADS_HIST:
-        times = self.THREADS_HIST[t]
-        if times[0] != 0:
-          active += 1
-          if tmin == 0 or times[0] < tmin: tmin = times[0]
-          if times[1] > tmax: tmax = times[1]
-
-      if tmax == 0: return ""
-
-      tpersec = active / (tmax - tmin)
+      (c, e) = self.HISTORY
+      if self.MAXSAMPLES == 0 or c < self.MAXSAMPLES:
+        c += 1
+      else:
+        e = e - (e / c)
+        e = 0.0 if e < 0 else e
+      e += elapsed
+      self.HISTORY = (c, e)
 
       self.PCOUNT += 1
-      self.PAVG += tpersec
-      if self.PMIN == 0 or tpersec < self.PMIN: self.PMIN = tpersec
-      if tpersec > self.PMAX: self.PMAX = tpersec
+      self.PAVG += elapsed
+      if self.PMIN == 0 or elapsed < self.PMIN: self.PMIN = elapsed
+      if elapsed > self.PMAX: self.PMAX = elapsed
 
-      # Maintain history of times to smooth out performance result...
-      self.HISTORY.insert(0,tpersec)
-      if len(self.HISTORY) > 25: self.HISTORY.pop()
-      tpersec = 0
-      for t in self.HISTORY: tpersec += t
-      tpersec = tpersec/len(self.HISTORY)
-
-    eta = self.secondsToTime(remaining / tpersec, withMillis=False)
-    return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
+  # Calculate average performance per second.
+  def getPerformance(self, remaining):
+    with threading.Lock():
+      (c, e) = self.HISTORY
+      tpersec = (e / c) if c > 0 else 1.0
+      eta = self.secondsToTime(remaining / tpersec, withMillis=False)
+      return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 
   def libraryStats(self, item="", multi=[], filter="", lastRun=False, query=""):
     if multi: item = "/".join(multi)
@@ -5335,12 +5328,12 @@ def updateIMDb(mediatype, jcomms, data):
     libid = item["movieid"]
     imdbnumber = item.get("imdbnumber", "")
 
-    if movies250 and imdbnumber is not None:
-      movie250 = movies250.get(imdbnumber, None)
+    if movies250 is not None and imdbnumber is not None:
+      movie250 = movies250.get(imdbnumber, {})
       # No need to query omdb if all Top250 fields are available and they're all we need
-      needomdb = not (movie250 and onlyt250fields and ("rank" in movie250 and "rating" in movie250 and "votes" in movie250))
+      needomdb = not (movie250 is not {} and onlyt250fields and ("rank" in movie250 and "rating" in movie250 and "votes" in movie250))
     else:
-      movie250 = None
+      movie250 = {}
       needomdb = True
 
     gLogger.progress("Querying IMDb: %s..." % title)
@@ -5355,12 +5348,9 @@ def updateIMDb(mediatype, jcomms, data):
       gLogger.log("Avoided query of omdbapi.com: [%s] (%s)" % (imdbnumber, title))
       newimdb = {}
 
-    if movie250 is not None:
-      newimdb["top250"] = movie250.get("rank", 0)
-      newimdb["rating"] = movie250.get("rating", newimdb.get("rating",0.0))
-      newimdb["votes"] = movie250.get("votes", newimdb.get("votes",'0'))
-    else:
-      newimdb["top250"] = 0
+    newimdb["top250"] = movie250.get("rank", 0)
+    newimdb["rating"] = movie250.get("rating", newimdb.get("rating",0.0))
+    newimdb["votes"] = movie250.get("votes", newimdb.get("votes",'0'))
 
     # Truncate rating to 1 decimal place
     if "rating" in imdbfields:
