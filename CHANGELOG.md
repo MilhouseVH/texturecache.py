@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.9.1 (21/04/2015)
+* Fix: Fix typo when handling image/icon url for `notify`
+
 ##Version 1.9.0 (03/04/2015)
 * Chg: Cosmetic - simplify performance counters
 * Fix: Map JSON Textures API `lastused` to SQL `lastusetime`

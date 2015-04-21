@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.0"
+    self.VERSION = "1.9.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -6728,7 +6728,7 @@ def ShowGUINotification(title, message, displaytime, image):
   if displaytime:
     REQUEST["params"]["displaytime"] = displaytime
   if image:
-    REQUEST["params"]["image"] = icon
+    REQUEST["params"]["image"] = image
 
   MyJSONComms(gConfig, gLogger).sendJSON(REQUEST, "libNotification")
 
