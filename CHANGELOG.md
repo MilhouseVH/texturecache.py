@@ -1,5 +1,12 @@
 #Changelog
 
+##Version 1.9.3 (28/04/2015)
+* Add: New media class, `musicvideos`
+* Chg: Include `tag` as default field when querying tags
+
+##Version 1.9.2 (23/04/2015)
+* Chg: Include `tag` property when querying tags
+
 ##Version 1.9.1 (21/04/2015)
 * Fix: Fix typo when handling image/icon url for `notify`
 

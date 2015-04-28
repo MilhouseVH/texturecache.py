@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.1"
+    self.VERSION = "1.9.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -277,7 +277,7 @@ class MyConfiguration(object):
     self.QA_FIELDS["qa.art.pvr.radio.channel"] = "thumbnail"
 
     for x in ["addons",
-              "albums", "artists", "songs",
+              "albums", "artists", "songs", "musicvideos",
               "movies", "sets",
               "tvshows.tvshow", "tvshows.season", "tvshows.episode",
               "pvr.tv", "pvr.radio", "pvr.tv.channel", "pvr.radio.channel",
@@ -2663,10 +2663,16 @@ class MyJSONComms(object):
       EXTRA = "songs"
       SECTION = "songs"
       IDENTIFIER = "songid"
+    elif mediatype == "musicvideos":
+      REQUEST = {"method":"VideoLibrary.GetMusicVideos",
+                 "params":{"sort": {"order": "ascending", "method": "title"},
+                           "properties":["title", "art", "tag"]}}
     elif mediatype in ["movies", "tags"]:
       REQUEST = {"method":"VideoLibrary.GetMovies",
                  "params":{"sort": {"order": "ascending", "method": "title"},
                            "properties":["title", "art"]}}
+      if mediatype == "tags":
+        REQUEST["params"]["properties"].append("tag")
       EXTRA = "movies"
       SECTION = "movies"
       IDENTIFIER = "movieid"
@@ -3941,7 +3947,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
                       decode=False, ensure_ascii=True, nodownload=False, lastRun=False, \
                       labels=None, query="", filename=None, wlBackup=True):
 
-  if mediatype not in ["addons", "agenres", "vgenres", "albums", "artists", "songs",
+  if mediatype not in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "musicvideos",
                        "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.err("Error: %s is not a valid media class" % mediatype, newLine=True)
     sys.exit(2)
