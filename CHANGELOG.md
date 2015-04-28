@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.9.4 (28/04/2015)
+* Fix: Correction for v1.9.3 commit
+
 ##Version 1.9.3 (28/04/2015)
 * Add: New media class, `musicvideos`
 

@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.3"
+    self.VERSION = "1.9.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2667,6 +2667,9 @@ class MyJSONComms(object):
       REQUEST = {"method":"VideoLibrary.GetMusicVideos",
                  "params":{"sort": {"order": "ascending", "method": "title"},
                            "properties":["title", "art", "tag"]}}
+      EXTRA = "musicvideos"
+      SECTION = "musicvideos"
+      IDENTIFIER = "musicvideoid"
     elif mediatype in ["movies", "tags"]:
       REQUEST = {"method":"VideoLibrary.GetMovies",
                  "params":{"sort": {"order": "ascending", "method": "title"},
@@ -2799,7 +2802,7 @@ class MyJSONComms(object):
       self.addProperties(REQUEST, ", ".join(self.config.getQAFields("blank", EXTRA)))
 
     elif action == "dump":
-      if mediatype in ["songs", "movies", "tvshows", "episodes"]:
+      if mediatype in ["songs", "movies", "tvshows", "episodes", "musicvideos"]:
         self.addProperties(REQUEST, "file")
       if "extrajson.%s" % EXTRA in self.config.XTRAJSON:
         extraFields = self.config.XTRAJSON["extrajson.%s" % EXTRA] if EXTRA != "" else None
