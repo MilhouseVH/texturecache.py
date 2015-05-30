@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.4"
+    self.VERSION = "1.9.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1780,6 +1780,7 @@ class MyJSONComms(object):
     pass
 
   def getSocket(self):
+    lastexception = None
     if not self.mysocket:
       useipv = int(self.config.RPC_IPVERSION) if self.config.RPC_IPVERSION else None
       for ipversion in [socket.AF_INET6, socket.AF_INET]:
@@ -1793,10 +1794,11 @@ class MyJSONComms(object):
           self.logger.log("RPC connection established with IPv%s" % ("4" if ipversion == socket.AF_INET else "6"))
           self.config.RPC_IPVERSION = "4" if ipversion == socket.AF_INET else "6"
           return self.mysocket
-        except:
+        except Exception as e:
+          lastexception = e
           pass
       else:
-        raise
+        raise lastexception if lastexception is not None else socket.error("Unknown socket error")
     return self.mysocket
 
   # Use a secondary socket object for simple lookups to avoid having to handle

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.9.5 (30/05/2015)
+* Fix: With Python 3.3+, don't raise an exception that is no longer "in scope"
+
 ##Version 1.9.4 (28/04/2015)
 * Fix: Correction for v1.9.3 commit
 
