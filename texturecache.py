@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.6"
+    self.VERSION = "1.9.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3182,7 +3182,7 @@ class MyTotals(object):
     self.THREADS = {}
 
     self.THREADS_HIST = {}
-    self.HISTORY = (0, 0.0)
+    self.HISTORY = (0, time.time(), 0.0)
     self.MAXSAMPLES = 0
     self.PCOUNT = self.PMIN = self.PAVG = self.PMAX = 0
 
@@ -3267,14 +3267,18 @@ class MyTotals(object):
   # Calculate and store min/max/avg.
   def setPerformance(self, elapsed):
     with threading.Lock():
-      (c, e) = self.HISTORY
+      (c, s, e) = self.HISTORY
       if self.MAXSAMPLES == 0 or c < self.MAXSAMPLES:
         c += 1
+        if self.MAXSAMPLES == 0:
+          e = time.time()
+        else:
+          e += elapsed
       else:
         e = e - (e / c)
         e = 0.0 if e < 0 else e
-      e += elapsed
-      self.HISTORY = (c, e)
+        e += elapsed
+      self.HISTORY = (c, s, e)
 
       self.PCOUNT += 1
       self.PAVG += elapsed
@@ -3284,8 +3288,11 @@ class MyTotals(object):
   # Calculate average performance per second.
   def getPerformance(self, remaining):
     with threading.Lock():
-      (c, e) = self.HISTORY
-      tpersec = (e / c) if c > 0 else 1.0
+      (c, s, e) = self.HISTORY
+      if self.MAXSAMPLES == 0 or c < self.MAXSAMPLES:
+        tpersec = (c / (e - s)) if e > s else 1.0
+      else:
+        tpersec = (c / e) if e > 0 else 1.0
       eta = self.secondsToTime(remaining / tpersec, withMillis=False)
       return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 

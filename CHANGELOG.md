@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.9.7 (21/06/2015)
+* Fix: Correct error in predicted ETA calculation when caching.
+
 ##Version 1.9.6 (21/06/2015)
 * Add: Introduce a web request "priming" facility which pre-requests remote urls, eg. cast artwork from http://ia.media-imdb.com, whenever Kodi is unable to initially cache the artwork. Often, particularly with IMdB cast artwork, the `Files.PrepareDownload` call will fail (403/Fobidden), however if a direct request of the URL is made by the script using a desktop browser user agent (ie. "priming", using the Firefox UA), then - assuming the artwork url is still valid - a subsequent `Files.PrepareDownload` call from Kodi will almost always succeed and the artwork successfully cached. This facility can be disabled with `download.prime=no`, although it should only add a small overhead (or none, if the remote web site is not playing silly buggers) and will significantly increase the chances of successful artwork caching.
 
