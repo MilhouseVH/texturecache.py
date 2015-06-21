@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.5"
+    self.VERSION = "1.9.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -234,6 +234,7 @@ class MyConfiguration(object):
 
     self.DOWNLOAD_THREADS_DEFAULT = int(self.getValue(config, "download.threads", "2"))
     self.DOWNLOAD_RETRY = int(self.getValue(config, "download.retry", "3"))
+    self.DOWNLOAD_PRIME = self.getBoolean(config, "download.prime", "yes")
 
     # It seems that Files.Preparedownload is sufficient to populate the texture cache
     # so there is no need to actually download the artwork.
@@ -729,6 +730,7 @@ class MyConfiguration(object):
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
     print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
     print("  download.retry = %d" % self.DOWNLOAD_RETRY)
+    print("  download.prime = %d" % self.BooleanIsYesNo(self.DOWNLOAD_PRIME))
     print("  download.threads = %d" % self.DOWNLOAD_THREADS_DEFAULT)
     if self.DOWNLOAD_THREADS != {}:
       for dt in self.DOWNLOAD_THREADS:
@@ -1074,13 +1076,44 @@ class MyImageLoader(threading.Thread):
         self.database.deleteItem(item.dbid, None)
         rowexists = False
 
-    while PDRETRY > 0 and not url:
+    # If PRIME is enabled, request the remote url directly. If not available, don't bother
+    # retrying call to Files.PrepareDownload as it will surely fail.
+    if PDRETRY > 0 and url is None and self.config.DOWNLOAD_PRIME:
+      isAvailable = self.prime_the_request(item.decoded_filename)
+    else:
+      isAvailable  = True
+
+    # Retry call to Files.PrepareDownload - hopefully it will succeed eventually...
+    while PDRETRY > 0 and url is None and isAvailable:
       self.logger.log("Retrying getDownloadURL(), %d attempts remaining" % PDRETRY)
       time.sleep(0.5)
       PDRETRY -= 1
       url = self.json.getDownloadURL(item.filename)
 
     return (url, rowexists)
+
+  # Directly request the remote ur, returning True if still available
+  def prime_the_request(self, url):
+    if url is None: return False
+    if not url.startswith("http://"): return True
+
+    domain = url.replace("http://", "").split("/")[0]
+    page = "/" + "/".join(url.replace("http://", "").split("/")[1:])
+
+    conn = None
+    isAvailable = True
+    try:
+      conn = httplib.HTTPConnection(domain)
+      conn.request("GET", page, headers={"User-agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0"})
+      resp = conn.getresponse()
+      payload = resp.read(1)
+      self.logger.log("Primed request of: Domain [%s] with URL [%s], result [%d, %s]" % (domain, page, resp.status, resp.reason))
+      isAvailable = (resp.status == 200 or 300 <= resp.status < 400)
+    except:
+      isAvailable = False
+    if conn is not None: conn.close()
+
+    return isAvailable
 
   def loadImage(self, item):
     ATTEMPT = 1 if self.retry < 1 else self.retry
@@ -7455,7 +7488,6 @@ def autoUpdate(argv):
     os.execl(sys.executable, sys.executable, *args)
 
 def main(argv):
-
   loadConfig(argv)
 
   if len(argv) == 0: usage(1)
