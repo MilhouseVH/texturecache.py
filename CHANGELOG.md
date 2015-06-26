@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.9.8 (26/06/2015)
+* Chg: Add paused and seeking labels to `status` when player is active
+
 ##Version 1.9.7 (21/06/2015)
 * Fix: Correct error in predicted ETA calculation when caching.
 

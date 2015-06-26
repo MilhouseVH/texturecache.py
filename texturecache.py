@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.7"
+    self.VERSION = "1.9.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -6517,7 +6517,7 @@ def showStatus(idleTime=600):
             STATUS.append("Activity: %s" % iType.capitalize())
             STATUS.append("Title: %s" % title)
 
-            REQUEST = {"method": "Player.GetProperties", "params": {"playerid": pId, "properties": ["percentage", "time", "totaltime"]}}
+            REQUEST = {"method": "Player.GetProperties", "params": {"playerid": pId, "properties": ["percentage", "time", "totaltime", "speed"]}}
             data = jcomms.sendJSON(REQUEST, "libGetProps", checkResult=False)
             if "result" in data:
               eTime = getSeconds(data["result"].get("time",0))
@@ -6525,7 +6525,12 @@ def showStatus(idleTime=600):
               elapsed = getHMS(eTime)
               pcnt = data["result"].get("percentage", 0)
               remaining = getHMS(tTime - eTime)
-              STATUS.append("Progress: %s (%4.2f%%, %s remaining)" % (elapsed, pcnt, remaining))
+              if data["result"].get("speed",0) == 0:
+                STATUS.append("Progress: %s (%4.2f%%, %s remaining, paused)" % (elapsed, pcnt, remaining))
+              elif data["result"].get("speed",0) != 1:
+                STATUS.append("Progress: %s (%4.2f%%, %s remaining, seeking)" % (elapsed, pcnt, remaining))
+              else:
+                STATUS.append("Progress: %s (%4.2f%%, %s remaining)" % (elapsed, pcnt, remaining))
 
   if STATUS != []:
     for x in STATUS:
