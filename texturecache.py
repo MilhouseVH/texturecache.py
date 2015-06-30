@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.8"
+    self.VERSION = "1.9.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3822,6 +3822,8 @@ class MyUtility(object):
             r += (int(m.group(1))*60) if m else 0
             if r > 0:
               newdata[newkey] = r
+          elif newkey == "votes":
+            newdata[newkey] = format(int(data[key].replace(",","")), ",d")
           else:
             newdata[newkey] = data[key]
         except Exception as e:

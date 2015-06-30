@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 1.9.9 (30/06/2015)
+* Chg: Re-establish comma numeric grouping of votes now that omdbapi.com strips commas from its result
+
 ##Version 1.9.8 (26/06/2015)
 * Chg: Add paused and seeking labels to `status` when player is active
 
