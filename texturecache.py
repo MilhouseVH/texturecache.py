@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "1.9.9"
+    self.VERSION = "2.0.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -386,8 +386,13 @@ class MyConfiguration(object):
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
     self.IMDB_FIELDS = self.getExRepList(config, "imdb.fields", ["rating", "votes", "top250"], True)
+    self.IMDB_THREADS = int(self.getValue(config, "imdb.threads", 10))
+    self.IMDB_THREADS = 1 if self.IMDB_THREADS < 1 else self.IMDB_THREADS
+    self.IMDB_THREADS = 20 if self.IMDB_THREADS > 20 else self.IMDB_THREADS
     self.IMDB_TIMEOUT = self.getValue(config, "imdb.timeout", 15.0, allowundefined=True)
     if self.IMDB_TIMEOUT: self.IMDB_TIMEOUT = float(self.IMDB_TIMEOUT)
+    self.IMDB_RETRY = int(self.getValue(config, "imdb.retry", 3))
+    self.IMDB_RETRY = 0 if self.IMDB_RETRY < 0 else self.IMDB_RETRY
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
     self.BIN_VCGENCMD = self.getValue(config, "bin.vcgencmd", "/usr/bin/vcgencmd", allowundefined=True)
@@ -730,7 +735,7 @@ class MyConfiguration(object):
     print("  download.predelete = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PREDELETE))
     print("  download.payload = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PAYLOAD))
     print("  download.retry = %d" % self.DOWNLOAD_RETRY)
-    print("  download.prime = %d" % self.BooleanIsYesNo(self.DOWNLOAD_PRIME))
+    print("  download.prime = %s" % self.BooleanIsYesNo(self.DOWNLOAD_PRIME))
     print("  download.threads = %d" % self.DOWNLOAD_THREADS_DEFAULT)
     if self.DOWNLOAD_THREADS != {}:
       for dt in self.DOWNLOAD_THREADS:
@@ -791,7 +796,9 @@ class MyConfiguration(object):
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
     print("  imdb.fields = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS)))
+    print("  imdb.threads = %s" % self.IMDB_THREADS)
     print("  imdb.timeout = %s" % self.NoneIsBlank(self.IMDB_TIMEOUT))
+    print("  imdb.retry = %s" % self.IMDB_RETRY)
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
     print("  bin.vcgencmd = %s" % self.NoneIsBlank(self.BIN_VCGENCMD))
     print("  bin.ceccontrol = %s" % self.NoneIsBlank(self.BIN_CECCONTROL))
@@ -1045,14 +1052,15 @@ class MyImageLoader(threading.Thread):
       while not stopped.is_set():
         self.showProgress()
 
-        item = self.work_queue.get()
+        try:
+          item = self.work_queue.get(block=False)
 
-        if not self.loadImage(item) and not item.missingOK:
-          self.error_queue.put(item)
+          if not self.loadImage(item) and not item.missingOK:
+            self.error_queue.put(item)
 
-        self.work_queue.task_done()
+          self.work_queue.task_done()
 
-        if self.work_queue.empty():
+        except Queue.Empty:
           break
 
     self.showProgress(ignoreSelf=True)
@@ -1162,6 +1170,83 @@ class MyImageLoader(threading.Thread):
     self.totals.finish(item.mtype, item.itype)
 
     return ATTEMPT != 0
+
+#
+# IMDB Thread
+#
+class MyIMDBLoader(threading.Thread):
+  def __init__(self, config, logger, input_queue, output_queue, plotFull, plotOutline, movies250, imdbfields):
+    threading.Thread.__init__(self)
+
+    self.config = config
+    self.logger = logger
+
+    self.input_queue = input_queue
+    self.output_queue = output_queue
+
+    self.plotFull = plotFull
+    self.plotOutline = plotOutline
+    self.movies250 = movies250
+
+    # We don't need to query omdb if only updating top250
+    self.omdbquery = (imdbfields != ["top250"])
+
+    # Avoid querying omdb if we're only updating fields available from Top250 movie list
+    self.onlyt250fields = (set(imdbfields).issubset(["top250", "rating", "votes"]))
+
+    self.timeout = self.config.IMDB_TIMEOUT
+    self.retry = self.config.IMDB_RETRY
+
+  def run(self):
+    while not stopped.is_set():
+      try:
+        qItem = self.input_queue.get(block=False)
+        self.input_queue.task_done()
+
+        item = qItem["item"]
+        title = item["title"]
+        libid = item["movieid"]
+        imdbnumber = item.get("imdbnumber", "")
+
+        if self.movies250 is not None and imdbnumber is not None:
+          movie250 = self.movies250.get(imdbnumber, {})
+          # No need to query omdb if all Top250 fields are available and they're all we need
+          needomdb = not (movie250 is not {} and self.onlyt250fields and ("rank" in movie250 and "rating" in movie250 and "votes" in movie250))
+        else:
+          movie250 = {}
+          needomdb = True
+
+        if self.omdbquery and needomdb:
+          self.logger.progress("Querying IMDb: %s..." % item["title"])
+          attempt = 0
+          newimdb = None
+          while True:
+            self.logger.log("Querying omdbapi.com[a=%d, r=%d]: [%s] (%s)" % (attempt, self.retry, item["imdbnumber"], item["title"]))
+            newimdb = MyUtility.getIMDBInfo(item["imdbnumber"], self.plotFull, self.plotOutline, self.timeout) if item["imdbnumber"] else None
+            if newimdb is not None and newimdb.get("response", "False") != "True":
+              newimdb = None
+            if newimdb is not None or attempt >= self.retry:
+              break
+            attempt += 1
+
+          if newimdb is None:
+            self.logger.err("Could not obtain imdb details for [%s] (%s)" % (item["imdbnumber"], item["title"]), newLine=True, log=True)
+            continue
+        else:
+          self.logger.log("Avoided omdbapi.com query, movies250 has all we need: [%s] (%s)" % (item["imdbnumber"], item["title"]))
+          newimdb = {}
+
+        newimdb["top250"] = movie250.get("rank", 0)
+        newimdb["rating"] = movie250.get("rating", newimdb.get("rating",0.0))
+        newimdb["votes"] = movie250.get("votes", newimdb.get("votes",'0'))
+
+        qItem["newimdb"] = newimdb
+
+        self.output_queue.put(qItem)
+
+      except Queue.Empty:
+        self.output_queue.put(None)
+        break
 
 #
 # Simple thread class to manage Raspberry Pi HDMI power state
@@ -4381,10 +4466,10 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     gLogger.out("\nThe following items could not be downloaded:\n\n")
     while not error_queue.empty():
       item = error_queue.get()
+      error_queue.task_done()
       name = item.getFullName()[:40]
       gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
       gLogger.log("ERROR ITEM: %s" % item)
-      error_queue.task_done()
 
 def matchTextures(mediatype, mediaitems, jcomms, database, force, nodownload):
 
@@ -5370,40 +5455,41 @@ def updateIMDb(mediatype, jcomms, data):
     if movies250 is None:
       gLogger.err("WARNING: Failed to obtain Top250 movies, check log for details", newLine=True)
 
-  # We don't need to query omdb if only updating top250
-  omdbquery = (imdbfields != ["top250"])
+  input_queue = Queue.Queue()
+  output_queue = Queue.Queue()
 
-  # Avoid querying omdb if we're only updating fields available from Top250 movie list
-  onlyt250fields = (set(imdbfields).issubset(["top250", "rating", "votes"]))
-
+  # Load input queue
   for item in data:
+    input_queue.put({"item": item})
+
+  # Create threads to process input queue
+  threadcount = input_queue.qsize() if input_queue.qsize() <= gConfig.IMDB_THREADS else gConfig.IMDB_THREADS
+  threads = []
+  for i in range(threadcount):
+    t = MyIMDBLoader(gConfig, gLogger, input_queue, output_queue, plotFull, plotOutline, movies250, imdbfields)
+    threads.append(t)
+    t.setDaemon(True)
+
+  # Start the threads...
+  for t in threads: t.start()
+
+  # Process results from output queue
+  # An empty qItem signifies end of thread
+  # Once all threads have ended, exit loop
+  while threadcount > 0:
+    qItem = output_queue.get(block=True)
+    output_queue.task_done()
+
+    if qItem is None:
+      threadcount -= 1
+      continue
+
+    item = qItem["item"]
+    newimdb = qItem["newimdb"]
+
     title = item["title"]
     libid = item["movieid"]
     imdbnumber = item.get("imdbnumber", "")
-
-    if movies250 is not None and imdbnumber is not None:
-      movie250 = movies250.get(imdbnumber, {})
-      # No need to query omdb if all Top250 fields are available and they're all we need
-      needomdb = not (movie250 is not {} and onlyt250fields and ("rank" in movie250 and "rating" in movie250 and "votes" in movie250))
-    else:
-      movie250 = {}
-      needomdb = True
-
-    gLogger.progress("Querying IMDb: %s..." % title)
-
-    if omdbquery and needomdb:
-      gLogger.log("Querying omdbapi.com: [%s] (%s)" % (imdbnumber, title))
-      newimdb = MyUtility.getIMDBInfo(imdbnumber, plotFull, plotOutline, qtimeout=gConfig.IMDB_TIMEOUT) if imdbnumber else None
-      if not newimdb or newimdb.get("response", "False") != "True":
-        gLogger.err("Could not obtain imdb details for [%s] (%s)" % (imdbnumber, title), newLine=True)
-        continue
-    else:
-      gLogger.log("Avoided query of omdbapi.com: [%s] (%s)" % (imdbnumber, title))
-      newimdb = {}
-
-    newimdb["top250"] = movie250.get("rank", 0)
-    newimdb["rating"] = movie250.get("rating", newimdb.get("rating",0.0))
-    newimdb["votes"] = movie250.get("votes", newimdb.get("votes",'0'))
 
     # Truncate rating to 1 decimal place
     if "rating" in imdbfields:
@@ -5434,6 +5520,9 @@ def updateIMDb(mediatype, jcomms, data):
       gLogger.log("  New items: %s" % workitem["items"])
 
   gLogger.progress("")
+
+  # Sort the list of items into title order
+  worklist.sort(key=lambda f: f["title"])
 
   jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
 

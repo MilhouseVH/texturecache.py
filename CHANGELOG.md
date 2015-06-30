@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.0 (30/06/2015)
+* Add: Use additional threads (concurrent connections) to access omdbapi.com, significantly increasing performance. Configure number of threads/connections with `imdb.threads`. Default is 10. Upper limit is 20. Exceeding this upper limit would result in `HTTP Error 403: Forbidden` errors, and is not permitted (maximum number of threads capped at 20).
+
 ##Version 1.9.9 (30/06/2015)
 * Chg: Re-establish comma numeric grouping of votes now that omdbapi.com strips commas from its result
 
