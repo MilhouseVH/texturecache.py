@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.0"
+    self.VERSION = "2.0.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3841,7 +3841,7 @@ class MyUtility(object):
             movie["title"] = title
             movie["rank"] = len(movies)+1
             try:
-              movie["rating"] = float("%.1f" % float(row[3].text))
+              movie["rating"] = float(row[3].text)
             except:
               pass
             try:
@@ -3865,32 +3865,36 @@ class MyUtility(object):
     try:
       base_url = "http://www.omdbapi.com"
 
-      if plotOutline or not plotFull:
-        f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber), timeout=qtimeout)
-        data = json.loads(f.read().decode("utf-8"))
-        outline = data.get("Plot", None)
-      else:
-        outline=None
+      f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber), timeout=qtimeout)
+      data = json.loads(f.read().decode("utf-8"))
+      data["Plotoutline"] = data.get("Plot", None)
+      data["Plot"] = None
 
       if plotFull:
         f = urllib2.urlopen("%s?i=%s&plot=full" % (base_url, imdbnumber), timeout=qtimeout)
-        data = json.loads(f.read().decode("utf-8"))
+        data2 = json.loads(f.read().decode("utf-8"))
+        data["Plot"] = data2.get("Plot", None)
 
       # Convert omdbapi.com fields to xbmc fields - mostly just a case
       # of converting to lowercase, and removing "imdb" prefix
       newdata = {}
       for key in data:
+        if data[key] is None or data[key] == "N/A":
+          continue
+
         newkey = key.replace("imdb", "").lower()
+
         try:
           # Convert rating from str to float
           if newkey == "rating":
             newdata[newkey] = float(data[key])
           # Munge plot/plotoutline together as required
           elif newkey == "plot":
-            if plotOutline and outline:
-              newdata["plotoutline"] = outline
             if plotFull:
-              newdata["plot"] = data[key]
+              newdata["plot"] = data.get(key, None)
+          elif newkey == "plotoutline":
+            if plotOutline:
+              newdata["plotoutline"] = data.get(key, None)
           # Convert genre to a list
           elif newkey in ["genre", "country", "director", "writer"]:
             newdata[newkey] = [g.strip() for g in data[key].split(",")]
@@ -5492,8 +5496,13 @@ def updateIMDb(mediatype, jcomms, data):
     imdbnumber = item.get("imdbnumber", "")
 
     # Truncate rating to 1 decimal place
+    # Keep existing value if difference is likely to be due to platform
+    # precision error ie. Python2 on OpenELEC where 6.6 => 6.5999999999999996.
     if "rating" in imdbfields:
       item["rating"] = float("%.1f" % item.get("rating", 0.0))
+      newimdb["rating"] = float("%.1f" % newimdb.get("rating", 0.0))
+      if abs(item["rating"] - newimdb["rating"]) < 0.01:
+        newimdb["rating"] = item["rating"]
 
     # Sort genre lists for comparison purposes
     if "genre" in imdbfields and "genre" in newimdb:
@@ -5521,8 +5530,9 @@ def updateIMDb(mediatype, jcomms, data):
 
   gLogger.progress("")
 
-  # Sort the list of items into title order
-  worklist.sort(key=lambda f: f["title"])
+  # Sort the list of items into title order, with libraryid to ensure consistency
+  # when two or more movies share the same title.
+  worklist.sort(key=lambda f: (f["title"], f["libraryid"]))
 
   jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
 
