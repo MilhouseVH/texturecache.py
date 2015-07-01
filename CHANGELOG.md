@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.2 (01/07/2015)
+* Chg: Force close url connections in omdb threads. Move display of progress to main thread.
+
 ##Version 2.0.1 (30/06/2015)
 * Fix: Discrepancy when querying omdbapi.com with `plot`, as the `plot` (full) query can sometime return slightly different results (rating, votes) to the `plotoutline` (short) query.
 

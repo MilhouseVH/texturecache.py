@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.1"
+    self.VERSION = "2.0.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1217,7 +1217,6 @@ class MyIMDBLoader(threading.Thread):
           needomdb = True
 
         if self.omdbquery and needomdb:
-          self.logger.progress("Querying IMDb: %s..." % item["title"])
           attempt = 0
           newimdb = None
           while True:
@@ -1230,7 +1229,7 @@ class MyIMDBLoader(threading.Thread):
             attempt += 1
 
           if newimdb is None:
-            self.logger.err("Could not obtain imdb details for [%s] (%s)" % (item["imdbnumber"], item["title"]), newLine=True, log=True)
+            self.logger.err("Could not obtain IMDb details for [%s] (%s)" % (item["imdbnumber"], item["title"]), newLine=True, log=True)
             continue
         else:
           self.logger.log("Avoided omdbapi.com query, movies250 has all we need: [%s] (%s)" % (item["imdbnumber"], item["title"]))
@@ -3867,12 +3866,14 @@ class MyUtility(object):
 
       f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber), timeout=qtimeout)
       data = json.loads(f.read().decode("utf-8"))
+      f.close()
       data["Plotoutline"] = data.get("Plot", None)
       data["Plot"] = None
 
       if plotFull:
         f = urllib2.urlopen("%s?i=%s&plot=full" % (base_url, imdbnumber), timeout=qtimeout)
         data2 = json.loads(f.read().decode("utf-8"))
+        f.close()
         data["Plot"] = data2.get("Plot", None)
 
       # Convert omdbapi.com fields to xbmc fields - mostly just a case
@@ -5494,6 +5495,8 @@ def updateIMDb(mediatype, jcomms, data):
     title = item["title"]
     libid = item["movieid"]
     imdbnumber = item.get("imdbnumber", "")
+
+    gLogger.progress("Processing IMDb: %s..." % title)
 
     # Truncate rating to 1 decimal place
     # Keep existing value if difference is likely to be due to platform
