@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.3 (04/07/2015)
+* Add: When grouping IMdB `votes` into thousands, hundreds of thousands etc. use the character specified by `@imdb.grouping` - this defaults to a comma. Set any value to be used as the grouping symbol, including blank (`@imdb.grouping=`) eliminate any extra formatting, and period (`@imdb.grouping=.`).
+
 ##Version 2.0.2 (01/07/2015)
 * Chg: Force close url connections in omdb threads. Move display of progress to main thread.
 

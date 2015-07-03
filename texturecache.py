@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.2"
+    self.VERSION = "2.0.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -393,6 +393,8 @@ class MyConfiguration(object):
     if self.IMDB_TIMEOUT: self.IMDB_TIMEOUT = float(self.IMDB_TIMEOUT)
     self.IMDB_RETRY = int(self.getValue(config, "imdb.retry", 3))
     self.IMDB_RETRY = 0 if self.IMDB_RETRY < 0 else self.IMDB_RETRY
+    self.IMDB_GROUPING = self.getValue(config, "imdb.grouping", ",", allowundefined=True)
+    self.IMDB_GROUPING = self.IMDB_GROUPING if self.IMDB_GROUPING is not None else ""
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
     self.BIN_VCGENCMD = self.getValue(config, "bin.vcgencmd", "/usr/bin/vcgencmd", allowundefined=True)
@@ -2741,7 +2743,7 @@ class MyJSONComms(object):
 
     if mediatype == "addons":
       REQUEST = {"method":"Addons.GetAddons",
-                 "params":{"properties":["name", "version", "thumbnail", "fanart"]}}
+                 "params":{"properties":["name", "version", "thumbnail", "fanart", "path"]}}
       FILTER = "name"
       TITLE = "name"
     elif mediatype in ["pvr.tv", "pvr.radio"]:
@@ -3844,7 +3846,7 @@ class MyUtility(object):
             except:
               pass
             try:
-              movie["votes"] = u"%s" % format(int(row[4].text), ",d")
+              movie["votes"] = u"%s" % format(int(row[4].text.replace(",", "")), ",d").replace(",", gConfig.IMDB_GROUPING)
             except:
               pass
             movies[movie["link"]] = movie
@@ -3913,7 +3915,7 @@ class MyUtility(object):
             if r > 0:
               newdata[newkey] = r
           elif newkey == "votes":
-            newdata[newkey] = format(int(data[key].replace(",","")), ",d")
+            newdata[newkey] = format(int(data[key].replace(",","")), ",d").replace(",", gConfig.IMDB_GROUPING)
           else:
             newdata[newkey] = data[key]
         except Exception as e:
