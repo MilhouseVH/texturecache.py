@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.4 (08/07/2015)
+* Fix: Another tweak to download perf stats - think I've got it (mostly) right this time...
+
 ##Version 2.0.3 (04/07/2015)
 * Add: When grouping IMdB `votes` into thousands, hundreds of thousands etc. use the character specified by `@imdb.grouping` - this defaults to a comma. Set any value to be used as the grouping symbol, including blank (`@imdb.grouping=`) eliminate any extra formatting, and period (`@imdb.grouping=.`).
 

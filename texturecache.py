@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.3"
+    self.VERSION = "2.0.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3268,8 +3268,7 @@ class MyTotals(object):
     self.THREADS = {}
 
     self.THREADS_HIST = {}
-    self.HISTORY = (0, time.time(), 0.0)
-    self.MAXSAMPLES = 0
+    self.HISTORY = (time.time(), time.time(), 0)
     self.PCOUNT = self.PMIN = self.PAVG = self.PMAX = 0
 
     self.TOTALS = {}
@@ -3349,22 +3348,11 @@ class MyTotals(object):
       if not imgtype in self.TOTALS[action]: self.TOTALS[action][imgtype] = 0
       self.TOTALS[action][imgtype] += 1
 
-  # Record moving average over MAXSAMPLES
   # Calculate and store min/max/avg.
   def setPerformance(self, elapsed):
     with threading.Lock():
-      (c, s, e) = self.HISTORY
-      if self.MAXSAMPLES == 0 or c < self.MAXSAMPLES:
-        c += 1
-        if self.MAXSAMPLES == 0:
-          e = time.time()
-        else:
-          e += elapsed
-      else:
-        e = e - (e / c)
-        e = 0.0 if e < 0 else e
-        e += elapsed
-      self.HISTORY = (c, s, e)
+      (s, e, c) = self.HISTORY
+      self.HISTORY = (s, time.time(), c+1)
 
       self.PCOUNT += 1
       self.PAVG += elapsed
@@ -3374,11 +3362,8 @@ class MyTotals(object):
   # Calculate average performance per second.
   def getPerformance(self, remaining):
     with threading.Lock():
-      (c, s, e) = self.HISTORY
-      if self.MAXSAMPLES == 0 or c < self.MAXSAMPLES:
-        tpersec = (c / (e - s)) if e > s else 1.0
-      else:
-        tpersec = (c / e) if e > 0 else 1.0
+      (s, e, c) = self.HISTORY
+      tpersec = (c / (e - s)) if c != 0 else 1.0
       eta = self.secondsToTime(remaining / tpersec, withMillis=False)
       return " (%05.2f downloads per second, ETA: %s)" % (tpersec, eta)
 
@@ -3503,7 +3488,8 @@ class MyTotals(object):
         if not tname.startswith("Main"):
           tcount += 1
       print("  Threads Used: %d" % tcount)
-      print("   Min/Avg/Max: %3.2f / %3.2f / %3.2f" % (self.PMIN, self.PAVG/pcount, self.PMAX))
+      print("   Min/Avg/Max: %05.2f / %05.2f / %05.2f downloads per second" % (1/self.PMAX, pcount/self.PAVG, 1/self.PMIN))
+      print("   Min/Avg/Max: %05.2f / %05.2f / %05.2f seconds per download" % (self.PMIN, self.PAVG/pcount, self.PMAX))
       print("")
 
     print("       Loading: %s" % self.secondsToTime(self.TimeDuration("Load")))
