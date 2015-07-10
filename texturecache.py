@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.4"
+    self.VERSION = "2.0.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -801,6 +801,7 @@ class MyConfiguration(object):
     print("  imdb.threads = %s" % self.IMDB_THREADS)
     print("  imdb.timeout = %s" % self.NoneIsBlank(self.IMDB_TIMEOUT))
     print("  imdb.retry = %s" % self.IMDB_RETRY)
+    print("  imdb.grouping = %s" % self.IMDB_GROUPING)
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
     print("  bin.vcgencmd = %s" % self.NoneIsBlank(self.BIN_VCGENCMD))
     print("  bin.ceccontrol = %s" % self.NoneIsBlank(self.BIN_CECCONTROL))
@@ -1008,16 +1009,14 @@ class MyLogger():
 # Image loader thread class.
 #
 class MyImageLoader(threading.Thread):
-  def __init__(self, isSingle, work_queue, other_queue, error_queue, maxItems,
+  def __init__(self, work_queue, other_queue, error_queue, complete_queue,
                 config, logger, totals, force=False, retry=0):
     threading.Thread.__init__(self)
-
-    self.isSingle = isSingle
 
     self.work_queue = work_queue
     self.other_queue = other_queue
     self.error_queue = error_queue
-    self.maxItems = maxItems
+    self.complete_queue = complete_queue
 
     self.config = config
     self.logger = logger
@@ -1030,44 +1029,23 @@ class MyImageLoader(threading.Thread):
 
     self.totals.init(self.name)
 
-  def showProgress(self, ignoreSelf=False):
-    tac = threading.activeCount() - 1
-    if ignoreSelf: tac = tac - 1
-
-    if self.isSingle:
-      swqs = self.work_queue.qsize()
-      mwqs = self.other_queue.qsize()
-    else:
-      swqs = self.other_queue.qsize()
-      mwqs = self.work_queue.qsize()
-    wqs = swqs + mwqs
-    eqs = self.error_queue.qsize()
-    self.logger.progress("Caching artwork: %d item%s remaining of %d (qs: %d, qm: %d), %d error%s, %d thread%s active%s" % \
-                      (wqs, "s"[wqs==1:],
-                       self.maxItems, swqs, mwqs,
-                       eqs, "s"[eqs==1:],
-                       tac, "s"[tac==1:],
-                       self.totals.getPerformance(wqs)))
-
   def run(self):
     with self.database:
       while not stopped.is_set():
-        self.showProgress()
-
         try:
           item = self.work_queue.get(block=False)
+          self.work_queue.task_done()
 
           if not self.loadImage(item) and not item.missingOK:
             self.error_queue.put(item)
 
-          self.work_queue.task_done()
+          self.complete_queue.put(item)
 
         except Queue.Empty:
           break
 
-    self.showProgress(ignoreSelf=True)
-
     self.totals.stop()
+    self.complete_queue.put(None)
 
   def geturl(self, item):
     PDRETRY = self.retry
@@ -2019,6 +1997,7 @@ class MyJSONComms(object):
         READ_ERR = False
 
       except IOError as e:
+        raise
         # Hack to exit monitor mode when socket dies
         if callback:
           jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}
@@ -3270,6 +3249,7 @@ class MyTotals(object):
     self.THREADS_HIST = {}
     self.HISTORY = (time.time(), time.time(), 0)
     self.PCOUNT = self.PMIN = self.PAVG = self.PMAX = 0
+    self.MCOUNT = self.MMIN = self.MAVG = self.MMAX = 0
 
     self.TOTALS = {}
     self.TOTALS["Skipped"] = {}
@@ -3484,11 +3464,12 @@ class MyTotals(object):
     if len(self.THREADS_HIST) != 0:
       tcount = 0
       pcount = 1 if self.PCOUNT == 0 else self.PCOUNT
+      mavg = 1 if self.MAVG == 0.0 else self.MAVG
       for tname in self.THREADS_HIST:
         if not tname.startswith("Main"):
           tcount += 1
       print("  Threads Used: %d" % tcount)
-      print("   Min/Avg/Max: %05.2f / %05.2f / %05.2f downloads per second" % (1/self.PMAX, pcount/self.PAVG, 1/self.PMIN))
+      print("   Min/Avg/Max: %05.2f / %05.2f / %05.2f downloads per second" % (self.MMIN, self.MCOUNT/mavg, self.MMAX))
       print("   Min/Avg/Max: %05.2f / %05.2f / %05.2f seconds per download" % (self.PMIN, self.PAVG/pcount, self.PMAX))
       print("")
 
@@ -4349,6 +4330,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   single_work_queue = Queue.Queue()
   multiple_work_queue = Queue.Queue()
   error_queue = Queue.Queue()
+  complete_queue = Queue.Queue()
 
   gLogger.out("\n")
 
@@ -4418,7 +4400,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
 
   if not single_work_queue.empty():
     gLogger.log("Creating 1 download thread for single access sites")
-    t = MyImageLoader(True, single_work_queue, multiple_work_queue, error_queue, itemCount,
+    t = MyImageLoader(single_work_queue, multiple_work_queue, error_queue, complete_queue,
                       gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
     THREADS.append(t)
     t.setDaemon(True)
@@ -4428,7 +4410,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     THREADCOUNT = tCount if tCount <= mc else mc
     gLogger.log("Creating %d download thread(s) for multi-access sites" % THREADCOUNT)
     for i in range(THREADCOUNT):
-      t = MyImageLoader(False, multiple_work_queue, single_work_queue, error_queue, itemCount,
+      t = MyImageLoader(multiple_work_queue, single_work_queue, error_queue, complete_queue,
                         gConfig, gLogger, TOTALS, force, gConfig.DOWNLOAD_RETRY)
       THREADS.append(t)
       t.setDaemon(True)
@@ -4436,20 +4418,30 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
   # Start the threads...
   for t in THREADS: t.start()
 
-  try:
-    ALIVE = True
-    while ALIVE:
-      ALIVE = False
-      for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
-      if ALIVE: time.sleep(1.0)
-  except (KeyboardInterrupt, SystemExit):
-    stopped.set()
-    gLogger.progress("Please wait while threads terminate...")
-    ALIVE = True
-    while ALIVE:
-      ALIVE = False
-      for t in THREADS: ALIVE = True if t.isAlive() else ALIVE
-      if ALIVE: time.sleep(0.1)
+  threadcount = len(THREADS)
+
+  updateInterval = 1.0
+  itemsRemaining = itemCount
+  perfhistory = []
+  showProgress(threadcount, itemCount, single_work_queue.qsize(), multiple_work_queue.qsize(), error_queue.qsize(), itemsRemaining)
+  while threadcount > 0:
+    pace = time.time()
+    completed = 0
+    while True:
+      try:
+        qItem = complete_queue.get(block=True, timeout=updateInterval)
+        complete_queue.task_done()
+        if qItem is None:
+          threadcount -= 1
+        else:
+          completed += 1
+          itemsRemaining -= 1
+        if (time.time() - pace) >= updateInterval or threadcount <= 0:
+          break
+      except Queue.Empty:
+        break
+    showProgress(threadcount, itemCount, single_work_queue.qsize(), multiple_work_queue.qsize(), error_queue.qsize(),
+                  itemsRemaining, completed, time.time() - pace, perfhistory)
 
   TOTALS.TimeEnd(mediatype, "Download")
 
@@ -4463,6 +4455,48 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
       name = item.getFullName()[:40]
       gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
       gLogger.log("ERROR ITEM: %s" % item)
+
+def showProgress(tRunning, maxItems, swqs, mwqs, ewqs, remaining=0, completed=0, interval=0.0, history=None):
+  c = 0
+  i = 0.0
+
+  # Apply a smoothing function based on fixed number of previous samples
+  if history is not None and interval != 0.0:
+    history.insert(0, (completed, interval))
+    if len(history) > 15: history.pop()
+    for p in history:
+      c += p[0]
+      i += p[1]
+
+  if i != 0.0:
+    # Smoothed tpersec
+    tpersec = c / i if i != 0.0 else 0.0
+    # Instantaneous tpersec - if sub-second don't normalise to a second as it results in erroneous value
+    if interval < 1.0:
+      itpersec = completed
+    else:
+      itpersec = completed / interval if interval != 0.0 else 0.0
+  else:
+    tpersec = itpersec = 0.0
+
+  # Accumulate per-second download stats
+  TOTALS.MCOUNT += completed
+  TOTALS.MAVG += interval
+  if TOTALS.MMIN == 0 or TOTALS.MMIN > itpersec:
+    TOTALS.MMIN = itpersec
+  if TOTALS.MMAX < itpersec:
+    TOTALS.MMAX = itpersec
+
+  eta = TOTALS.secondsToTime(remaining / tpersec, withMillis=False) if tpersec != 0.0 else "**:**:**"
+
+  msg = " (%05.2f downloads per second, ETA: %s)" % (itpersec, eta)
+
+  gLogger.progress("Caching artwork: %d item%s remaining of %d (qs: %d, qm: %d), %d error%s, %d thread%s active%s" % \
+                    (remaining, "s"[remaining==1:],
+                     maxItems, swqs, mwqs,
+                     ewqs, "s"[ewqs==1:],
+                     tRunning, "s"[tRunning==1:],
+                     msg))
 
 def matchTextures(mediatype, mediaitems, jcomms, database, force, nodownload):
 
