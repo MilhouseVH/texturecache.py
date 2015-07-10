@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.5"
+    self.VERSION = "2.0.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1997,7 +1997,6 @@ class MyJSONComms(object):
         READ_ERR = False
 
       except IOError as e:
-        raise
         # Hack to exit monitor mode when socket dies
         if callback:
           jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}

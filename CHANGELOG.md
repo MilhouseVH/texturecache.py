@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.6 (10/07/2015)
+* Fix: Remove debug code.
+
 ##Version 2.0.5 (10/07/2015)
 * Chg: Simplify processing of ImageLoader (caching) threads. Update progress in main thread, and pace output of progress updates to approximately one update per second, showing instantaneous downloads per second with estimated completion time based on up to 15 previous samples.
 
