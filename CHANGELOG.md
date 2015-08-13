@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.9 (13/08/2015)
+* Fix: Add `file` to url decoded items when dumping with decode
+
 ##Version 2.0.8 (13/08/2015)
 * Add: Small extension of previous fix
 

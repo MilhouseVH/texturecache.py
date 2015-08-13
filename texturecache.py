@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.8"
+    self.VERSION = "2.0.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2598,7 +2598,7 @@ class MyJSONComms(object):
       for field in item:
         if field in ["seasons", "episodes", "channels", "tc.members"]:
           self.unquoteArtwork(item[field])
-        elif field in ["fanart", "thumbnail"]:
+        elif field in ["file", "fanart", "thumbnail"]:
           item[field] = MyUtility.normalise(item[field])
         elif field == "art":
           art = item["art"]
