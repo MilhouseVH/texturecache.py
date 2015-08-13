@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.7"
+    self.VERSION = "2.0.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4846,7 +4846,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
                 if qa_check_artfile_exists(jcomms, mediatype, item, i):
                   missing["URL %s %s, local is available" % (j, qafailtype.pattern)] = True
                 else:
-                  missing["URL %s %s, local not found" % (j, qafailtype.pattern)] = False
+                  missing["URL %s %s, local not found" % (j, qafailtype.pattern)] = gConfig.QA_FAIL_MISSING_LOCAL_ART
               else:
                 missing["URL %s %s" % (j, qafailtype.pattern)] = True
               FAILED = True

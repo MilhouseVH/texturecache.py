@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.0.8 (13/08/2015)
+* Add: Small extension of previous fix
+
 ##Version 2.0.7 (13/08/2015)
 * Add: During `qax`, when artwork is missing and not found locally, continue to refresh (ie. fail) the item if `qa.fail.missinglocalart` is `yes` (default: `no`).
 
