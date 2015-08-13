@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.6"
+    self.VERSION = "2.0.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -308,6 +308,7 @@ class MyConfiguration(object):
 
     self.QA_FILE = self.getBoolean(config, "qafile", "no")
     self.QA_FAIL_CHECKEXISTS = self.getBoolean(config, "qa.fail.checkexists", "yes")
+    self.QA_FAIL_MISSING_LOCAL_ART = self.getBoolean(config, "qa.fail.missinglocalart", "no")
     self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls, allowundefined=True)
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
@@ -761,6 +762,7 @@ class MyConfiguration(object):
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
     print("  qa.nfo.refresh = %s%s" % (self.NoneIsBlank(self.QA_NFO_REFRESH), " (%s)" % self.qa_nfo_refresh_date_fmt if self.qa_nfo_refresh_date_fmt else ""))
     print("  qa.fail.checkexists = %s" % self.BooleanIsYesNo(self.QA_FAIL_CHECKEXISTS))
+    print("  qa.fail.missinglocalart = %s" % self.BooleanIsYesNo(self.QA_FAIL_MISSING_LOCAL_ART))
     print("  qa.fail.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_FAIL_TYPES)))
     print("  qa.warn.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_WARN_TYPES)))
 
@@ -2003,8 +2005,8 @@ class MyJSONComms(object):
           self.handleResponse(id, jdata, callback)
           return jdata
         elif ignoreSocketError == False:
-            self.logger.err("ERROR: Socket closed prematurely - exiting", newLine=True, log=True)
-            sys.exit(2)
+          self.logger.err("ERROR: Socket closed prematurely - exiting", newLine=True, log=True)
+          sys.exit(2)
         else:
           return {}
 
@@ -4829,7 +4831,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               if qa_check_artfile_exists(jcomms, mediatype, item, i):
                 missing["missing %s, local is available" % j] = True
               else:
-                missing["missing %s, local not found" % j] = False
+                missing["missing %s, local not found" % j] = gConfig.QA_FAIL_MISSING_LOCAL_ART
             else:
               missing["missing %s" % j] = True
           else:
