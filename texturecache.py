@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.10"
+    self.VERSION = "2.1.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4044,6 +4044,11 @@ class MyUtility(object):
   def SinceEpoch(dt):
     return int((dt - MyUtility.EPOCH).total_seconds())
 
+  @staticmethod
+  def getVersion(strVersion):
+    fields = strVersion.split(".")
+    return int("%03d%03d%03d" % (int(fields[0]), int(fields[1]), int(fields[2])))
+
 #
 # Load data using JSON-RPC. In the case of TV Shows, also load Seasons
 # and Episodes into a single data structure.
@@ -7456,7 +7461,7 @@ def checkUpdate(argv, forcedCheck=False):
     gLogger.out("Latest  Version: %s" % ("v" + remoteVersion if remoteVersion else "Unknown"), newLine=True)
     gLogger.out("", newLine=True)
 
-  if remoteVersion and remoteVersion > gConfig.VERSION:
+  if remoteVersion and MyUtility.getVersion(remoteVersion) > MyUtility.getVersion(gConfig.VERSION):
     out_method = gLogger.out if forcedCheck else gLogger.err
     out_method("A new version of this script is available - use the \"update\" option to apply update.", newLine=True)
     out_method("", newLine=True)
@@ -7562,14 +7567,14 @@ def getLatestVersion_ex(url, headers=None):
 def downloadLatestVersion(argv, force=False, autoupdate=False):
   (remoteVersion, remoteHash) = getLatestVersion(argv)
 
-  if autoupdate and (not remoteVersion or remoteVersion <= gConfig.VERSION):
+  if autoupdate and (not remoteVersion or MyUtility.getVersion(remoteVersion) <= MyUtility.getVersion(gConfig.VERSION)):
     return False
 
   if not remoteVersion:
     gLogger.err("FATAL: Unable to determine version of the latest file, check internet and github.com are available.", newLine=True)
     sys.exit(2)
 
-  if not force and remoteVersion <= gConfig.VERSION:
+  if not force and MyUtility.getVersion(remoteVersion) <= MyUtility.getVersion(gConfig.VERSION):
     gLogger.err("Current version is already up to date - no update required.", newLine=True)
     sys.exit(2)
 

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.0 (15/08/2015)
+* Fix: Version comparison error - 2.0.10 is not greater than 2.0.9, apparently..."
+
 ##Version 2.0.10 (15/08/2015)
 * Fix: Correctly handle newlines passed from the command line when performing a single `set`
 
