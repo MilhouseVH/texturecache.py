@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.0"
+    self.VERSION = "2.1.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -92,6 +92,7 @@ class MyConfiguration(object):
                                   "openplayercoredef":(6, 18, 3),
                                   "libshowdialogs":   (6, 19, 0),
                                   "exitcode":         (6, 21, 0),
+                                  "refreshrefactor":  (6, 27, 0),
                                   "profiledirectory": (999, 99, 9)
                                  }
 
@@ -313,6 +314,7 @@ class MyConfiguration(object):
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
     (self.QA_NFO_REFRESH, self.qa_nfo_refresh_date, self.qa_nfo_refresh_date_fmt) = self.getRelativeDateAndFormat(config, "qa.nfo.refresh", "")
+    self.QA_USEOLDREFRESHMETHOD = self.getBoolean(config, "qa.useoldrefreshmethod", "no")
 
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
 
@@ -492,6 +494,9 @@ class MyConfiguration(object):
 
     #https://github.com/xbmc/xbmc/pull/5786
     self.JSON_HAS_EXIT_CODE = self.HasJSONCapability("exitcode")
+
+    #https://github.com/xbmc/xbmc/pull/7306
+    self.JSON_HAS_REFRESH_REFACTOR = self.HasJSONCapability("refreshrefactor")
 
     # Support profile switching?
     self.JSON_HAS_PROFILE_SUPPORT = self.HasJSONCapability("profilesupport")
@@ -761,6 +766,7 @@ class MyConfiguration(object):
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
     print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
     print("  qa.nfo.refresh = %s%s" % (self.NoneIsBlank(self.QA_NFO_REFRESH), " (%s)" % self.qa_nfo_refresh_date_fmt if self.qa_nfo_refresh_date_fmt else ""))
+    print("  qa.useoldrefreshmethod = %s" % (self.BooleanIsYesNo(self.QA_USEOLDREFRESHMETHOD)))
     print("  qa.fail.checkexists = %s" % self.BooleanIsYesNo(self.QA_FAIL_CHECKEXISTS))
     print("  qa.fail.missinglocalart = %s" % self.BooleanIsYesNo(self.QA_FAIL_MISSING_LOCAL_ART))
     print("  qa.fail.urls = %s" % self.NoneIsBlank(self.getListFromPattern(self.QA_FAIL_TYPES)))
@@ -2255,6 +2261,9 @@ class MyJSONComms(object):
   def rescanDirectories(self, workItems):
     if workItems == {}: return
 
+    doRefresh = (gConfig.JSON_HAS_REFRESH_REFACTOR and not gConfig.QA_USEOLDREFRESHMETHOD)
+    method = "Refresh" if doRefresh else "Remove"
+
     # Seems to be a bug in rescan method when scanning the root folder of a source
     # So if any items are in the root folder, just scan the entire library after
     # items have been removed.
@@ -2276,27 +2285,37 @@ class MyJSONComms(object):
 
       if mediatype == "movies":
         scanMethod = "VideoLibrary.Scan"
-        removeMethod = "VideoLibrary.RemoveMovie"
+        removeMethod = "VideoLibrary.%sMovie" % method
         idName = "movieid"
       elif mediatype == "tvshows":
         scanMethod = "VideoLibrary.Scan"
-        removeMethod = "VideoLibrary.RemoveTVShow"
+        removeMethod = "VideoLibrary.%sTVShow" % method
         idName = "tvshowid"
       elif mediatype == "episodes":
         scanMethod = "VideoLibrary.Scan"
-        removeMethod = "VideoLibrary.RemoveEpisode"
+        removeMethod = "VideoLibrary.%sEpisode" % method
         idName = "episodeid"
       else:
         raise ValueError("mediatype [%s] not yet implemented" % mediatype)
 
-      for libraryid in workItems[directory]:
-        self.logger.log("Removing %s %d from media library." % (idName, libraryid))
+      for libraryitem in workItems[directory]:
+        libraryid = libraryitem["id"]
+        if doRefresh:
+          self.logger.log("Refreshing %s %d in media library." % (idName, libraryid))
+        else:
+          self.logger.log("Removing %s %d from media library." % (idName, libraryid))
         REQUEST = {"method": removeMethod, "params":{idName: libraryid}}
-        self.sendJSON(REQUEST, "libRemove")
+        if doRefresh:
+          REQUEST["params"]["ignorenfo"] = False
+          if mediatype == "tvshows":
+            REQUEST["params"]["refreshepisodes"] = False
+        self.sendJSON(REQUEST, "lib%s" % method)
+        if doRefresh:
+          gLogger.out("Updating Library: Refreshed %s %d [%s]" % (idName, libraryid, libraryitem["name"]), newLine=True)
 
-      if not rootScan: self.scanDirectory(scanMethod, path=dpath)
+      if not doRefresh and not rootScan: self.scanDirectory(scanMethod, path=dpath)
 
-    if rootScan: self.scanDirectory(scanMethod)
+    if not doRefresh and rootScan: self.scanDirectory(scanMethod)
 
   def scanDirectory(self, scanMethod, path=None):
     if path and path != "":
@@ -4919,7 +4938,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       if "file" in item and mFAIL:
         dir = "%s;%s" % (mediatype, os.path.dirname(unstackFiles(item["file"])[0]))
         libraryids = workItems[dir] if dir in workItems else []
-        libraryids.append(libraryid)
+        libraryids.append({"id": libraryid, "name": name})
         workItems[dir] = libraryids
 
   if mitems is None:

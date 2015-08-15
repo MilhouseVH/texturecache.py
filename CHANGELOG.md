@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.1 (15/08/2015)
+* Add: Support `VideoLibrary.RefreshFoo` methods (movie, tvshow, episode) instead of performing a `VideoLibrary.RemoveFoo` followed by `VideoLibrary.Scan`. New methods will be used by default when available (JSON API >= 6.27.0). Disable new methods with `qa.useoldrefreshmethod=yes`. See https://github.com/xbmc/xbmc/pull/7306 for details.
+
 ##Version 2.1.0 (15/08/2015)
 * Fix: Version comparison error - 2.0.10 is not greater than 2.0.9, apparently..."
 
