@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.0.9"
+    self.VERSION = "2.0.10"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -5621,7 +5621,7 @@ def setDetails_single(mtype, libraryid, kvpairs, dryRun=True):
   # Fix unicode bacsklash mangling from the command line...
   ukvpairs = []
   for kv in kvpairs:
-    ukvpairs.append(MyUtility.toUnicode(kv))
+    ukvpairs.append(MyUtility.toUnicode(kv).replace("\\n","\n"))
 
   jcomms = MyJSONComms(gConfig, gLogger) if not dryRun else None
   setDetails_worker(jcomms, mtype, libraryid, ukvpairs, None, dryRun, None, None, typeconversion=True)
