@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.1"
+    self.VERSION = "2.1.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4077,7 +4077,6 @@ class MyUtility(object):
 def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, \
                       decode=False, ensure_ascii=True, nodownload=False, lastRun=False, \
                       labels=None, query="", filename=None, wlBackup=True):
-
   if mediatype not in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "musicvideos",
                        "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.err("Error: %s is not a valid media class" % mediatype, newLine=True)
@@ -5333,10 +5332,10 @@ def watchedBackup(mediatype, filename, data, title_name, id_name, work=None, mit
 
     if "seasons" in item:
       watchedBackup("seasons", filename, item["seasons"], "label", "season", \
-              work=workItems, mitems=mediaitems, showName=title)
+                    work=workItems, mitems=mediaitems, showName=title)
     if "episodes" in item:
       watchedBackup("episodes", filename, item["episodes"], "label", "episodeid", \
-              work=workItems, mitems=mediaitems, showName=showName, season=title)
+                    work=workItems, mitems=mediaitems, showName=showName, season=title)
       season = None
 
   if mitems is None:
@@ -5394,10 +5393,10 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
 
     if "seasons" in item:
       watchedRestore("seasons", jcomms, filename, item["seasons"], "label", "season", \
-              work=workItems, mitems=mediaitems, showName=title)
+                      work=workItems, mitems=mediaitems, showName=title)
     if "episodes" in item:
       watchedRestore("episodes", jcomms, filename, item["episodes"], "label", "episodeid", \
-              work=workItems, mitems=mediaitems, showName=showName, season=title)
+                      work=workItems, mitems=mediaitems, showName=showName, season=title)
       season = None
 
   if mitems is None:
@@ -5421,7 +5420,7 @@ def watchedRestore(mediatype, jcomms, filename, data, title_name, id_name, work=
           ERROR += 1
     gLogger.out("", newLine=True)
     gLogger.out("Watched List item summary: Restored %d, Unchanged %d, Unmatched %d, Failed %d\n" %
-        (RESTORED, UNCHANGED, UNMATCHED, ERROR), newLine=True)
+                (RESTORED, UNCHANGED, UNMATCHED, ERROR), newLine=True)
 
 def watchedItemUpdate(jcomms, mediaitem, shortName):
   if mediaitem.mtype == "movies":
@@ -7045,8 +7044,11 @@ def usage(EXIT_CODE):
           purge hashed;unhashed;all pattern [pattern [pattern]] | \
           purgetest hashed;unhashed;all pattern [pattern [pattern]] | \
           fixurls | \
-          remove mediatype libraryid | watched class backup <filename> | \
-          watched class restore <filename> | duplicates | set | testset | set class libraryid key1 value 1 [key2 value2...] | \
+          remove mediatype libraryid | \
+          watched class backup <filename> [filter] | \
+          watched class restore <filename> [filter] | \
+          duplicates | \
+          set | testset | set class libraryid key1 value 1 [key2 value2...] | \
           missing class src-label [src-label]* | ascan [path] |vscan [path] | aclean | vclean | \
           sources [media] | sources media [label] | directory path | rdirectory path | readfile infile [outfile ; -] | \
           notify title message [displaytime [image]] | \
@@ -7088,7 +7090,7 @@ def usage(EXIT_CODE):
   print("  purgetest  Dry-run version of purge")
   print("  fixurls    Output new urls for Movies, Sets and TVShows that have urls containing both forward and backward slashes. Output suitable as stdin for set option")
   print("  remove     Remove a library item - specify type (movie, tvshow, episode or musicvideo) and libraryid")
-  print("  watched    Backup or restore movies and tvshows watched statuses, to/from the specified text file")
+  print("  watched    Backup or restore movies and tvshows watched status and restore points, to/from the specified text file")
   print("  duplicates List movies with multiple versions as determined by imdb number")
   print("  set        Set values on objects (movie, tvshow, episode, musicvideo, album, artist, song) eg. \"set movie 312 art.fanart 'http://assets.fanart.tv/fanart/movies/19908/hdmovielogo/zombieland-5145e97ed73a4.png'\"")
   print("  testset    Dry run version of set")
@@ -7845,11 +7847,12 @@ def main(argv):
   elif argv[0] == "missing" and len(argv) >= 3:
     jsonQuery(action="missing", mediatype=argv[1], labels=argv[2:])
 
-  elif argv[0] == "watched" and len(argv) == 4:
+  elif argv[0] == "watched" and argv[2] in ["backup", "restore"] and len(argv) in [4, 5]:
+    _filter = "" if len(argv) == 4 else argv[4]
     if argv[2] == "backup":
-      jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=True)
+      jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=True, filter=_filter)
     elif argv[2] == "restore":
-      jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=False)
+      jsonQuery(action="watched", mediatype=argv[1], filename=argv[3], wlBackup=False, filter=_filter)
     else:
       usage(1)
 
