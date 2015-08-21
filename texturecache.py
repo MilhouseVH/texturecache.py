@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.2"
+    self.VERSION = "2.1.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -314,7 +314,7 @@ class MyConfiguration(object):
     self.QA_WARN_TYPES = self.getPatternFromList(config, "qa.warn.urls", "")
 
     (self.QA_NFO_REFRESH, self.qa_nfo_refresh_date, self.qa_nfo_refresh_date_fmt) = self.getRelativeDateAndFormat(config, "qa.nfo.refresh", "")
-    self.QA_USEOLDREFRESHMETHOD = self.getBoolean(config, "qa.useoldrefreshmethod", "no")
+    self.QA_USEOLDREFRESHMETHOD = self.getBoolean(config, "qa.useoldrefreshmethod", "yes")
 
     self.CACHE_CAST_THUMB = self.getBoolean(config, "cache.castthumb", "no")
 

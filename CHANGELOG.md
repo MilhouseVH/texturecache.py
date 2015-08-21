@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.3 (21/08/2015)
+* Chg: Disable `VideoLibrary.RefreshFoo` support by default, as current implementation is unusable without a `Finished` (completion) notification.
+
 ##Version 2.1.2 (20/08/2015)
 * Add: Allow `watched` backup and restore operations to be filtered (ie. backup/restore for a specific tvshow or movie).
 
