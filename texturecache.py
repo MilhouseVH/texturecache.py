@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.3"
+    self.VERSION = "2.1.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -5943,9 +5943,11 @@ def pruneCache(remove_nonlibrary_artwork=False):
   (libraryFiles, mediaFiles) = getAllFiles(keyFunction=getKeyFromFilename)
 
   re_search = []
-  # addon
+  # addons
+  re_search.append(re.compile(r"^.*[/\\]\.kodi[/\\]addons[/\\].*"))
   re_search.append(re.compile(r"^.*[/\\]\.xbmc[/\\]addons[/\\].*"))
-  # mirror
+  # mirrors
+  re_search.append(re.compile(r"^http://mirrors.kodi.tv/addons/.*"))
   re_search.append(re.compile(r"^http://mirrors.xbmc.org/addons/.*"))
 
   database = MyDB(gConfig, gLogger)

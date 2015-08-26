@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.4 (26/08/2015)
+* Add: Support kodi.tv mirror
+
 ##Version 2.1.3 (21/08/2015)
 * Chg: Disable `VideoLibrary.RefreshFoo` support by default, as current implementation is unusable without a `Finished` (completion) notification.
 
