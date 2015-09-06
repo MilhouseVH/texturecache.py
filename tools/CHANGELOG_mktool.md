@@ -1,6 +1,9 @@
 
 #Changelog
 
+## 25/08/2015
+* Add: Support extrafanart and extrathumbs artwork types (fanart# and thumb#, respectively). Specify the maximum number of items per artwork type with `--extrafanartmax` and `--extrathumbsmax` - both default to 4 (existing items in excess of this amount will be removed if `--nokeep` is specified). The assumed location of the `extrafanart` and `extrathumbs` directories will be alongside the corresponding media unless a shared local directory path is specified for either `--extrafanart` or `--extrathumbs`. See http://kodi.wiki/view/Extra_fanart for naming details.
+
 ## 28/11/2014
 * Fix: Unicode issue when displaying urls
 

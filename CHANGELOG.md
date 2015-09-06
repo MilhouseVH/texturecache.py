@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.5 (06/09/2015)
+* Chg: Catch all exceptions in imdb request threads
+
 ##Version 2.1.4 (26/08/2015)
 * Add: Support kodi.tv mirror
 

@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.4"
+    self.VERSION = "2.1.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -3908,7 +3908,7 @@ class MyUtility(object):
         except Exception as e:
           gLogger.log("Exception during imdb processing: imdbnumber [%s], key [%s]. msg [%s]" % (imdbnumber, key, str(e)))
       return newdata
-    except (urllib2.URLError, socket.timeout) as e:
+    except Exception as e:
       gLogger.log("Exception during imdb processing: imdbnumber [%s], timeout [%s], msg [%s]" % (imdbnumber, qtimeout, str(e)))
       return {}
 

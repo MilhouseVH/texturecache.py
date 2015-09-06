@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.2.4
+#version 0.2.5
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -86,6 +86,14 @@ class MyUtility(object):
           pass
 
     return value
+
+  # Used to extract # from fanart# or thumb#
+  @staticmethod
+  def extract_index(atype, value):
+    try:
+      return int(value[len(atype) - 1:])
+    except:
+      return 0
 
 def printout(msg, newline=True):
   endchar = "\n" if newline else ""
@@ -293,18 +301,27 @@ def findMostFrequentSetParent(setname, members, level=0, counts=None):
     return "%s%s" % (sorted_counts[0], getSlash(sorted_counts[0]))
 
 def formatArtworkFilename(args, mediatype, filename, suffix, season, singleFolder=False):
+  joinchar = getSlash(filename)
+
   if mediatype == "movie":
-    if singleFolder:
-      parent = os.path.dirname(filename)
-      bslash = filename.find("\\")
-      fslash = filename.find("/")
-      if bslash > fslash:
-        return "%s\\%s" % (parent, suffix)
+    if suffix == "fanart#":
+      parent = args.extrafanart if args.extrafanart else "%s%s%s" % (os.path.dirname(filename), joinchar, "extrafanart")
+      if singleFolder and args.extrafanart is None:
+        return "%s%s%s" % (parent, joinchar, suffix)
       else:
-        return "%s/%s" % (parent, suffix)
+        return "%s%s%s-%s" % (parent, joinchar, os.path.basename(filename), suffix)
+    elif suffix == "thumb#":
+      parent = args.extrathumbs if args.extrathumbs else "%s%s%s" % (os.path.dirname(filename), joinchar, "extrathumbs")
+      if singleFolder and args.extrathumbs is None:
+        return "%s%s%s" % (parent, joinchar, suffix)
+      else:
+        return "%s%s%s-%s" % (parent, joinchar, os.path.basename(filename), suffix)
     else:
-      return "%s-%s" % (filename, suffix)
-  if mediatype == "episode":
+      if singleFolder:
+        return "%s%s%s" % (os.path.dirname(filename), joinchar, suffix)
+      else:
+        return "%s-%s" % (filename, suffix)
+  elif mediatype == "episode":
     return "%s-%s" % (filename, suffix)
   elif mediatype == "season":
     if season == 0:
@@ -323,8 +340,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   workitem = {}
   workitem["items"] = {}
-  keepitem = {}
-  keepitem["items"] = {}
+  previtems = {}
 
   # Use first file in files[] for "set"
   if mediatype == "set":
@@ -358,35 +374,52 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
   art = media["art"]
 
   for artitem in download_items:
-    oldname = art.get(artitem["type"], None)
-    if oldname: oldname = MyUtility.toutf8(oldname[8:-1])
-
-    label = "art.%s" % artitem["type"]
-
-    if label in keepitem["items"]:
-      debug(1, "already found a value for artwork type [%s] - ignoring" % artitem["type"])
+    if artitem["type"] in previtems:
+      debug(1, "already found a value for artwork type [%s] - ignoring repeated item" % artitem["type"])
       continue
 
     artpath_m = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None), singleFolder=False)
     artpath_s = formatArtworkFilename(args, mediatype, filename, artitem["suffix"], media.get("season", None), singleFolder=True)
 
-    newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath_m, artpath_s)
+    if artitem["type"] in ["fanart#", "thumb#"]:
+      if mediatype not in ["movie", "tvshow"]:
+        debug(1, "invalid artwork type [%s] for media [%s] - ignoring" % (artitem["type"], mediatype))
+        continue
 
-    if not newname and oldname:
-      debug2(artitem["type"], "Assigning null value to library item")
-      workitem["items"][label] = None
-      if args.info:
-        info(args, "Removing", artitem["type"], mediatitle)
+      m_regex = re.compile("%s[0-9]+" % artitem["type"][:-1])
+      m_max = args.extrafanartmax + 1 if artitem["type"] == "fanart#" else args.extrathumbsmax + 1
+
+      m_items = {}
+      for index in range(1, m_max):
+        m_items[index] = False
+      for aitem in [MyUtility.extract_index(artitem["type"], x) for x in art if m_regex.match(x)]:
+        if aitem not in m_items:
+          m_items[aitem] = True
+
+      for m_index in sorted(m_items):
+        m_type = "%s%d" % (artitem["type"][:-1], m_index)
+
+        if m_type in previtems:
+          debug(1, "already found a value for artwork type [%s] - ignoring repeated item (expanded from %s)" % (m_type, artitem["type"]))
+          continue
+
+        m_artpath_m = re.sub("%s$" % artitem["suffix"], m_type, artpath_m)
+        m_artpath_s = re.sub("%s$" % artitem["suffix"], m_type, artpath_s)
+
+        oldname = art.get(m_type, None)
+        if oldname: oldname = MyUtility.toutf8(oldname[8:-1])
+
+        newname = processArtwork(args, mediatype, media, mediatitle, m_type, mediafile, oldname, m_artpath_m, m_artpath_s, is_excess=m_items[m_index])
+        updateworkitem(args, m_type, mediatitle, workitem, oldname, newname)
+
+        previtems[m_type] = True
     else:
-      if newname and newname != oldname:
-        debug2(artitem["type"], "Changing library value to:", newname)
-        workitem["items"][label] = newname
-        keepitem["items"][label] = newname
-        if args.info:
-          info(args, "Replacing", artitem["type"], mediatitle)
-      else:
-        debug2(artitem["type"], "No library change required, keeping:", oldname)
-        keepitem["items"][label] = newname
+      oldname = art.get(artitem["type"], None)
+      if oldname: oldname = MyUtility.toutf8(oldname[8:-1])
+      newname = processArtwork(args, mediatype, media, mediatitle, artitem["type"], mediafile, oldname, artpath_m, artpath_s, is_excess=False)
+      updateworkitem(args, artitem["type"], mediatitle, workitem, oldname, newname)
+
+    previtems[artitem["type"]] = True
 
   if args.check:
     clist = args.check if args.check != ["all"] else [x for x in art if not x.startswith("tvshow.") ]
@@ -398,8 +431,30 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   return workitem
 
-def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname_multi, pathname_single):
+def updateworkitem(args, art_type, mediatitle, workitem, oldname, newname):
+  label = "art.%s" % art_type
+
+  if not newname and oldname:
+    debug2(art_type, "Assigning null value to library item")
+    workitem["items"][label] = None
+    if args.info:
+      info(args, "Removing", art_type, mediatitle)
+  else:
+    if newname and newname != oldname:
+      debug2(art_type, "Changing library value to:", newname)
+      workitem["items"][label] = newname
+      if args.info:
+        info(args, "Replacing", art_type, mediatitle)
+    else:
+      if label in workitem["items"]: del workitem["items"][label]
+      debug2(art_type, "No library change required, keeping:", oldname)
+
+def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname_multi, pathname_single, is_excess):
   debug(1, "artwork type [%s] known by XBMC as [%s]" % (atype, currentname))
+
+  # if this is an excess fanart# or thumb#, return nothing
+  if is_excess:
+    return None if args.nokeep else currentname
 
   # See if we already have a file of the desired artwork type, either in
   # jpg or png format. If found, use it as the source for this artwork type.
@@ -576,6 +631,8 @@ def showConfig(args, download_items, season_items, episode_items):
   printerr("  Local Path    : %s" % _blank(LOCAL_DIR))
   printerr("  Alt Local     : %s" % _blank(LOCAL_ALT))
   printerr("  XBMC Path     : %s" % _blank(XBMC_PATH))
+  printerr("  Extra Fanart  : %s (max: %d)" % (_blank(args.extrafanart), args.extrafanartmax))
+  printerr("  Extra Thumbs  : %s (max: %d)" % (_blank(args.extrathumbs), args.extrathumbsmax))
   printerr("  Read Only     : %s" % ("Yes" if args.readonly else "No"))
   printerr("  Dry Run       : %s" % ("Yes" if args.dryrun else "No"))
   printerr("  Single Folder : %s" % ("Yes" if args.singlefolders else "No"))
@@ -655,11 +712,13 @@ def init():
                             local urls. Written to stdout if FILENAME is - or not specified")
 
   parser.add_argument("--dryrun", action="store_true", \
-                      help="Don't create anything (although downloads will be attempted)")
+                      help="Attempt downloads, but don't create any new files")
 
   parser.add_argument("-r", "--readonly", action="store_true", \
-                      help="Don't download (or, if specified, copy from --altlocal) new artwork, \
-                            only use existing --local artwork")
+                      help="Don't download (or, if specified, copy from --altlocal) any new artwork, \
+                            only use existing --local artwork. Warn about artwork that needs to be \
+                            copied or downloaded, unless --nokeep is enabled in which case such artwork \
+                            will be removed.")
 
   parser.add_argument("--ignorebadprefix", action="store_true", \
                       help="Don't display a warning for media files with a path that does not match \
@@ -686,6 +745,20 @@ def init():
 
   parser.add_argument("-nk", "--nokeep", action="store_true", \
                       help="Don't keep artwork if not able to match with pre-existing local artwork")
+
+  parser.add_argument("-xf", "--extrafanart", metavar="PATH", \
+                      help="Local directory path to a single shared extrafanart folder. If not specified, \
+                            alongside media will be assumed for fanart# artwork")
+
+  parser.add_argument("-xfm", "--extrafanartmax", type=int, default=4, metavar="#", \
+                      help="Maximum number of fanart# items to process - default is 4. A value of 0 will clear all items.")
+
+  parser.add_argument("-xt", "--extrathumbs", metavar="PATH", \
+                      help="Local directory path to a single shared extrathumb folder. If not specified, \
+                            alongside media will be assumed for thumb# artwork")
+
+  parser.add_argument("-xft", "--extrathumbsmax", type=int, default=4, metavar="#", \
+                      help="Maximum number of thumb# items to process - default is 4. A value of 0 will clear all items.")
 
   parser.add_argument("--info", action="store_true", \
                       help="Display informational output to stdout")
@@ -721,6 +794,12 @@ def init():
     parser.error("local DIRECTORY %s does not exist!" % LOCAL_DIR)
   if LOCAL_ALT and not os.path.exists(LOCAL_ALT):
     parser.error("alternate local PATH %s does not exist!" % LOCAL_ALT)
+
+  if args.extrafanart and not os.path.exists(args.extrafanart):
+    parser.error("extrafanart local PATH %s does not exist!" % args.extrafanart)
+
+  if args.extrathumbs and not os.path.exists(args.extrathumbs):
+    parser.error("extrathumbs local PATH %s does not exist!" % args.extrathumbs)
 
   if args.input != "-" and not os.path.exists(args.input):
     parser.error("input FILENAME %s does not exist!" % args.input)
@@ -781,7 +860,7 @@ def main(args):
   printerr("")
 
   if args.output:
-    data = json.dumps(workitems, indent=2, ensure_ascii=True, sort_keys=False)
+    data = json.dumps(workitems, indent=2, ensure_ascii=True, sort_keys=True)
     if args.output == "-":
       printout(data)
     else:
