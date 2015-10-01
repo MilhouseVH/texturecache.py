@@ -5,9 +5,9 @@
 
 This facility uses the title and year of each tvshow to query http://omdbapi.com so it can fail if the tvshow title or year differs from that held by imdb.com. In order to overcome this potential mismatch, use `@imdb.translate.tvtitles` to translate your tvshow titles to what imdb.com/omdbapi.com expects
 
-You may also use `@imdb.translate.tvyears` to temporarily alter the year when a tvshow first aired, for when you library uses a different date to that in use by IMDb/OMDb. 
+You may also use `@imdb.translate.tvyears` to temporarily alter the year when a tvshow first aired, for when your library uses a different date to that in use by IMDb/OMDb. 
 
-Finally, use `imdb.ignore.tvtitles` to disable the lookup of those shows that will never be fixed or added imdb.com/omdabpi.com.
+Finally, use `imdb.ignore.tvtitles` to disable the lookup of those shows that will never be fixed or added to omdabpi.com.
 
 All of the above settings accept a list of regex patterns (case insensitive, delimited by pipe character). In the case of the translate options, a replacement value will follow the equal sign (either a year, or a new string - a blank string essentially means the matched string is removed). Note also that the patterns for `imdb.ignore.tvtitles` and `imdb.translate.tvyears` will be matched against the original tvshow title and not the temporarily translated title.
 
@@ -24,7 +24,7 @@ In the case of `imdb.translate.tvyears`, the tvshow "Battlestar Galactica" (aka 
 
 One new setting that applies to movies and episodes: If you only wish to process movies or episodes added to the media library within a specific period then set `@imdb.period=#`, eg. `imdb.period=30` would consider only movies or episodes added during the previous 30 days. There is no default value in which case all movies/episodes will be considered.
 
-See the logfile for additional information relating to omdbapi.com query failures. When a tvshow can't be found on omdbapi.com it's almost always going to be due to a mismatched title and/or year. When an episode can't be found  - but the tvshow does exist - then the episode is simply not available on omdbapi.com - many series appear to be incomplete, sometimes missing just one or two episodes, sometimes almost all episodes may be missing. It's possible a missing tvshow or the missing episodes may be added to omdbapi.com in the future, however if there is a lot of missing episodes for an old tvshow (ie. it's not going to be a added to omdbapi.com any time soon) then you have the option to ignore the tvshow entirely by adding a suitable pattern to `imdb.ignore.title`.
+See the logfile for additional information relating to omdbapi.com query failures. When a tvshow can't be found on omdbapi.com it's almost always going to be due to a mismatched title and/or year. When an episode can't be found  - but the tvshow does exist - then the episode is simply not available on omdbapi.com - many series appear to be incomplete, sometimes missing just one or two episodes, sometimes almost all episodes may be missing. It's possible a missing tvshow or the missing episodes may be added to omdbapi.com in the future, however if there is a lot of missing episodes for an old tvshow the chances are slim of (IMHO) of this happening in which case you have the option to ignore the tvshow entirely by adding a suitable pattern to `imdb.ignore.tvtitles`.
 
 ##Version 2.1.5 (06/09/2015)
 * Chg: Catch all exceptions in imdb request threads
