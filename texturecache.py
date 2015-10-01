@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.6"
+    self.VERSION = "2.1.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -573,7 +573,7 @@ class MyConfiguration(object):
           if default is None and not allowundefined:
             raise ConfigParser.NoOptionError(aKey, "%s (or global section)" % self.THIS_SECTION)
       else:
-        if default is None and not allowNone:
+        if default is None and not allowundefined:
           raise ConfigParser.NoOptionError(aKey, self.GLOBAL_SECTION)
 
     return value if value else default

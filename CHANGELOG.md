@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.7 (01/10/2015)
+* Fix: Close #29
+
 ##Version 2.1.6 (01/10/2015)
 * Add: `imdb` support for tvshows. The usable fields for tvshows and episodes are `votes`, `ratings`, `plot` (typically an overview at the tvshow level, detail at the episode level) and `genre` (which is set only at the tvshow level). Configure the fields to be set using `@imdb.fields.tvshows`, eg. `@imdb.fields.tvshows=plot,votes,ratings`. The default fields are `votes` and `ratings`. 
 
