@@ -1,5 +1,31 @@
 #Changelog
 
+##Version 2.1.6 (01/10/2015)
+* Add: `imdb` support for tvshows. The usable fields for tvshows and episodes are `votes`, `ratings`, `plot` (typically an overview at the tvshow level, detail at the episode level) and `genre` (which is set only at the tvshow level). Configure the fields to be set using `@imdb.fields.tvshows`, eg. `@imdb.fields.tvshows=plot,votes,ratings`. The default fields are `votes` and `ratings`. 
+
+This facility uses the title and year of each tvshow to query http://omdbapi.com so it can fail if the tvshow title or year differs from that held by imdb.com. In order to overcome this potential mismatch, use `@imdb.translate.tvtitles` to translate your tvshow titles to what imdb.com/omdbapi.com expects
+
+You may also use `@imdb.translate.tvyears` to temporarily alter the year when a tvshow first aired, for when you library uses a different date to that in use by IMDb/OMDb. 
+
+Finally, use `imdb.ignore.tvtitles` to disable the lookup of those shows that will never be fixed or added imdb.com/omdabpi.com.
+
+All of the above settings accept a list of regex patterns (case insensitive, delimited by pipe character). In the case of the translate options, a replacement value will follow the equal sign (either a year, or a new string - a blank string essentially means the matched string is removed). Note also that the patterns for `imdb.ignore.tvtitles` and `imdb.translate.tvyears` will be matched against the original tvshow title and not the temporarily translated title.
+
+Examples:
+```
+imdb.ignore.tvtitles = ^Brass Eye|^Connections|^Dynamo: Magician Impossible|^Fresh Meat|^Hamish Macbeth|^The Mighty Boosh|^The Killing|^Sanctuary|^Outnumbered
+imdb.translate.tvtitles = ^Frank Herbert's=|^Marvel's=|Hitchhiker's=Hitch Hikers
+imdb.translate.tvyears = ^Battlestar Galactica=1978|^Wallander$=2005
+```
+
+With the above `imdb.translate.tvtitles` example: "Frank Herbert's Children of Dune" will be temporarily changed to "Children of Dune", "Marvel's Agent Carter" and "Marvel's Daredevil" to "Agent Carter" and "Daredevil" respectively, and "The Hitchhiker's Guide to the Galaxy" as "The Hitch Hikers Guide to the Galaxy".
+
+In the case of `imdb.translate.tvyears`, the tvshow "Battlestar Galactica" (aka "Galactica 1980") will have its year temporarily changed from 1980 to 1978 when querying omdbapi.com as the episode data for "Galactica 1980" (by which it is known on tvdb.com) is listed under "Battlestar Galactica (1978)" on imdb.com/omdbapi.com. As for Wallander, I have two Wallander tvshows: "Wallander" (the original Swedish, with the incorrect year - 2006 instead of 2005) and "Wallander (UK)" (the UK 2008 remake). The `^Wallander$` pattern ensures that the year is changed only for the Swedish tvshow.
+
+One new setting that applies to movies and episodes: If you only wish to process movies or episodes added to the media library within a specific period then set `@imdb.period=#`, eg. `imdb.period=30` would consider only movies or episodes added during the previous 30 days. There is no default value in which case all movies/episodes will be considered.
+
+See the logfile for additional information relating to omdbapi.com query failures. When a tvshow can't be found on omdbapi.com it's almost always going to be due to a mismatched title and/or year. When an episode can't be found  - but the tvshow does exist - then the episode is simply not available on omdbapi.com - many series appear to be incomplete, sometimes missing just one or two episodes, sometimes almost all episodes may be missing. It's possible a missing tvshow or the missing episodes may be added to omdbapi.com in the future, however if there is a lot of missing episodes for an old tvshow (ie. it's not going to be a added to omdbapi.com any time soon) then you have the option to ignore the tvshow entirely by adding a suitable pattern to `imdb.ignore.title`.
+
 ##Version 2.1.5 (06/09/2015)
 * Chg: Catch all exceptions in imdb request threads
 

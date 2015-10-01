@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.5"
+    self.VERSION = "2.1.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -158,7 +158,8 @@ class MyConfiguration(object):
     for arg in list(argv):
       arg_match = re.match("^[ ]*@([^ ]+)[ ]*=(.*)", arg)
       if arg_match and len(arg_match.groups()) == 2:
-        config.set(self.THIS_SECTION, arg_match.group(1).strip(), arg_match.group(2).strip())
+        argKey, argVal = arg.split("=", 1)
+        config.set(self.THIS_SECTION, argKey.strip()[1:], argVal.strip())
         argv.remove(arg)
 
     if not self.DEBUG and self.getBoolean(config, "debug", ""):
@@ -388,7 +389,11 @@ class MyConfiguration(object):
 
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
 
-    self.IMDB_FIELDS = self.getExRepList(config, "imdb.fields", ["rating", "votes", "top250"], True)
+    self.IMDB_FIELDS_MOVIES = self.getExRepList(config, "imdb.fields.movies", ["rating", "votes", "top250"], True)
+    self.IMDB_FIELDS_TVSHOWS = self.getExRepList(config, "imdb.fields.tvshows", ["rating", "votes"], True)
+    self.IMDB_IGNORE_TVTITLES = self.getSimpleList(config, "imdb.ignore.tvtitles", "", True, "|")
+    self.IMDB_TRANSLATE_TVTITLES = self.getSimpleList(config, "imdb.translate.tvtitles", "", True, "|", False)
+    self.IMDB_TRANSLATE_TVYEARS = self.getSimpleList(config, "imdb.translate.tvyears", "", True, "|")
     self.IMDB_THREADS = int(self.getValue(config, "imdb.threads", 10))
     self.IMDB_THREADS = 1 if self.IMDB_THREADS < 1 else self.IMDB_THREADS
     self.IMDB_THREADS = 20 if self.IMDB_THREADS > 20 else self.IMDB_THREADS
@@ -398,6 +403,14 @@ class MyConfiguration(object):
     self.IMDB_RETRY = 0 if self.IMDB_RETRY < 0 else self.IMDB_RETRY
     self.IMDB_GROUPING = self.getValue(config, "imdb.grouping", ",", allowundefined=True)
     self.IMDB_GROUPING = self.IMDB_GROUPING if self.IMDB_GROUPING is not None else ""
+    self.IMDB_DEL_PARENTHESIS = self.getBoolean(config, "imdb.delete_parenthesis", "yes")
+
+    self.IMDB_PERIOD = self.getValue(config, "imdb.period", None, allowundefined=True)
+    if self.IMDB_PERIOD:
+      adate = datetime.date.today() - datetime.timedelta(days=int(self.IMDB_PERIOD))
+      self.IMDB_PERIOD_FROM = adate.strftime("%Y-%m-%d")
+    else:
+      self.IMDB_PERIOD_FROM = None
 
     self.BIN_TVSERVICE = self.getValue(config, "bin.tvservice", "/usr/bin/tvservice")
     self.BIN_VCGENCMD = self.getValue(config, "bin.vcgencmd", "/usr/bin/vcgencmd", allowundefined=True)
@@ -570,13 +583,15 @@ class MyConfiguration(object):
     temp = self.getValue(config, aKey, default).lower()
     return temp in ["yes", "true"]
 
-  def getSimpleList(self, config, aKey, default="", allowundefined=False):
+  def getSimpleList(self, config, aKey, default="", allowundefined=False, delimiter=",", strip=True):
     aStr = self.getValue(config, aKey, default, allowundefined)
 
     newlist = []
 
     if aStr:
-      for item in [x.strip() for x in aStr.split(",") if x]:
+      for item in [x for x in aStr.split(delimiter) if x]:
+        if item and strip:
+          item = item.strip()
         if item:
           newlist.append(item)
     elif aStr is None and allowundefined:
@@ -805,11 +820,20 @@ class MyConfiguration(object):
     print("  subtitle.filetypes = %s" % self.NoneIsBlank(", ".join(self.SUBTITLE_FILETYPES_EX)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
-    print("  imdb.fields = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS)))
+    print("  imdb.fields.movie = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_MOVIES)))
+    print("  imdb.fields.tvshows = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_TVSHOWS)))
+    print("  imdb.ignore.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_IGNORE_TVTITLES)))
+    print("  imdb.translate.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_TRANSLATE_TVTITLES)))
+    print("  imdb.translate.tvyears = %s" % self.NoneIsBlank("|".join(self.IMDB_TRANSLATE_TVYEARS)))
     print("  imdb.threads = %s" % self.IMDB_THREADS)
     print("  imdb.timeout = %s" % self.NoneIsBlank(self.IMDB_TIMEOUT))
     print("  imdb.retry = %s" % self.IMDB_RETRY)
     print("  imdb.grouping = %s" % self.IMDB_GROUPING)
+    if self.IMDB_PERIOD_FROM:
+      print("  imdb.period = %s (added after %s)" % (self.NoneIsBlank(self.IMDB_PERIOD), self.NoneIsBlank(self.IMDB_PERIOD_FROM)))
+    else:
+      print("  imdb.period = %s" % (self.NoneIsBlank(self.IMDB_PERIOD)))
+    print("  imdb.delete_parenthesis = %s" % self.BooleanIsYesNo(self.IMDB_DEL_PARENTHESIS))
     print("  bin.tvservice = %s" % self.NoneIsBlank(self.BIN_TVSERVICE))
     print("  bin.vcgencmd = %s" % self.NoneIsBlank(self.BIN_VCGENCMD))
     print("  bin.ceccontrol = %s" % self.NoneIsBlank(self.BIN_CECCONTROL))
@@ -907,11 +931,10 @@ class MyLogger():
       self.lastlen = ulen
 
       if spaces > 0 and not noBlank:
-        sys.stderr.write("%-s%*s\r" % (udata, spaces, " "))
+        sys.stderr.write("%-s%*s\r%s" % (udata, spaces, " ", ("\n" if newLine else "")))
       else:
-        sys.stderr.write("%-s\r" % udata)
+        sys.stderr.write("%-s\r%s" % (udata, ("\n" if newLine else "")))
       if newLine:
-        sys.stderr.write("\n")
         self.lastlen = 0
       sys.stderr.flush()
 
@@ -1002,9 +1025,10 @@ class MyLogger():
     with threading.Lock():
       self.progress("")
       udata = MyUtility.toUnicode(data)
-      sys.stderr.write("%-s" % udata)
       if newLine:
-        sys.stderr.write("\n")
+        sys.stderr.write("%-s\n" % udata)
+      else:
+        sys.stderr.write("%-s" % udata)
       sys.stderr.flush()
     if log: self.log(data)
 
@@ -1192,11 +1216,36 @@ class MyIMDBLoader(threading.Thread):
         self.input_queue.task_done()
 
         item = qItem["item"]
-        title = item["title"]
-        libid = item["movieid"]
-        imdbnumber = item.get("imdbnumber", "")
 
-        if self.movies250 is not None and imdbnumber is not None:
+        imdbnumber = item.get("imdbnumber", "")
+        title = item.get("title", item["label"])
+        original_title = qItem.get("OriginalShowTitle", title)
+        year = item.get("year", None)
+
+        showTitle = title
+        showYear = year
+        season = None
+        episode = None
+
+        isMovie = isTVShow = isEpisode = False
+
+        if "movieid" in item:
+          libid = item["movieid"]
+          isMovie = True
+        elif "tvshowid" in item:
+          libid = item["tvshowid"]
+          if year and title.endswith("(%d)" % year):
+            title = re.sub("\(%d\)$" % year, "", title).strip()
+          isTVShow = True
+        elif "episodeid" in item:
+          libid = item["episodeid"]
+          show_title = qItem["ShowTitle"]
+          show_year = qItem["ShowYear"]
+          season = qItem["Season"]
+          episode = qItem["Episode"]
+          isEpisode = True
+
+        if isMovie and self.movies250 is not None and imdbnumber is not None:
           movie250 = self.movies250.get(imdbnumber, {})
           # No need to query omdb if all Top250 fields are available and they're all we need
           needomdb = not (movie250 is not {} and self.onlyt250fields and ("rank" in movie250 and "rating" in movie250 and "votes" in movie250))
@@ -1208,24 +1257,39 @@ class MyIMDBLoader(threading.Thread):
           attempt = 0
           newimdb = None
           while True:
-            self.logger.log("Querying omdbapi.com[a=%d, r=%d]: [%s] (%s)" % (attempt, self.retry, item["imdbnumber"], item["title"]))
-            newimdb = MyUtility.getIMDBInfo(item["imdbnumber"], self.plotFull, self.plotOutline, self.timeout) if item["imdbnumber"] else None
-            if newimdb is not None and newimdb.get("response", "False") != "True":
-              newimdb = None
+            if isMovie:
+              self.logger.log("Querying omdbapi.com[a=%d, r=%d]: [movie] %s (%s)" % (attempt, self.retry, imdbnumber, title))
+              newimdb = MyUtility.getIMDBInfo(imdbnumber=imdbnumber, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout) if imdbnumber else None
+            elif isTVShow:
+              self.logger.log("Querying omdbapi.com[a=%d, r=%d]: [tvshow] %s, %d" % (attempt, self.retry, title, year))
+              newimdb = MyUtility.getIMDBInfo(title=title, year=year, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
+            elif isEpisode:
+              self.logger.log("Querying omdbapi.com[a=%d, r=%d]: [episode] %s, %d, S%02d, E%02d" % (attempt, self.retry, show_title, show_year, season, episode))
+              newimdb = MyUtility.getIMDBInfo(title=show_title, year=show_year, season=season, episode=episode, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
+
             if newimdb is not None or attempt >= self.retry:
+              newimdb = newimdb if newimdb.get("response", "False") == "True" else None
               break
+
             attempt += 1
 
           if newimdb is None:
-            self.logger.err("Could not obtain IMDb details for [%s] (%s)" % (item["imdbnumber"], item["title"]), newLine=True, log=True)
+            if isMovie:
+              self.logger.err("Could not obtain OMDb details for [movie] %s (%s)" % (imdbnumber, original_title), newLine=True, log=True)
+            elif isTVShow:
+              self.logger.err("Could not obtain OMDb details for [tvshow] %s (%d)" % (original_title, year), newLine=True, log=True)
+            elif isEpisode:
+              self.logger.err("Could not obtain OMDb details for [episode] %s S%02dE%02d" % (original_title, season, episode), newLine=True, log=True)
             continue
         else:
-          self.logger.log("Avoided omdbapi.com query, movies250 has all we need: [%s] (%s)" % (item["imdbnumber"], item["title"]))
+          self.logger.log("Avoided omdbapi.com query, movies250 has all we need: %s (%s)" % (imdbnumber, original_title))
           newimdb = {}
 
-        newimdb["top250"] = movie250.get("rank", 0)
-        newimdb["rating"] = movie250.get("rating", newimdb.get("rating",0.0))
-        newimdb["votes"] = movie250.get("votes", newimdb.get("votes",'0'))
+        # Add top250 only if we've got a 250 list
+        if self.movies250 is not None:
+          newimdb["top250"] = movie250.get("rank", 0)
+          newimdb["rating"] = movie250.get("rating", newimdb.get("rating",None))
+          newimdb["votes"] = movie250.get("votes", newimdb.get("votes", None))
 
         qItem["newimdb"] = newimdb
 
@@ -2246,8 +2310,17 @@ class MyJSONComms(object):
     aList = request["params"]["properties"]
     if fields is not None:
       for f in [f.strip() for f in fields.split(",")]:
-        if f != "" and not f in aList:
+        if f != "" and f not in aList:
           aList.append(f)
+    request["params"]["properties"] = aList
+
+  def delProperties(self, request, fields):
+    if not "properties" in request["params"]: return
+    aList = request["params"]["properties"]
+    if fields is not None:
+      for f in [f.strip() for f in fields.split(",")]:
+        if f != "" and f in aList:
+          aList.remove(f)
     request["params"]["properties"] = aList
 
   def addFilter(self, request, newFilter, condition="and"):
@@ -2893,8 +2966,18 @@ class MyJSONComms(object):
       self.addProperties(REQUEST, "dateadded")
 
     elif action == "imdb":
-      self.addProperties(REQUEST, "imdbnumber")
-      self.addProperties(REQUEST, ",".join(self.config.IMDB_FIELDS))
+      if self.config.IMDB_PERIOD_FROM and mediatype in ["movies", "episodes"]:
+          self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.IMDB_PERIOD_FROM})
+
+      if mediatype == "movies":
+        self.addProperties(REQUEST, "imdbnumber")
+        self.addProperties(REQUEST, ",".join(self.config.IMDB_FIELDS_MOVIES))
+      elif mediatype in ["tvshows", "episodes"]:
+        if mediatype == "tvshows":
+          self.addProperties(REQUEST, "year")
+        self.addProperties(REQUEST, ",".join(self.config.IMDB_FIELDS_TVSHOWS))
+        if mediatype == "episodes":
+          self.delProperties(REQUEST, "genre")
 
     elif action == "missing":
       for unwanted in ["artist", "art", "fanart", "thumbnail"]:
@@ -2911,9 +2994,8 @@ class MyJSONComms(object):
         self.addProperties(REQUEST, "playcount, lastplayed, resume")
 
     elif action == "qa":
-      qaSinceDate = self.config.QADATE
-      if qaSinceDate and mediatype in ["movies", "tags", "episodes"]:
-          self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": qaSinceDate})
+      if self.config.QADATE and mediatype in ["movies", "tags", "episodes"]:
+          self.addFilter(REQUEST, {"field": "dateadded", "operator": "after", "value": self.config.QADATE})
 
       if mediatype in ["songs", "movies", "tags", "tvshows", "episodes"]:
         self.addProperties(REQUEST, "file")
@@ -3849,21 +3931,61 @@ class MyUtility(object):
       return None
 
   @staticmethod
-  def getIMDBInfo(imdbnumber, plotFull=False, plotOutline=False, qtimeout=15.0):
+  def getIMDBInfo(imdbnumber=None, title=None, year=None, season=None, episode=None, plotFull=False, plotOutline=False, qtimeout=15.0):
     try:
       base_url = "http://www.omdbapi.com"
 
-      f = urllib2.urlopen("%s?i=%s&plot=short" % (base_url, imdbnumber), timeout=qtimeout)
-      data = json.loads(f.read().decode("utf-8"))
-      f.close()
-      data["Plotoutline"] = data.get("Plot", None)
-      data["Plot"] = None
+      isMovie = isTVShow = isSeason = isEpisode = False
 
-      if plotFull:
-        f = urllib2.urlopen("%s?i=%s&plot=full" % (base_url, imdbnumber), timeout=qtimeout)
-        data2 = json.loads(f.read().decode("utf-8"))
+      if imdbnumber is not None:
+        query_url = "i=%s&type=movie" % imdbnumber
+        reference = imdbnumber
+        isMovie = True
+      elif title is not None and year is not None:
+        reference = "tvshow: %s (%d)" % (title, year)
+        query_url = "t=%s&y=%d" % (MyUtility.denormalise(title, False), year)
+        isTVShow = True
+        if season:
+          query_url = "%s&season=%d" % (query_url, season)
+          reference = "season: %s (%d) S%02d" % (title, year, season)
+          isSeason = True
+        if episode:
+          query_url = "%s&episode=%d" % (query_url, episode)
+          reference = "episode: %s (%d) S%02dE%02d" % (title, year, season, episode)
+          isEpisode = True
+        query_url = "%s&type=%s" % (query_url, "episode" if isEpisode else "series")
+      else:
+        return {}
+
+      data_short = data_full = data = {}
+
+      # For movie, get both short plot, and optionally the full plot. Use fields from short query.
+      if isMovie:
+        f = urllib2.urlopen("%s?%s&plot=short" % (base_url, query_url), timeout=qtimeout)
+        data_short = json.loads(f.read().decode("utf-8"))
         f.close()
-        data["Plot"] = data2.get("Plot", None)
+
+      # For TVShows and Episodes, we only need the full plot and fields.
+      if not isMovie or plotFull:
+        f = urllib2.urlopen("%s?%s&plot=full" % (base_url, query_url), timeout=qtimeout)
+        data_full = json.loads(f.read().decode("utf-8"))
+        f.close()
+
+      if data_short != {}:
+        data = data_short
+        data["Plotoutline"] = data_short.get("Plot", None)
+        data["Plot"] = None
+
+      if data_full != {}:
+        if data == {}:
+          data = data_full
+        data["Plot"] = data_full.get("Plot", None)
+
+      if "Response" not in data or data["Response"] == "False":
+        gLogger.log("Failed OMDBAPI Query [%s?%s] => [%s]" % (base_url, query_url, data))
+        if isTVShow and not isEpisode:
+          gLogger.log("Try OMDBAPI Query [%s?s=%s&type=series] to see possible available titles (hint: year of tvshow is %d)" %(base_url, title, year))
+        return {}
 
       # Convert omdbapi.com fields to xbmc fields - mostly just a case
       # of converting to lowercase, and removing "imdb" prefix
@@ -3890,6 +4012,7 @@ class MyUtility(object):
             newdata[newkey] = [g.strip() for g in data[key].split(",")]
           # Year to an int
           elif newkey == "year":
+            if not isMovie: continue
             newdata[newkey] = int(data[key])
           # Runtime from "2 h", "36 min", "2 h 22 min" or "N/A" to seconds
           elif newkey == "runtime":
@@ -3906,10 +4029,12 @@ class MyUtility(object):
           else:
             newdata[newkey] = data[key]
         except Exception as e:
-          gLogger.log("Exception during imdb processing: imdbnumber [%s], key [%s]. msg [%s]" % (imdbnumber, key, str(e)))
+          gLogger.log("Exception during imdb processing: reference [%s], key [%s]. msg [%s]" % (reference, key, str(e)))
+          gLogger.log("OMDBAPI Query [%s?%s]" % (base_url, query_url))
       return newdata
     except Exception as e:
-      gLogger.log("Exception during imdb processing: imdbnumber [%s], timeout [%s], msg [%s]" % (imdbnumber, qtimeout, str(e)))
+      gLogger.log("Exception during imdb processing: reference [%s], timeout [%s], msg [%s]" % (reference, qtimeout, str(e)))
+      gLogger.log("OMDBAPI Query [%s?%s]" % (base_url, query_url))
       return {}
 
   @staticmethod
@@ -4092,8 +4217,8 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     gLogger.err("Error: media class [%s] is not currently supported by watched" % mediatype, newLine=True)
     sys.exit(2)
 
-  # Only movies for "imdb"...
-  if action == "imdb" and mediatype not in ["movies"]:
+  # Only movies and tvshows for "imdb"...
+  if action == "imdb" and mediatype not in ["movies", "tvshows"]:
     gLogger.err("Error: media class [%s] is not currently supported by imdb" % mediatype, newLine=True)
     return
 
@@ -4189,7 +4314,6 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
             album_files[album_name].append(album)
         for album in data:
           album["tc.members"] = album_files.get(album["title"], [])
-
 
   # Combine PVR channelgroups with PVR channels to create a hierarchical structure that can be parsed
   if mediatype in ["pvr.tv", "pvr.radio"]:
@@ -5493,9 +5617,10 @@ def duplicatesList(mediatype, jcomms, data):
       gLogger.out("", newLine=True)
 
 def updateIMDb(mediatype, jcomms, data):
-  worklist = []
-
-  imdbfields = gConfig.IMDB_FIELDS
+  if mediatype == "movies":
+    imdbfields = gConfig.IMDB_FIELDS_MOVIES
+  else:
+    imdbfields = gConfig.IMDB_FIELDS_TVSHOWS
 
   plotFull    = ("plot" in imdbfields)
   plotOutline = ("plotoutline" in imdbfields)
@@ -5506,12 +5631,124 @@ def updateIMDb(mediatype, jcomms, data):
     if movies250 is None:
       gLogger.err("WARNING: Failed to obtain Top250 movies, check log for details", newLine=True)
 
+  # Movies and TVShows
+  worklist = _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdbfields)
+
+  # Once we have verified TVShows, add the episodes and process them
+  if mediatype == "tvshows":
+    epsdata = []
+    tvhash = {}
+    for tvshow in worklist:
+      tvhash[tvshow["libraryid"]] = tvshow
+
+    for tvshow in data:
+      if tvshow["tvshowid"] not in tvhash: continue
+      if "seasons" not in tvshow: continue
+      for season in tvshow["seasons"]:
+        if season["season"] < 1: continue
+        if "episodes" not in season: continue
+        for episode in season["episodes"]:
+          if "title" not in episode:
+            episode["title"] = episode["label"]
+
+          SxE = re.sub("[0-9]*x([0-9]*)\..*", "\\1", episode["label"])
+          if SxE == episode["label"] or int(SxE) < 1: continue
+
+          epsdata.append({"ShowTitle": tvshow["title"],
+                          "ShowYear":  tvshow["year"],
+                          "OriginalShowTitle": tvshow["tc.title"],
+                          "Season":    season["season"],
+                          "Episode":   int(SxE),
+                          "item":        episode})
+
+    # Add episodes requiring updates to the existing list of work items
+    worklist.extend(_ProcessIMDB("episodes", jcomms, epsdata, plotFull, plotOutline, movies250, imdbfields))
+
+  # Remove year fields from worklist, as they're not required
+  # Remove anything without items
+  for w in worklist:
+    if "year" in w: del w["year"]
+
+  # Create a new list without any workitems that have no work to perform (ie. items=={})
+  newlist = [x for x in worklist if x["items"]]
+
+  # Sort the list of items into title order, with libraryid to ensure consistency
+  # when two or more movies share the same title.
+  newlist.sort(key=lambda f: (f["title"], f.get("episodetitle", ""), f["libraryid"]))
+
+  jcomms.dumpJSON(newlist, decode=True, ensure_ascii=True)
+
+def _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdbfields):
+  worklist = []
   input_queue = Queue.Queue()
   output_queue = Queue.Queue()
 
   # Load input queue
-  for item in data:
-    input_queue.put({"item": item})
+  # For tvshows, we need to perform some extra processing on the title and year of each show
+  # so that it matches the title/year on omdb
+  if mediatype == "movies":
+    for movie in data:
+      input_queue.put({"item": movie})
+  elif mediatype == "tvshows":
+    re_ignore_titles = []
+    re_trans_titles = []
+    re_trans_years = []
+    re_parenthesis = re.compile("\([a-zA-Z]*\)$")
+
+    for ft in gConfig.IMDB_IGNORE_TVTITLES:
+      re_ignore_titles.append(re.compile(ft, re.IGNORECASE))
+    for ft in gConfig.IMDB_TRANSLATE_TVTITLES:
+      ftsplit = ft.split("=")
+      if len(ftsplit) == 2:
+        re_trans_titles.append((re.compile(ftsplit[0], re.IGNORECASE), ftsplit[1]))
+    for ft in gConfig.IMDB_TRANSLATE_TVYEARS:
+      ftsplit = ft.split("=")
+      if len(ftsplit) == 2 and ftsplit[1]:
+        re_trans_years.append((re.compile(ftsplit[0], re.IGNORECASE), int(ftsplit[1])))
+    for tvshow in data:
+      ignoreShow = False
+      tvshow["tc.title"] = tvshow["title"]
+      tvshow["tc.year"] = tvshow["year"]
+      for ignore in re_ignore_titles:
+        if ignore.search(tvshow["title"]):
+          gLogger.log("PREP OMDB: Title: [%s] Ignoring tvshow - matched [%s] in imdb.ignore.tvtitles" % (tvshow["title"], ignore.pattern))
+          ignoreShow = True
+          break
+      if not ignoreShow:
+        # Translate year
+        for trans in re_trans_years:
+          if trans[0].search(tvshow["title"]):
+            gLogger.log("PREP OMDB: Title: [%s] Translating tvshow year for pattern [%s], replacing [%d] with [%d]" % (tvshow["title"], trans[0].pattern, tvshow["year"], trans[1]))
+            tvshow["year"] = trans[1]
+
+        # Translate title
+        for trans in re_trans_titles:
+          if trans[0].search(tvshow["title"]):
+            before_title = tvshow["title"]
+            tvshow["title"] = trans[0].sub(trans[1], tvshow["title"]).strip()
+            gLogger.log("PREP OMDB: Title: [%s] Translating tvshow title for pattern [%s], replacing with [%s], giving [%s]" % (before_title, trans[0].pattern, trans[1], tvshow["title"]))
+
+        # Remove original year from end of title
+        if tvshow["tc.year"] is not None and tvshow["title"].endswith("(%d)" % tvshow["tc.year"]):
+          before_title = tvshow["title"]
+          tvshow["title"] = re.sub("\(%d\)$" % tvshow["tc.year"], "", tvshow["title"]).strip()
+          gLogger.log("PREP OMDB: Title: [%s] Removing year from title, giving [%s]" % (before_title, tvshow["title"]))
+
+        # Remove trailing parenthesis (...) from end of title - most likely to be a country code
+        if gConfig.IMDB_DEL_PARENTHESIS:
+          re_find = re_parenthesis.search(tvshow["title"])
+          if re_find:
+            before_title = tvshow["title"]
+            tvshow["title"] = tvshow["title"][:re_find.start() - 1].strip()
+            gLogger.log("PREP OMDB: Title: [%s] Removing trailing parenthesis from title, giving [%s]" % (before_title, tvshow["title"]))
+
+        input_queue.put({"OriginalShowTitle": tvshow["tc.title"], "item": tvshow})
+  elif mediatype == "episodes":
+    for episode in data:
+      input_queue.put(episode)
+
+  if input_queue.qsize() == 0:
+    return worklist
 
   # Create threads to process input queue
   threadcount = input_queue.qsize() if input_queue.qsize() <= gConfig.IMDB_THREADS else gConfig.IMDB_THREADS
@@ -5536,18 +5773,34 @@ def updateIMDb(mediatype, jcomms, data):
       continue
 
     item = qItem["item"]
-    newimdb = qItem["newimdb"]
+    if "OriginalShowTitle" in qItem:
+      title = qItem["OriginalShowTitle"]
+    else:
+      title = item["title"]
 
-    title = item["title"]
-    libid = item["movieid"]
     imdbnumber = item.get("imdbnumber", "")
+    year = item.get("year", None)
 
-    gLogger.progress("Processing IMDb: %s..." % title)
+    if "episodeid" in item:
+      infotitle = "%s S%02dE%02d" % (title, qItem["Season"], qItem["Episode"])
+    else:
+      infotitle = title
+
+    gLogger.progress("Processing IMDb: %s..." % infotitle)
+
+    if mediatype == "movies":
+      libid = item["movieid"]
+    elif mediatype == "tvshows":
+      libid = item["tvshowid"]
+    elif mediatype == "episodes":
+      libid = item["episodeid"]
+
+    newimdb = qItem["newimdb"]
 
     # Truncate rating to 1 decimal place
     # Keep existing value if difference is likely to be due to platform
     # precision error ie. Python2 on OpenELEC where 6.6 => 6.5999999999999996.
-    if "rating" in imdbfields:
+    if "rating" in imdbfields and newimdb.get("rating",None) is not None:
       item["rating"] = float("%.1f" % item.get("rating", 0.0))
       newimdb["rating"] = float("%.1f" % newimdb.get("rating", 0.0))
       if abs(item["rating"] - newimdb["rating"]) < 0.01:
@@ -5559,31 +5812,39 @@ def updateIMDb(mediatype, jcomms, data):
       newimdb["genre"] = sorted(newimdb.get("genre", []))
 
     olditems = {"items": {}}
-    workitem = {"type": "movie",
+    workitem = {"type": mediatype[:-1],
                 "libraryid": libid,
                 "title": title,
                 "items": {}}
 
+    if year is not None:
+      workitem["year"] = year,
+    if mediatype == "episodes":
+      workitem["episodetitle"] = item["title"]
+
     for field in imdbfields:
+      # Don't attempt to change title of tvshows
+      if mediatype == "tvshows" and field in ["title"]: continue
+      # Don't attempt to set genre for episodes - only works at the tvshow level
+      if mediatype == "episodes" and field in ["genre"]: continue
+
       if field in newimdb:
-        if field not in item or item[field] != newimdb[field]:
+        if field not in item or item[field] != newimdb[field] and newimdb[field] is not None:
           workitem["items"][field] = newimdb[field]
           olditems["items"][field] = item.get(field, None)
 
-    if workitem["items"]:
+    # Always append tvshows - we use this to validate the show when deciding to process episodes.
+    # TVshows without any changes will be dropped at the end.
+    if workitem["items"] or mediatype == "tvshows":
       worklist.append(workitem)
       gLogger.log("Workitem for id: %d, type: %s, title: %s" %
-                  (workitem["libraryid"], workitem["type"], workitem["title"]))
+                  (workitem["libraryid"], workitem["type"], infotitle))
       gLogger.log("  Old items: %s" % olditems["items"])
       gLogger.log("  New items: %s" % workitem["items"])
 
   gLogger.progress("")
 
-  # Sort the list of items into title order, with libraryid to ensure consistency
-  # when two or more movies share the same title.
-  worklist.sort(key=lambda f: (f["title"], f["libraryid"]))
-
-  jcomms.dumpJSON(worklist, decode=True, ensure_ascii=True)
+  return worklist
 
 def getIntFloatStr(aField, aValue):
   # Some fields can only be strings...
