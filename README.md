@@ -1,7 +1,7 @@
 texturecache.py
 ===============
 
-Utility to manage and update the local XBMC texture cache (Texture##.db and Thumbnails folder), view content of the XBMC media library using JSON calls (so works with MySQL too), and also cross reference cache with library to identify space saving opportunities or problems.
+Utility to manage and update the local Kodi texture cache (Texture##.db and Thumbnails folder), view content of the Kodi media library using JSON calls (so works with MySQL too), and also cross reference cache with library to identify space saving opportunities or problems.
 
 ##Summary of features
 
@@ -13,7 +13,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[lc, lnc]** Same as `c` and `nc`, but only considers those media (movies, tvshows/episodes) added since the modification timestamp of the file identified by the property `lastrunfile`
 
-**[p, P]** Prune texture cache by removing accumulated **cruft** such as image previews, previously deleted movies/tv shows/music and whose artwork remains in the texture cache even after cleaning the media library database. Essentially, remove any cached file that is no longer associated with an entry in the media library, or an addon
+**[p, P]** Prune texture cache by removing accumulated **cruft** such as image previews, previously deleted movies/tvshows/music and whose artwork remains in the texture cache even after cleaning the media library database. Essentially, remove any cached file that is no longer associated with an entry in the media library, or an addon
 
 **[s, S]** Search texture cache for specific files and view database content, can help explain reason for incorrect artwork. **S** will only return database results for items that no longer exist in the filesystem.
 
@@ -35,7 +35,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
-**[imdb]** Update imdb fields on movies. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest imdb details based on `imdbnumber`. Movies without `imdbnumber` will not be updated. Specify fields to be updated with the property `@imdb.fields` from the following: `top250`, `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. The default value is: `rating, votes, top250`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields=+year,genre` to update ratings, votes, top250, year and genre. See log for old/new values.
+**[imdb]** Update IMDb fields on movies. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest IMDb details based on `imdbnumber`. Movies without `imdbnumber` will not be updated. Specify fields to be updated with the property `@imdb.fields` from the following: `top250`, `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. The default value is: `rating, votes, top250`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields=+year,genre` to update ratings, votes, top250, year and genre. See log for old/new values.
 
 **[purge hashed|unhashed|all]** Delete cached artwork containing specified patterns, with or without lasthashcheck, or if it doesn't matter `all` eg. `purge unhashed youtube iplayer imdb.com`
 
@@ -43,7 +43,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[watched]** Backup and restore movie and tvshow watched lists to a text file. Watched list will be restored keeping more recent playcount, lastplayed and resume points unless  `@watched.overwrite=yes` is specified, in which case the watched list will be restored exactly as per the backup.
 
-**[duplicates]** List movies that appear more than once in the media library with the same imdb number
+**[duplicates]** List movies that appear more than once in the media library with the same IMDb number
 
 **[missing]** Locate media files missing from the specified media library and source label, eg. `missing movies "My Movies"`
 
@@ -65,7 +65,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 
 **[stats]** Output media library stats. Optionally filter by media class, eg. `stats tvshows episodes` or `stats audio`
 
-**[input]** Send keyboard/remote control input to client, eg. `input back left left select`. See [JSON API](http://wiki.xbmc.org/?title=JSON-RPC_API/v6#Input) for more details
+**[input]** Send keyboard/remote control input to client, eg. `input back left left select`. See [JSON API](http://kodi.wiki/view/JSON-RPC_API/v6#Input) for more details
 
 **[volume]** Show mute state and volume level (no args), or set volume level `0`-`100`, `mute`, `unmute`, eg. `volume mute` or `volume 100`
 
@@ -101,7 +101,7 @@ Utility to manage and update the local XBMC texture cache (Texture##.db and Thum
 * ![logo](http://www.monitorix.org/imgs/archlinux.png "arch logo")Arch: in the [AUR](https://aur.archlinux.org/packages/xbmc-texturecache).
 
 ####Installation from source
-Download the single Python file required from github. A default properties file is available on github, rename this to texturecache.cfg in order to use it.
+Download the single Python file required from Github. A default properties file is available on Github, rename this to texturecache.cfg in order to use it.
 
 To download the script at the command line:
 ####Code:
@@ -112,7 +112,7 @@ chmod +x ./texturecache.py
 
 If you experience a certificate error, try adding "--no-check-certificate" to the wget command line.
 
-If you are using OpenELEC which has a pretty basic wget that doesn't support https downloads, instead use `curl`:
+If you are using OpenELEC which has a pretty basic wget that doesn't support HTTPS downloads, instead use `curl`:
 
 ####Code:
 ```
@@ -134,7 +134,7 @@ rm python*.deb
 ```
 
 ##Basic Example usage
-Let's say the poster image for the "Dr. No" movie is corrupted, and it needs to be deleted so that XBMC will automatically re-cache it (hopefully correctly) next time it is displayed:
+Let's say the poster image for the "Dr. No" movie is corrupted, and it needs to be deleted so that Kodi will automatically re-cache it (hopefully correctly) next time it is displayed:
 
 1) Execute: `./texturecache.py s "Dr. No"` to search for my Dr. No related artwork
 
@@ -148,7 +148,7 @@ Matching row ids: 226 227
 
 3) Since only the poster (.tbn) needs to be removed, executing `./texturecache.py d 227` will remove both the database row *and* the cached poster image. If we wanted to remove both images, we would simply execute `./texturecache.py d 226 227` and the two rows and their corresponding cached images would be removed.
 
-Now it's simply a matter of browsing the Dr. No movie in the XBMC GUI, and the image should be re-cached correctly.
+Now it's simply a matter of browsing the Dr. No movie in the Kodi GUI, and the image should be re-cached correctly.
 
 But wait, there's more... another method is to force images to be re-cached, automatically. `./texturecache.py C movies "Dr. No"` will achieve the same result as the above three steps, including re-caching the deleted items so that it is already there for you in the GUI.
 
@@ -208,7 +208,7 @@ rowid, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url
 
 ##Additional usage examples
 
-#####Caching all of the artwork for your TV Shows
+#####Caching all of the artwork for your TV shows
 ####Code:
 ```
 ./texturecache.py c tvshows
@@ -499,7 +499,7 @@ The `dbfile` and `thumbbnails` properties represent folders that are normally re
 
 Set values for `webserver.username` and `webserver.password` if you require webserver authentication.
 
-The `extrajson.*` properties allow the specification of additional JSON audio/video fields to be returned by the J/Jd query options. See the XBMC [JSON-RPC API Specification](http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6) for details.
+The `extrajson.*` properties allow the specification of additional JSON audio/video fields to be returned by the J/Jd query options. See the Kodi [JSON-RPC API Specification](http://kodi.wiki/view/JSON-RPC_API/v6) for details.
 
 The `qa.art.*`, `qa.blank.*` and `qa.zero.*` files can be used to replace or add additional fields for qa (not zero, not blank, and present in art list). Add to default fields by prefixing with +, so `qa.blank.movies = +director` will QA mpaa, plot and director for movies (failing QA if any are blank).
 
@@ -509,7 +509,7 @@ Extrafanart and extrathumbs will not be cached by default or considered when pru
 
 Filtering will default to the title field in most cases, such that `jd movies avatar` will return only movies where the title contains the text "avatar". However, you may specify an alternate field on which to filter with `@filter=<field>`. For example, should you wish to select only movies directed by James Cameron, use `jd movies "james cameron" @filter=director`.
 
-The default filter operator is `contains`, but this can be changed to any one of the [standard filter operators](http://wiki.xbmc.org/index.php?title=JSON-RPC_API/v6#List.Filter.Operators) using `@filter.operator=<operator>`. For example, `jd movies 21 @filter.operator=is` will return only the movie "21", but not "21 Jump Street".
+The default filter operator is `contains`, but this can be changed to any one of the [standard filter operators](http://kodi.wiki/view/JSON-RPC_API/v6#List.Filter.Operators) using `@filter.operator=<operator>`. For example, `jd movies 21 @filter.operator=is` will return only the movie "21", but not "21 Jump Street".
 
 Cache specific artwork types by specifying a comma-delimited list of artwork types for `cache.artwork`, eg. `cache.artwork=poster, fanart` to cache only posters and fanart. By default this list is empty, which will ensure that all artwork types are cached.
 
@@ -525,7 +525,7 @@ Use `download.threads` to vary the number of threads used when downloading and c
 
 Specify a comma delimited list of pattherns in `singlethread.urls` to force downloads corresponding with those URLs on a single thread, necessary for sites that limit the number of concurrent requests. One such site is fanart.tv, hence the default value includes `assets\.fanart\.tv`.
 
-When identifying `missing` media files (ie. files that are not present in the media library), additional audio and video file types can be included by specifying a comma delimited list of file extensions for `audio.filetypes` and `video.filetypes` respectively (eg. `wmv, ogg`). All current XBMC audio and video file extensions are supported by default.
+When identifying `missing` media files (ie. files that are not present in the media library), additional audio and video file types can be included by specifying a comma delimited list of file extensions for `audio.filetypes` and `video.filetypes` respectively (eg. `wmv, ogg`). All current Kodi audio and video file extensions are supported by default.
 
 ##Command Line Properties
 
@@ -557,5 +557,5 @@ Also, a specific property section may be used, `@section=name`, allowing multipl
 
 Run the script without arguments for basic usage, and with `config` option to view current configuration information.
 
-See [texturecache.py @ XBMC Forums](http://forum.xbmc.org/showthread.php?tid=158373).
+See [texturecache.py @ Kodi Forums](http://forum.xbmc.org/showthread.php?tid=158373).
 =====
