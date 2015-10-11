@@ -118,7 +118,7 @@ def init():
     sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
     sys.stderr = codecs.getwriter("utf-8")(sys.stderr)
 
-  parser = argparse.ArgumentParser(description="Generate instructions to remove artwork urls matching specific patterns \
+  parser = argparse.ArgumentParser(description="Generate instructions to remove artwork URLs matching specific patterns \
                                                 or that are of a type that should not be retained", \
                     formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=25,width=90))
 
@@ -126,7 +126,7 @@ def init():
                       help="Artwork TYPE(s) to be kept or retained, eg. \"--keepart fanart poster\"")
 
   parser.add_argument("-p", "--patterns", nargs="+", metavar="PATTERN", \
-                      help="Regex pattern(s) to match against artwork urls (unless artwork type is \
+                      help="Regex pattern(s) to match against artwork URLs (unless artwork type is \
                             specified in --keepart)")
 
   parser.add_argument("-v", "--verbose", action="store_true", \
