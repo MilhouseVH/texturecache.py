@@ -19,7 +19,7 @@
 #  along with this program; if not, write to the Free Software
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
-# Simple utility to fix artwork urls.
+# Simple utility to fix artwork URLs.
 #
 # https://github.com/MilhouseVH/texturecache.py/blob/master/tools/fixart.py
 #
@@ -28,7 +28,7 @@
 #  See built-in help (run script with --help parameter).
 #
 #  For details on artwork naming conventions supported by this script:
-#     http://wiki.xbmc.org/index.php?title=Frodo_FAQ#Local_images
+#     http://kodi.wiki/view/Frodo_FAQ#Local_images
 #
 ################################################################################
 
@@ -72,7 +72,7 @@ def init():
     sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
     sys.stderr = codecs.getwriter("utf-8")(sys.stderr)
 
-  parser = argparse.ArgumentParser(description="Fix artwork urls, replacing \"--from url\" with \"--to url\". \
+  parser = argparse.ArgumentParser(description="Fix artwork URLs, replacing \"--from url\" with \"--to url\". \
                                                 Reads input from stdin (which should be the output from \"texturecache jd <movies|sets|tvshows> [item]\")", \
                     formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=25,width=90))
 
