@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.8 (11/10/2015)
+* Fix: Close #31, minors from un1versal - many thanks
+
 ##Version 2.1.7 (01/10/2015)
 * Fix: Close #29
 
