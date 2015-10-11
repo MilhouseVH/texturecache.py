@@ -29,7 +29,7 @@
 #  See built-in help (run script with --help parameter).
 #
 #  For details on artwork naming conventions supported by this script:
-#     http://wiki.xbmc.org/index.php?title=Frodo_FAQ#Local_images
+#     http://kodi.wiki/view/Frodo_FAQ#Local_images
 #
 ################################################################################
 
@@ -47,7 +47,7 @@ else:
 class MyUtility(object):
   isPython3 = (sys.version_info >= (3, 0))
 
-  # Convert filename into consistent utf-8
+  # Convert filename into consistent UTF-8
   # representation for both Python2 and Python3
   @staticmethod
   def toutf8(value):
@@ -271,7 +271,7 @@ def findCommonSetParent(setname, members, level=0):
 # Uses recursion to build up a list of path frequencies, then returns
 # the longest instance of the most frequently used path.
 def findMostFrequentSetParent(setname, members, level=0, counts=None):
-  # XBMC sets will either be together in one shared folder, or individual
+  # Kodi sets will either be together in one shared folder, or individual
   # folders below a shared parent, so only need to consider two levels (the file
   # folder and the parent)
   if level > 1: return
@@ -295,7 +295,7 @@ def findMostFrequentSetParent(setname, members, level=0, counts=None):
 
     maxfreq = counts[sorted_counts[0]]
 
-    # Now sort just the most frquently used paths by descending length
+    # Now sort just the most frequently used paths by descending length
     sorted_counts = [x for x in sorted(counts, key=len, reverse=True) if counts[x] == maxfreq]
 
     return "%s%s" % (sorted_counts[0], getSlash(sorted_counts[0]))
@@ -355,7 +355,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
 
   if XBMC_PATH and not mediafile.startswith(XBMC_PATH):
     if not args.ignorebadprefix:
-      warning(args, "** SKIPPING **", "Bad Prefix", mediatitle, "XBMC path does not match prefix", mediafile)
+      warning(args, "** SKIPPING **", "Bad prefix", mediatitle, "Kodi path does not match prefix", mediafile)
     return workitem
 
   filename = os.path.splitext(pathToLocal(mediafile))[0]
@@ -450,7 +450,7 @@ def updateworkitem(args, art_type, mediatitle, workitem, oldname, newname):
       debug2(art_type, "No library change required, keeping:", oldname)
 
 def processArtwork(args, mediatype, media, title, atype, filename, currentname, pathname_multi, pathname_single, is_excess):
-  debug(1, "artwork type [%s] known by XBMC as [%s]" % (atype, currentname))
+  debug(1, "artwork type [%s] known by Kodi as [%s]" % (atype, currentname))
 
   # if this is an excess fanart# or thumb#, return nothing
   if is_excess:
@@ -466,7 +466,7 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
       if os.path.exists(target):
         debug2(atype, "Found pre-existing local file:", target)
         target = pathToXBMC(target)
-        debug2(atype, "Converting local filename to XBMC path:", target)
+        debug2(atype, "Converting local filename to Kodi path:", target)
         return target
 
   # Next, check folder using multi-file naming convention
@@ -475,7 +475,7 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
     if os.path.exists(target):
       debug2(atype, "Found pre-existing local file:", target)
       target = pathToXBMC(target)
-      debug2(atype, "Converting local filename to XBMC path:", target)
+      debug2(atype, "Converting local filename to Kodi path:", target)
       return target
 
   # If we don't currently have a remote source, return nothing
@@ -496,9 +496,9 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
   target = "%s%s" % (pathname, os.path.splitext(currentname)[1].lower())
 
   # Download the new artwork and convert the name of the new file
-  # back into a valid XBMC path.
+  # back into a valid Kodi path.
   fname = pathToXBMC(getImage(args, mediatype, media, title, atype, filename, currentname, target))
-  debug2(atype, "Converting local filename to XBMC path:", fname)
+  debug2(atype, "Converting local filename to Kodi path:", fname)
   return fname
 
 def getImage(args, mediatype, media, title, atype, filename, source, target):
@@ -511,7 +511,7 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
   if LOCAL_ALT and not source.startswith("http://"):
     source = pathToAltLocal(source)
 
-  # We've already failed to download this url before, so fail quickly
+  # We've already failed to download this URL before, so fail quickly
   if source in NOT_AVAILABLE_CACHE:
     NOT_AVAILABLE_CACHE[source] += 1
     warning(args, "**UNAVAILABLE**", atype, title, "Prior download failed: %4d" % NOT_AVAILABLE_CACHE[source], source)
@@ -521,7 +521,7 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
   if not source.startswith("http://"):
     newsource = source
     found_file = os.path.exists(newsource)
-    debug2(atype, "Lookup non-HTTP file using current url:", newsource, (" [%s]" % ("SUCCESS" if found_file else "FAIL")))
+    debug2(atype, "Lookup non-HTTP file using current URL:", newsource, (" [%s]" % ("SUCCESS" if found_file else "FAIL")))
 
     # Try using name of file plus artwork type and same extension as
     # alternative source
@@ -545,7 +545,7 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
           shutil.copyfile(newsource, target)
           debug2(atype, ("Copied %d bytes of data:" % os.path.getsize(target)), target)
         else:
-          debug2(atype, "WARNING! target is same as source - skipping copy:", target)
+          debug2(atype, "WARNING: Target is same as source - skipping copy:", target)
       else:
         debug2(atype, "Dry run, skipping file creation:", target)
 
@@ -630,7 +630,7 @@ def showConfig(args, download_items, season_items, episode_items):
   printerr("")
   printerr("  Local Path    : %s" % _blank(LOCAL_DIR))
   printerr("  Alt Local     : %s" % _blank(LOCAL_ALT))
-  printerr("  XBMC Path     : %s" % _blank(XBMC_PATH))
+  printerr("  Kodi Path     : %s" % _blank(XBMC_PATH))
   printerr("  Extra Fanart  : %s (max: %d)" % (_blank(args.extrafanart), args.extrafanartmax))
   printerr("  Extra Thumbs  : %s (max: %d)" % (_blank(args.extrathumbs), args.extrathumbsmax))
   printerr("  Read Only     : %s" % ("Yes" if args.readonly else "No"))
@@ -640,16 +640,16 @@ def showConfig(args, download_items, season_items, episode_items):
   printerr("  Artwork       : %s" % listToString(download_items, translate=True))
   if args.season:
     printerr("")
-    printerr("  TV Seasons    : %s" % listToString(season_items, translate=True))
+    printerr("  TV seasons    : %s" % listToString(season_items, translate=True))
   if args.episode:
     printerr("")
-    printerr("  TV Episodes   : %s" % listToString(episode_items, translate=True))
+    printerr("  TV episodes   : %s" % listToString(episode_items, translate=True))
   printerr("")
   printerr("  Checking      : %s" % listToString(args.check))
   printerr("")
 
 def listToString(aList, translate=False):
-  if not aList: return "Not Specified"
+  if not aList: return "Not specified"
 
   tmpStr = ""
 
@@ -682,8 +682,8 @@ def init():
   NOT_AVAILABLE_CACHE = {}
 
   parser = argparse.ArgumentParser(description="Downloads specific artwork types (default: clearart, clearlogo) \
-                                                based on urls in media library (ie. original source) creating local \
-                                                versions. Avoids retrieving artwork from XBMC Texture Cache as this is \
+                                                based on URLs in media library (ie. original source) creating local \
+                                                versions. Avoids retrieving artwork from Kodi texture cache as this is \
                                                 often resized, resampled and of lower quality. Optionally output data \
                                                 that can be used to update the media library to use new local versions of \
                                                 artwork, replacing any current remote versions. The same data will \
@@ -694,7 +694,7 @@ def init():
                       help="Local DIRECTORY into which artwork will be WRITTEN, eg. /freenas/media/")
 
   parser.add_argument("-p", "--prefix", metavar="PATH", \
-                      help="XBMC PATH prefix (eg. nfs://192.168.0.3/mnt/share/media/) that \
+                      help="Kodi PATH prefix (eg. nfs://192.168.0.3/mnt/share/media/) that \
                             will be substituted by --local DIRECTORY when traversing media files. \
                             This is typically the root of the media source as defined in sources.xml")
 
@@ -708,8 +708,8 @@ def init():
 
   parser.add_argument("-o", "--output", const="-", nargs="?", metavar="FILENAME", \
                       help="Output a data structure suitable for consumption by texturecache.py [test]set, \
-                            used to update an XBMC media library converting remote urls into \
-                            local urls. Written to stdout if FILENAME is - or not specified")
+                            used to update an Kodi media library converting remote URLs into \
+                            local URLs. Written to stdout if FILENAME is - or not specified")
 
   parser.add_argument("--dryrun", action="store_true", \
                       help="Attempt downloads, but don't create any new files")
@@ -735,10 +735,10 @@ def init():
                             (http) URLs are detected")
 
   parser.add_argument("-s", "--season", nargs="*", metavar="TYPE", \
-                      help="For TV Shows, process season items (default: poster banner landscape)")
+                      help="For TV shows, process season items (default: poster banner landscape)")
 
   parser.add_argument("-e", "--episode", nargs="*", metavar="TYPE", \
-                      help="For TV Shows, process episode items (default: thumb)")
+                      help="For TV shows, process episode items (default: thumb)")
 
   parser.add_argument("-1", "--singlefolders", action="store_true", \
                       help="Movies are in individual folders so don't use the movie-name as a prefix")
