@@ -5008,7 +5008,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
 
     if (check_file or nfo_file) and "file" in item:
       for file in unstackFiles(item["file"]):
-        dir = os.path.dirname(item["file"])
+        dir = os.path.dirname(file)
         data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
         files = data.get("result", {}).get("files", [])
 
