@@ -308,7 +308,7 @@ class MyConfiguration(object):
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
     self.QADATE = adate.strftime("%Y-%m-%d")
 
-    self.QA_FILE = self.getBoolean(config, "qafile", "no")
+    self.QA_FILE = self.getBoolean(config, "qa.file", "no")
     self.QA_FAIL_CHECKEXISTS = self.getBoolean(config, "qa.fail.checkexists", "yes")
     self.QA_FAIL_MISSING_LOCAL_ART = self.getBoolean(config, "qa.fail.missinglocalart", "no")
     self.QA_FAIL_TYPES = self.getPatternFromList(config, "qa.fail.urls", embedded_urls, allowundefined=True)
