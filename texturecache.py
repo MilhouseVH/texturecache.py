@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.9"
+    self.VERSION = "2.2.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -779,7 +779,7 @@ class MyConfiguration(object):
     print("  setmembers = %s" % self.BooleanIsYesNo(self.ADD_SET_MEMBERS))
     print("  songmembers = %s" % self.BooleanIsYesNo(self.ADD_SONG_MEMBERS))
     print("  qaperiod = %d (added after %s)" % (self.QAPERIOD, self.QADATE))
-    print("  qafile = %s" % self.BooleanIsYesNo(self.QA_FILE))
+    print("  qa.file = %s" % self.BooleanIsYesNo(self.QA_FILE))
     print("  qa.nfo.refresh = %s%s" % (self.NoneIsBlank(self.QA_NFO_REFRESH), " (%s)" % self.qa_nfo_refresh_date_fmt if self.qa_nfo_refresh_date_fmt else ""))
     print("  qa.useoldrefreshmethod = %s" % (self.BooleanIsYesNo(self.QA_USEOLDREFRESHMETHOD)))
     print("  qa.fail.checkexists = %s" % self.BooleanIsYesNo(self.QA_FAIL_CHECKEXISTS))

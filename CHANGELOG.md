@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 2.2.0 (08/11/2015)
+* Fix: Correct naming of `qa.file` property - closes #34
+* Fix: Error when handling stacked files (`stack://`) - closes #34
+
 ##Version 2.1.9 (08/11/2015)
 * Fix: Logic error reported on forum
 
