@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.1.9 (08/11/2015)
+* Fix: Logic error reported on forum
+
 ##Version 2.1.8 (11/10/2015)
 * Fix: Close #31, minors from un1versal - many thanks
 

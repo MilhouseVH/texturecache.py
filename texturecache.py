@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.1.8"
+    self.VERSION = "2.1.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1267,8 +1267,10 @@ class MyIMDBLoader(threading.Thread):
               self.logger.log("Querying omdbapi.com[a=%d, r=%d]: [episode] %s, %d, S%02d, E%02d" % (attempt, self.retry, show_title, show_year, season, episode))
               newimdb = MyUtility.getIMDBInfo(title=show_title, year=show_year, season=season, episode=episode, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
 
-            if newimdb is not None or attempt >= self.retry:
+            if newimdb is not None:
               newimdb = newimdb if newimdb.get("response", "False") == "True" else None
+              break
+            elif attempt >= self.retry:
               break
 
             attempt += 1
