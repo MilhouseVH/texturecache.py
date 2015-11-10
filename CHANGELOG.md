@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.2.1 (10/11/2015)
+* Fix: Improve stacking support - correctly match artwork and nfo against the combined (unstacked) filename
+
 ##Version 2.2.0 (08/11/2015)
 * Fix: Correct naming of `qa.file` property - closes #34
 * Fix: Error when handling stacked files (`stack://`) - closes #34

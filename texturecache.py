@@ -58,7 +58,7 @@ else:
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.0"
+    self.VERSION = "2.2.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2464,7 +2464,7 @@ class MyJSONComms(object):
     # fanart/thumbnail artwork.
     directory = None
     if "file" in item:
-      directory = self.unstackFiles(item["file"])[0]
+      directory = MyUtility.unstackFiles(item["file"])[0]
     else:
       for a in ["fanart", "thumbnail"]:
         if a in item:
@@ -3331,12 +3331,6 @@ class MyJSONComms(object):
 
     return self.sendJSON(REQUEST, "libTextures", checkResult=False)
 
-  def unstackFiles(self, files):
-    if files.startswith("stack://"):
-      return files[8:].split(" , ")
-    else:
-      return [files]
-
 #
 # Hold and print some pretty totals.
 #
@@ -3735,6 +3729,14 @@ class MyUtility(object):
   DCStats = {}
   DCStatsAccumulated = {}
 
+  #http://kodi.wiki/view/Advancedsettings.xml#moviestacking
+  #<!-- <cd/dvd/part/pt/disk/disc> <0-N> -->
+  #<regexp>(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck])[ _.-]*[0-9]+)(.*?)(\.[^.]+)$</regexp>
+  #<!-- <cd/dvd/part/pt/disk/disc> <a-d> -->
+  #<regexp>(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck])[ _.-]*[a-d])(.*?)(\.[^.]+)$</regexp>
+  RE_STACKING_1_9 = re.compile("(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck])[ _.-]*[0-9]+)(.*?)(\.[^.]+)$", flags=re.IGNORECASE)
+  RE_STACKING_A_D = re.compile("(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck])[ _.-]*[a-d])(.*?)(\.[^.]+)$", flags=re.IGNORECASE)
+
   # Convert quoted filename into consistent UTF-8
   # representation for both Python2 and Python3
   @staticmethod
@@ -4114,7 +4116,6 @@ class MyUtility(object):
       else:
         MyUtility.DCStats[props]["hit"] += 1
         c = MyUtility.DCData[props][path]
-#        MyUtility.DCData[props][path] = {"time": time.time(), "count": c["count"]+1, "data": c["data"]}
         c["time"] = time.time()
         c["count"] += 1
         result = c["data"]
@@ -4194,6 +4195,32 @@ class MyUtility(object):
   def getVersion(strVersion):
     fields = strVersion.split(".")
     return int("%03d%03d%03d" % (int(fields[0]), int(fields[1]), int(fields[2])))
+
+  @staticmethod
+  def removeDiscPart(filename):
+
+    match = MyUtility.RE_STACKING_1_9.match(filename)
+    if not match:
+      match = MyUtility.RE_STACKING_A_D.match(filename)
+
+    if match and len(match.groups()) >= 3:
+      p1 = match.string[:match.end(1)]
+      p2 = match.string[match.start(3):]
+      p1 = p1[:-1] if p1[-1] in [" ", "(", "[", ".", "-", "_"] else p1
+      p2 = p2[1:] if p2[0] in [")", "]"] else p2
+      return "%s%s" % (p1, p2)
+
+    return filename
+
+  @staticmethod
+  def unstackFiles(files, addcombinedfile=False):
+    if files.startswith("stack://"):
+      unstack = files[8:].split(" , ")
+      if addcombinedfile:
+        unstack.insert(0, MyUtility.removeDiscPart(unstack[0]))
+      return unstack
+    else:
+      return [files]
 
 #
 # Load data using JSON-RPC. In the case of TV shows, also load seasons
@@ -5007,17 +5034,22 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
               break
 
     if (check_file or nfo_file) and "file" in item:
-      for file in unstackFiles(item["file"]):
+      files = None
+      file_not_found = True
+      nfo_not_found = True
+      for file in MyUtility.unstackFiles(item["file"], addcombinedfile=True):
         dir = os.path.dirname(file)
         data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
-        files = data.get("result", {}).get("files", [])
+        if files == None:
+          files = data.get("result", {}).get("files", [])
 
-        if check_file and not [f for f in files if f["filetype"] == "file" and f.get("file", None) == file]:
-          missing["missing file"] = False
+        if check_file and file_not_found and [f for f in files if f["filetype"] == "file" and f.get("file", None) == file]:
+          file_not_found = False
 
-        if nfo_file:
+        if nfo_file and nfo_not_found:
           nfofile = "%s.nfo" % os.path.splitext(file)[0]
           for f in [x for x in files if x["filetype"] == "file" and x.get("file", None) == nfofile]:
+            nfo_not_found = False
             jcomms.setTimeStamp(f)
             if "lastmodified_timestamp" in f and \
                f["lastmodified_timestamp"] >= gConfig.qa_nfo_refresh_date:
@@ -5025,6 +5057,9 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
             break
           else:
             missing["missing nfo"] = False
+
+      if file_not_found:
+        missing["missing file"] = False
 
     if "seasons" in item:
       qaData("seasons", jcomms, database, item["seasons"], "label", "season", False, \
@@ -5048,11 +5083,11 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
         if mtype == "Tvshow": mtype = "TVShow"
 
       if "file" in item:
-        mFAIL = ", ".join([x for x in missing if missing[x] == True])
-        mWARN = ", ".join([x for x in missing if missing[x] == False])
+        mFAIL = "; ".join([x for x in missing if missing[x] == True])
+        mWARN = "; ".join([x for x in missing if missing[x] == False])
       else:
         mFAIL = ""
-        mWARN = ", ".join(missing)
+        mWARN = "; ".join(missing)
 
       msg = ""
       if mFAIL: msg = "%sFAIL (%s), " % (msg, mFAIL)
@@ -5061,7 +5096,7 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
       mediaitems.append("%-8s [%-50s]: %s" % (mtype, addEllipsis(50, name), msg))
 
       if "file" in item and mFAIL:
-        dir = "%s;%s" % (mediatype, os.path.dirname(unstackFiles(item["file"])[0]))
+        dir = "%s;%s" % (mediatype, os.path.dirname(MyUtility.unstackFiles(item["file"])[0]))
         libraryids = workItems[dir] if dir in workItems else []
         libraryids.append({"id": libraryid, "name": name})
         workItems[dir] = libraryids
@@ -5083,12 +5118,13 @@ def qa_check_artfile_exists(jcomms, mediatype, item, artwork):
   if "file" not in item:
     return False
 
-  dir = os.path.dirname(item["file"])
+  filename = MyUtility.unstackFiles(item["file"], addcombinedfile=True)[0]
+  dir = os.path.dirname(filename)
   data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
   files = data.get("result", {}).get("files", [])
 
   if files:
-    for art in get_qa_artworkcandidates(mediatype, item, artwork):
+    for art in get_qa_artworkcandidates(mediatype, filename, item, artwork):
       for file in files:
         if file["filetype"] == "file" and file["file"] == art:
           return True
@@ -5097,11 +5133,10 @@ def qa_check_artfile_exists(jcomms, mediatype, item, artwork):
 
 # Construct a list of potential artwork candidates
 # based on file name and artwork type.
-def get_qa_artworkcandidates(mediatype, item, artwork):
+def get_qa_artworkcandidates(mediatype, filename, item, artwork):
   art = []
   types = []
 
-  filename = item["file"]
   fname = os.path.splitext(filename)[0]
   parent = os.path.dirname(filename)
   fs_bs = "\\" if filename.find("\\") != -1 else "/"
@@ -5117,11 +5152,16 @@ def get_qa_artworkcandidates(mediatype, item, artwork):
 
   for t in types:
     art.append("%s-%s.jpg" % (fname, t))
+    art.append("%s-%s.png" % (fname, t))
     art.append("%s%s%s.jpg" % (parent, fs_bs, t))
+    art.append("%s%s%s.png" % (parent, fs_bs, t))
     if mediatype in ["albums", "songs"] and t == "thumbnail":
       art.append("%s.jpg" % (fname))
+      art.append("%s.png" % (fname))
       art.append("%s%s%s.jpg" % (parent, fs_bs, "folder"))
+      art.append("%s%s%s.png" % (parent, fs_bs, "folder"))
       art.append("%s%s%s.jpg" % (parent, fs_bs, "cover"))
+      art.append("%s%s%s.png" % (parent, fs_bs, "cover"))
 
   return art
 
@@ -5162,7 +5202,7 @@ def missingFiles(mediatype, data, fileList, title_name, id_name, showName=None, 
     # Remove matched file from fileList - what files remain at the end
     # will be reported to the user
     if mediatype != "tvshows" and "file" in item:
-      for file in unstackFiles(item["file"]):
+      for file in MyUtility.unstackFiles(item["file"]):
         try:
           fileList.remove(file)
         except ValueError:
@@ -5299,12 +5339,6 @@ def addEllipsis(maxlen, aStr):
   iright = int(maxlen/2) - 1
 
   return "%s...%s" % (aStr[0:ileft], aStr[-iright:])
-
-def unstackFiles(files):
-  if files.startswith("stack://"):
-    return files[8:].split(" , ")
-  else:
-    return [files]
 
 def searchItem(data, field):
   if field in data: return data[field]
