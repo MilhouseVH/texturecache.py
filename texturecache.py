@@ -52,13 +52,15 @@ if sys.version_info >= (3, 0):
 else:
   import ConfigParser, StringIO, httplib, urllib2, Queue
 
+lock = threading.RLock()
+
 #
 # Config class. Will be a global object.
 #
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.1"
+    self.VERSION = "2.2.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -223,7 +225,7 @@ class MyConfiguration(object):
 
     if (web_user and web_pass):
       token = "%s:%s" % (web_user, web_pass)
-      if sys.version_info >= (3, 0):
+      if MyUtility.isPython3:
         self.WEB_AUTH_TOKEN = base64.encodestring(bytes(token, "utf-8")).decode()
       else:
         self.WEB_AUTH_TOKEN = base64.encodestring(token)
@@ -436,6 +438,10 @@ class MyConfiguration(object):
 
     self.CLEAN_SHOW_DIALOGS = self.getBoolean(config, "clean.showdialogs", "no")
     self.SCAN_SHOW_DIALOGS = self.getBoolean(config, "scan.showdialogs", "no")
+
+    self.LOG_REPLAY_FILENAME = self.getValue(config, "replayfile", "")
+    self.log_replay_fmap = {}
+    self.log_replay_tmap = {}
 
   def getdefaultuserdata(self, appid):
     atv2_path     = "/User/Library/Preferences/%s/userdata" % appid
@@ -883,7 +889,7 @@ class MyLogger():
     self.ISATTY = sys.stdout.isatty()
 
     #Ensure stdout/stderr use utf-8 encoding...
-    if sys.version_info >= (3, 1):
+    if MyUtility.isPython3_1:
       sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
       sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
     else:
@@ -894,7 +900,7 @@ class MyLogger():
     if self.LOGFILE: self.LOGFILE.close()
 
   def setLogFile(self, config=None):
-    with threading.Lock():
+    with lock:
       if config and config.LOGFILE:
         if not self.LOGGING:
           filename = config.LOGFILE
@@ -916,7 +922,7 @@ class MyLogger():
           self.LOGFILE = None
 
   def progress(self, data, every=0, finalItem=False, newLine=False, noBlank=False):
-    with threading.Lock():
+    with lock:
       if every != 0 and not finalItem:
         self.now += 1
         if self.now != 1:
@@ -942,7 +948,7 @@ class MyLogger():
     self.now = initialValue
 
   def out(self, data, newLine=False, log=False, padspaces=True):
-    with threading.Lock():
+    with lock:
       udata = MyUtility.toUnicode(data)
       ulen = len(data)
       spaces = self.lastlen - ulen
@@ -969,7 +975,7 @@ class MyLogger():
     if log: self.log(data)
 
   def debug(self, data, jsonrequest=None):
-    with threading.Lock():
+    with lock:
       if self.DEBUG:
         if self.ISATTY:
           self.out("%s: [%s] %s" % (datetime.datetime.now(), self.OPTION, data), newLine=True)
@@ -980,7 +986,7 @@ class MyLogger():
 
   def log(self, data, jsonrequest=None, maxLen=0):
     if self.LOGGING:
-      with threading.Lock():
+      with lock:
         udata = MyUtility.toUnicode(data)
 
         t = threading.current_thread().name
@@ -1000,7 +1006,7 @@ class MyLogger():
   # creation of additional temporary buffers through concatenation.
   def log2(self, prefix, udata, jsonrequest=None, maxLen=0):
     if self.LOGGING:
-      with threading.Lock():
+      with lock:
         t = threading.current_thread().name
         self.LOGFILE.write("%s:%-10s: %s" % (datetime.datetime.now(), t, prefix))
 
@@ -1022,7 +1028,7 @@ class MyLogger():
         if self.DEBUG or self.LOGFLUSH: self.LOGFILE.flush()
 
   def err(self, data, newLine=False, log=False):
-    with threading.Lock():
+    with lock:
       self.progress("")
       udata = MyUtility.toUnicode(data)
       if newLine:
@@ -1076,6 +1082,9 @@ class MyImageLoader(threading.Thread):
         except Queue.Empty:
           break
 
+        except IOEndOfReplayLog:
+          break
+
     self.totals.stop()
     self.complete_queue.put(None)
 
@@ -1106,7 +1115,8 @@ class MyImageLoader(threading.Thread):
     # Retry call to Files.PrepareDownload - hopefully it will succeed eventually...
     while PDRETRY > 0 and url is None and isAvailable:
       self.logger.log("Retrying getDownloadURL(), %d attempts remaining" % PDRETRY)
-      time.sleep(0.5)
+      # Introduce a short delay, unless we're playing back a log file...
+      if self.json.LOG_REPLAYFILE is None: time.sleep(0.5)
       PDRETRY -= 1
       url = self.json.getDownloadURL(item.filename)
 
@@ -1120,18 +1130,14 @@ class MyImageLoader(threading.Thread):
     domain = url.replace("http://", "").split("/")[0]
     page = "/" + "/".join(url.replace("http://", "").split("/")[1:])
 
-    conn = None
     isAvailable = True
     try:
-      conn = httplib.HTTPConnection(domain)
-      conn.request("GET", page, headers={"User-agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0"})
-      resp = conn.getresponse()
-      payload = resp.read(1)
-      self.logger.log("Primed request of: Domain [%s] with URL [%s], result [%d, %s]" % (domain, page, resp.status, resp.reason))
-      isAvailable = (resp.status == 200 or 300 <= resp.status < 400)
+      PAYLOAD = self.json.sendWeb("GET", page, "primeImage", headers={"User-agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0"}, \
+                                  readAmount=1024, rawData=True, domain=domain)
+      self.logger.log("Primed request of: Domain [%s] with URL [%s], result [%d, %s]" % (domain, page, self.json.WEB_LAST_STATUS, self.json.WEB_LAST_REASON))
+      isAvailable = (self.json.WEB_LAST_STATUS == 200 or 300 <= self.json.WEB_LAST_STATUS < 400)
     except:
       isAvailable = False
-    if conn is not None: conn.close()
 
     return isAvailable
 
@@ -1161,7 +1167,7 @@ class MyImageLoader(threading.Thread):
     while ATTEMPT > 0 and (self.config.DOWNLOAD_PAYLOAD or PERFORM_DOWNLOAD):
       try:
         # Don't need to download the whole image for it to be cached so just grab the first 1KB
-        PAYLOAD = self.json.sendWeb("GET", url, readAmount=1024, rawData=True)
+        PAYLOAD = self.json.sendWeb("GET", url, "loadImage", readAmount=1024, rawData=True)
         if self.json.WEB_LAST_STATUS == httplib.OK:
           self.logger.log("Successfully downloaded image with size [%d] bytes, attempts required [%d], filename [%s]" \
                         % (len(PAYLOAD), (self.retry - ATTEMPT + 1), item.decoded_filename))
@@ -1916,6 +1922,13 @@ class MyDB(object):
     else:
       return "WHERE cachedurl LIKE '%s/%%'" % folder
 
+# Raise this exception when we run out of replay log input
+class IOEndOfReplayLog(Exception):
+  def __init__(self, value):
+    self.value = value
+  def __str__(self):
+    return repr(self.value)
+
 #
 # Handle all JSON RPC communication.
 #
@@ -1931,11 +1944,16 @@ class MyJSONComms(object):
     self.mysocket = None
     self.myweb = None
     self.WEB_LAST_STATUS = -1
+    self.WEB_LAST_REASON = ""
     self.config.WEB_SINGLESHOT = True
     self.aUpdateCount = self.vUpdateCount = 0
     self.jcomms2 = None
 
+    self.BUFFER_SIZE = 32768
+
     self.QUIT_METHOD = self.QUIT_PARAMS = None
+
+    self.LOG_REPLAYFILE = None
 
   def __enter__(self):
     return self
@@ -1986,47 +2004,153 @@ class MyJSONComms(object):
       if self.myweb: self.myweb.close()
       self.myweb = httplib.HTTPConnection("%s:%s" % (self.config.XBMC_HOST, self.config.WEB_PORT), timeout=self.connecttimeout)
       self.WEB_LAST_STATUS = -1
+      self.WEB_LAST_REASON = ""
       if self.config.DEBUG: self.myweb.set_debuglevel(1)
     return self.myweb
 
-  def sendWeb(self, request_type, url, request=None, headers={}, readAmount=0, timeout=15.0, rawData=False):
-    if self.config.WEB_AUTH_TOKEN:
-      headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
-
-    web = self.getWeb()
-
-    web.request(request_type, url, request, headers)
-
-    if timeout is None: web.sock.setblocking(1)
-    else: web.sock.settimeout(timeout)
-
+  def logreplay_open(self):
     try:
-      response = web.getresponse()
-      self.WEB_LAST_STATUS = response.status
-      if self.WEB_LAST_STATUS == httplib.UNAUTHORIZED:
-        raise httplib.HTTPException("Remote web host requires webserver.username/webserver.password properties")
-      if sys.version_info >= (3, 0) and not rawData:
-        if readAmount == 0: return response.read().decode("utf-8")
-        else: return response.read(readAmount).decode("utf-8")
+      thread = threading.current_thread().name
+      if thread not in self.config.log_replay_fmap:
+        self.LOG_REPLAYFILE = codecs.open(self.config.LOG_REPLAY_FILENAME, "r", encoding="utf-8")
+        self.config.log_replay_fmap[thread] = self.LOG_REPLAYFILE
       else:
-        if readAmount == 0: return response.read()
-        else: return response.read(readAmount)
-    except socket.timeout:
-      self.logger.log("** iotimeout occurred during web request **")
-      self.WEB_LAST_STATUS = httplib.REQUEST_TIMEOUT
-      self.myweb.close()
-      self.myweb = None
-      return ""
+        self.LOG_REPLAYFILE = self.config.log_replay_fmap[thread]
+      self.logreplay_mapthread(None)
     except:
-      if self.config.WEB_SINGLESHOT == False:
-        self.logger.log("SWITCHING TO WEBSERVER.SINGLESHOT MODE")
-        self.config.WEB_SINGLESHOT = True
-        return self.sendWeb(request_type, url, request, headers, readAmount, timeout, rawData)
-      raise
+      self.logger.err("ERROR: Unable to open replay file [%s] - exiting" % self.config.LOG_REPLAY_FILENAME, newLine=True, log=True)
+      sys.exit(2)
+
+  # When replaying muti-threaded input, map each new thread of input data to the
+  # currently available threads. Once a thread is allocated a thread from the data,
+  # it will only process data for that thread.
+  def logreplay_mapthread(self, map_to_thread=None):
+    thread = threading.current_thread().name
+
+    if map_to_thread is None: # process data for all threads
+      tpattern = thread if thread == "MainThread" else "Thread-[0-9]*"
+    else: # process data for a specific thread
+      tpattern = map_to_thread
+      self.config.log_replay_tmap[map_to_thread] = thread
+
+    self.web_re_result = re.compile("^.*:(%s)[ ]*: .*\.RECEIVED WEB DATA: ([0-9]*), (.*), (.*)$" % tpattern)
+    self.json_re_result = re.compile("^.*:(%s)[ ]*: .*\.PARSING JSON DATA: (.*)$" % tpattern)
+
+  # If the thread data being processed is mapped to a thread other than the current
+  # thread then ignore this thread data
+  def logreplay_ignore_thread(self, map_to_thread):
+    with lock:
+      thread = threading.current_thread().name
+
+      if map_to_thread in self.config.log_replay_tmap:
+         return self.config.log_replay_tmap[map_to_thread] != thread
+
+      self.logreplay_mapthread(map_to_thread)
+      return False
+
+  # Read responses from log, use in place of actual socket/web responses (requests are never made)
+  def logreplay(self, request, useWebServer):
+    if not self.LOG_REPLAYFILE:
+      self.logreplay_open()
+
+    while True:
+      line = self.LOG_REPLAYFILE.readline()
+      if not line: break
+
+      if useWebServer:
+        match = self.web_re_result.match(line)
+        if match and not self.logreplay_ignore_thread(match.group(1)):
+          self.WEB_LAST_STATUS = int(match.group(2))
+          self.WEB_LAST_REASON = match.group(3)
+          return match.group(4).encode("utf-8")
+      else:
+        match = self.json_re_result.match(line)
+        if match and not self.logreplay_ignore_thread(match.group(1)):
+          return match.group(2).encode("utf-8")
+
+    self.LOG_REPLAYFILE.close()
+    raise IOEndOfReplayLog("End of replay log data")
+
+  def sendWeb(self, request_type, url, id, request=None, headers={}, readAmount=0, timeout=15.0, rawData=False, domain=None):
+    if request is not None:
+      sdata = json.dumps(request)
+      self.logger.log("%s.JSON WEB REQUEST: [%s]" % (id, sdata))
+    else:
+      sdata = None
+      self.logger.log("%s.DIRECT WEB REQUEST: [%s], [%s]" % (id, request_type, url))
+
+    if self.config.LOG_REPLAY_FILENAME:
+      data = self.logreplay(url, True)
+      data = "" if sdata and data == "<raw data>" else data
+      if MyUtility.isPython3 and not rawData:
+        data = data.decode("utf-8")
+    else:
+      if self.config.WEB_AUTH_TOKEN:
+        headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
+
+      if domain:
+        web = httplib.HTTPConnection(domain)
+      else:
+        web = self.getWeb()
+
+      web.request(request_type, url, sdata, headers)
+
+      if timeout is None: web.sock.setblocking(1)
+      else: web.sock.settimeout(timeout)
+
+      data = ""
+
+      try:
+        response = web.getresponse()
+        self.WEB_LAST_STATUS = response.status
+        self.WEB_LAST_REASON = response.reason
+
+        if self.WEB_LAST_STATUS == httplib.UNAUTHORIZED:
+          raise httplib.HTTPException("Remote web host requires webserver.username/webserver.password properties")
+
+        if MyUtility.isPython3 and not rawData:
+          if readAmount == 0:
+            data = response.read().decode("utf-8")
+          else:
+            data = response.read(readAmount).decode("utf-8")
+        else:
+          if readAmount == 0:
+            data = response.read()
+          else:
+            data = response.read(readAmount)
+      except socket.timeout:
+        self.logger.log("** iotimeout occurred during web request **")
+        self.WEB_LAST_STATUS = httplib.REQUEST_TIMEOUT
+        self.WEB_LAST_REASON = "Request Timeout"
+        self.myweb.close()
+        self.myweb = None
+        data = ""
+      except:
+        if domain:
+          self.logger.log("%s.RECEIVED WEB DATA: %d, %s, <exception>" % (id, response.status, response.reason), maxLen=256)
+          raise
+        if self.config.WEB_SINGLESHOT == False:
+          self.logger.log("SWITCHING TO WEBSERVER.SINGLESHOT MODE")
+          self.config.WEB_SINGLESHOT = True
+          data = self.sendWeb(request_type, url, id, request, headers, readAmount, timeout, rawData)
+        else:
+          raise
+      finally:
+        if domain and web:
+          web.close()
+
+    if self.logger.LOGGING:
+      if rawData:
+        self.logger.log("%s.RECEIVED WEB DATA: %d, %s, <raw data>" % (id, self.WEB_LAST_STATUS, self.WEB_LAST_REASON), maxLen=256)
+      else:
+        self.logger.log("%s.RECEIVED WEB DATA: %d, %s, %s" % (id, self.WEB_LAST_STATUS, self.WEB_LAST_REASON, data), maxLen=256)
+
+    if sdata:
+      return json.loads(data) if data != "" else ""
+    else:
+      return data
 
   def sendJSON(self, request, id, callback=None, timeout=5.0, checkResult=True, useWebServer=False, ignoreSocketError=False):
-    BUFFER_SIZE = 32768
-
     request["jsonrpc"] = "2.0"
     request["id"] =  id
 
@@ -2035,20 +2159,19 @@ class MyJSONComms(object):
 
     # Following methods don't work over sockets - by design.
     if request["method"] in ["Files.PrepareDownload", "Files.Download"] or useWebServer:
-      self.logger.log("%s.JSON WEB REQUEST:" % id, jsonrequest=request)
-      data = self.sendWeb("POST", "/jsonrpc", json.dumps(request), {"Content-Type": "application/json"}, timeout=timeout)
-      if self.logger.LOGGING:
-        self.logger.log("%s.RECEIVED DATA: %s" % (id, data), maxLen=256)
-      return json.loads(data) if data != "" else ""
+      return self.sendWeb("POST", "/jsonrpc", id, request, {"Content-Type": "application/json"}, timeout=timeout)
 
-    s = self.getSocket()
     self.logger.log("%s.JSON SOCKET REQUEST:" % id, jsonrequest=request)
     START_IO_TIME = time.time()
 
-    if sys.version_info >= (3, 0):
-      s.send(bytes(json.dumps(request), "utf-8"))
+    if self.config.LOG_REPLAY_FILENAME:
+      jsocket = None
     else:
-      s.send(json.dumps(request))
+      jsocket = self.getSocket()
+      if MyUtility.isPython3:
+        jsocket.send(bytes(json.dumps(request), "utf-8"))
+      else:
+        jsocket.send(json.dumps(request))
 
     ENDOFDATA = True
     LASTIO = 0
@@ -2058,19 +2181,23 @@ class MyJSONComms(object):
     while True:
       if ENDOFDATA:
         ENDOFDATA = False
-        s.setblocking(1)
         data = b""
+        if jsocket: jsocket.setblocking(1)
 
       try:
-        newdata = s.recv(BUFFER_SIZE)
-        if len(data) == 0: s.settimeout(1.0)
+        if jsocket:
+          newdata = jsocket.recv(self.BUFFER_SIZE)
+          if len(data) == 0: jsocket.settimeout(1.0)
+        else:
+          newdata = self.logreplay(request, useWebServer)
+
         data += newdata
         LASTIO = time.time()
         self.logger.log("%s.BUFFER RECEIVED (len %d)" % (id, len(newdata)))
         if len(newdata) == 0: raise IOError("nodata")
         READ_ERR = False
 
-      except IOError as e:
+      except (IOError, IOEndOfReplayLog) as e:
         # Hack to exit monitor mode when socket dies
         if callback:
           jdata = {"jsonrpc":"2.0","method":"System.OnQuit","params":{"data":-1,"sender":"xbmc"}}
@@ -3390,14 +3517,14 @@ class MyTotals(object):
     return False
 
   def init(self, name=""):
-    with threading.Lock():
+    with lock:
       tname = threading.current_thread().name if name == "" else name
       self.THREADS[tname] = 0
       self.THREADS_HIST[tname] = (0, 0)
 
   # Record start time for an image type.
   def start(self, mediatype, imgtype):
-    with threading.Lock():
+    with lock:
       tname = threading.current_thread().name
       ctime = time.time()
       self.THREADS[tname] = ctime
@@ -3408,7 +3535,7 @@ class MyTotals(object):
   # Record current time for imgtype - this will allow stats to
   # determine cumulative time taken to download an image type.
   def finish(self, mediatype, imgtype):
-    with threading.Lock():
+    with lock:
       tname = threading.current_thread().name
       ctime = time.time()
       self.setPerformance(ctime - self.THREADS[tname])
@@ -3421,14 +3548,14 @@ class MyTotals(object):
 
   # Increment counter for action/imgtype pairing
   def bump(self, action, imgtype):
-    with threading.Lock():
+    with lock:
       if not action in self.TOTALS: self.TOTALS[action] = {}
       if not imgtype in self.TOTALS[action]: self.TOTALS[action][imgtype] = 0
       self.TOTALS[action][imgtype] += 1
 
   # Calculate and store min/max/avg.
   def setPerformance(self, elapsed):
-    with threading.Lock():
+    with lock:
       (s, e, c) = self.HISTORY
       self.HISTORY = (s, time.time(), c+1)
 
@@ -3439,7 +3566,7 @@ class MyTotals(object):
 
   # Calculate average performance per second.
   def getPerformance(self, remaining):
-    with threading.Lock():
+    with lock:
       (s, e, c) = self.HISTORY
       tpersec = (c / (e - s)) if c != 0 else 1.0
       eta = self.secondsToTime(remaining / tpersec, withMillis=False)
@@ -3723,6 +3850,7 @@ class MyWatchedItem(object):
 # Helper class...
 class MyUtility(object):
   isPython3 = (sys.version_info >= (3, 0))
+  isPython3_1 = (sys.version_info >= (3, 1))
   EPOCH = datetime.datetime.utcfromtimestamp(0)
 
   DCData = {}
@@ -4056,7 +4184,7 @@ class MyUtility(object):
 
   @staticmethod
   def invalidateDirectoryCache(mediatype):
-    with threading.Lock():
+    with lock:
       # Transfer current stats to accumulated
       for p in MyUtility.DCData:
         for c in MyUtility.DCStats[p]:
@@ -4077,7 +4205,7 @@ class MyUtility(object):
     fs_bs = "\\" if path.find("\\") != -1 else "/"
     if path[-1:] != fs_bs: path += fs_bs
 
-    with threading.Lock():
+    with lock:
       if props not in MyUtility.DCData:
         MyUtility.DCData[props] = {}
       if props not in MyUtility.DCStats:
@@ -4104,7 +4232,7 @@ class MyUtility(object):
     fs_bs = "\\" if path.find("\\") != -1 else "/"
     if path[-1:] != fs_bs: path += fs_bs
 
-    with threading.Lock():
+    with lock:
       if props not in MyUtility.DCData:
         MyUtility.DCData[props] = {}
         if props not in MyUtility.DCStats:
@@ -7205,7 +7333,7 @@ def readFile(infile, outfile):
   url = jcomms.getDownloadURL(infile)
   if url:
     try:
-      PAYLOAD = jcomms.sendWeb("GET", url, rawData=True)
+      PAYLOAD = jcomms.sendWeb("GET", url, "readFile", rawData=True)
       if outfile == "-":
         os.write(sys.stdout.fileno(), PAYLOAD)
         sys.stdout.flush()
@@ -7867,7 +7995,7 @@ def getLatestVersion_ex(url, headers=None):
     else:
       response = urllib2.urlopen(url)
 
-    if sys.version_info >= (3, 0):
+    if MyUtility.isPython3:
       data = response.read().decode("utf-8")
     else:
       data = response.read()

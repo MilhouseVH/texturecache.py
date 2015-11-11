@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.2.2 (11/11/2015)
+* Add: Initial stab at a replay facility, purely as a debugging aid
+
 ##Version 2.2.1 (10/11/2015)
 * Fix: Improve stacking support - correctly match artwork and nfo against the combined (unstacked) filename
 
