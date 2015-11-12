@@ -5167,8 +5167,8 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
 
     if (check_file or nfo_file) and "file" in item:
       files = None
-      file_not_found = True
-      nfo_not_found = True
+      file_not_found = check_file
+      nfo_not_found = nfo_file
       for file in MyUtility.unstackFiles(item["file"], addcombinedfile=True):
         dir = os.path.dirname(file)
         data = jcomms.getDirectoryList(dir, mediatype="files", properties=["file", "lastmodified"])
