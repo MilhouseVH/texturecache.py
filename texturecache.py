@@ -2057,6 +2057,10 @@ class MyJSONComms(object):
       line = self.LOG_REPLAYFILE.readline()
       if not line: break
 
+      # Remove trailing newline and - if present, ie. Windows/DOS file format - carriage return
+      if line[-1] in ["\n", "\r"]: line = line[0:-1]
+      if line[-1] in ["\n", "\r"]: line = line[0:-1]
+
       if useWebServer:
         match = self.web_re_result.match(line)
         if match and not self.logreplay_ignore_thread(match.group(1)):
