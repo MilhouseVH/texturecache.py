@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 2.2.3 (12/11/2015)
+* Fix: Stop flagging files as missing in `qa` when we're not checking for files...
+* Fix: Correctly handle DOS line endings on Linux when replaying log files
+
 ##Version 2.2.2 (11/11/2015)
 * Add: Initial stab at a replay facility, purely as a debugging aid
 
