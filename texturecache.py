@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.3"
+    self.VERSION = "2.2.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -5186,12 +5186,12 @@ def qaData(mediatype, jcomms, database, data, title_name, id_name, rescan, work=
             if "lastmodified_timestamp" in f and \
                f["lastmodified_timestamp"] >= gConfig.qa_nfo_refresh_date:
               missing["modified nfo"] = True
-            break
-          else:
-            missing["missing nfo"] = False
 
       if file_not_found:
         missing["missing file"] = False
+
+      if nfo_not_found:
+        missing["missing nfo"] = False
 
     if "seasons" in item:
       qaData("seasons", jcomms, database, item["seasons"], "label", "season", False, \

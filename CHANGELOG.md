@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.2.4 (12/11/2015)
+* Fix: Quick fix... don't flag nfo as missing if it's not matched against the first stacked file (check all files before deciding it is missing)
+
 ##Version 2.2.3 (12/11/2015)
 * Fix: Stop flagging files as missing in `qa` when we're not checking for files...
 * Fix: Correctly handle DOS line endings on Linux when replaying log files
