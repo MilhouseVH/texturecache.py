@@ -35,7 +35,7 @@ Utility to manage and update the local Kodi texture cache (Texture##.db and Thum
 
 **[remove]** Remove specified library item from media library, ie. "remove movie 123"
 
-**[imdb]** Update IMDb fields on movies. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest IMDb details based on `imdbnumber`. Movies without `imdbnumber` will not be updated. Specify fields to be updated with the property `@imdb.fields` from the following: `top250`, `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. The default value is: `rating, votes, top250`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields=+year,genre` to update ratings, votes, top250, year and genre. See log for old/new values.
+**[imdb]** Update IMDb fields on movies and tvshows. Pipe output into `set` option to apply changes to the media library using JSON. Uses http://www.omdbapi.com to query latest IMDb details based on `imdbnumber` (movies) or `title` and `season`/`episode` # (tvshows). Movies without `imdbnumber` will not be updated. Specify movie fields to be updated with the property `@imdb.fields.movies` from the following: `top250`, `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline` - the default value is: `rating, votes, top250`. Specify tvshow fields to be updated with the property `@imdb.fields.tvshows` from the following: `title`, `rating`, `votes`, `year`, `runtime`, `genre`, `plot` and `plotoutline`. Specify additional fields to the default by prefixing the list with `+`, eg. `@imdb.fields.movies=+year,genre` to update movie ratings, votes, top250, year and genre. See log for old/new values. See [announcement](http://forum.kodi.tv/showthread.php?tid=158373&pid=2120793#pid2120793) for further important details
 
 **[purge hashed|unhashed|all]** Delete cached artwork containing specified patterns, with or without lasthashcheck, or if it doesn't matter `all` eg. `purge unhashed youtube iplayer imdb.com`
 
@@ -490,7 +490,8 @@ audio.filetypes =
 subtitle.filetypes =
 watched.overwrite = no
 network.mac =
-imdb.fields = rating, votes
+imdb.fields.movies = rating, votes, top250
+imdb.fields.tvshows = rating, votes
 bin.tvservice = /usr/bin/tvservice
 hdmi.force.hotplug = no
 ```
