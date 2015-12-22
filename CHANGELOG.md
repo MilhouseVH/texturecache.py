@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.2.6 (22/12/2015)
+* Chg: Allow `qaperiod=-1` to disable date added checks
+
 ##Version 2.2.5 (14/11/2015)
 * Fix: Update README to clarify change of field name (`imdb.fields` -> `imdb.fields.movies`)
 * Fix: Improve handling of multipart episodes when querying omdbapi. For example, NCIS S05E18E19: when E19 isn't found on omdbapi - it doesn't exist - then query omdbapi again using the first part E18, but ignoring plot details as the plot details of the first episode may not apply to subsequent episodes.

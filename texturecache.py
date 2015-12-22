@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.5"
+    self.VERSION = "2.2.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -308,7 +308,7 @@ class MyConfiguration(object):
 
     self.QAPERIOD = int(self.getValue(config, "qaperiod", "30"))
     adate = datetime.date.today() - datetime.timedelta(days=self.QAPERIOD)
-    self.QADATE = adate.strftime("%Y-%m-%d")
+    self.QADATE = adate.strftime("%Y-%m-%d") if self.QAPERIOD >= 0 else None
 
     self.QA_FILE = self.getBoolean(config, "qa.file", "no")
     self.QA_FAIL_CHECKEXISTS = self.getBoolean(config, "qa.fail.checkexists", "yes")
