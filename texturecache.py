@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.6"
+    self.VERSION = "2.2.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -95,6 +95,7 @@ class MyConfiguration(object):
                                   "libshowdialogs":   (6, 19, 0),
                                   "exitcode":         (6, 21, 0),
                                   "refreshrefactor":  (6, 27, 0),
+                                  "votesnogrouping":  (7,  1, 0),
                                   "profiledirectory": (999, 99, 9)
                                  }
 
@@ -519,6 +520,9 @@ class MyConfiguration(object):
 
     # Support profile switching?
     self.JSON_HAS_PROFILE_SUPPORT = self.HasJSONCapability("profilesupport")
+
+    #https://github.com/xbmc/xbmc/pull/8080
+    self.JSON_VOTES_HAVE_NO_GROUPING = self.HasJSONCapability("votesnogrouping")
 
     # https://github.com/xbmc/xbmc/pull/8196
     self.JSON_HAS_PROFILE_DIRECTORY = self.HasJSONCapability("profiledirectory")
@@ -3883,6 +3887,8 @@ class MyUtility(object):
   RE_STACKING_1_9 = re.compile("(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck])[ _.-]*[0-9]+)(.*?)(\.[^.]+)$", flags=re.IGNORECASE)
   RE_STACKING_A_D = re.compile("(.*?)([ _.-]*(?:cd|dvd|p(?:ar)?t|dis[ck])[ _.-]*[a-d])(.*?)(\.[^.]+)$", flags=re.IGNORECASE)
 
+  RE_NOT_DIGITS = re.compile("[^0123456789]")
+
   # Convert quoted filename into consistent UTF-8
   # representation for both Python2 and Python3
   @staticmethod
@@ -4065,7 +4071,10 @@ class MyUtility(object):
             except:
               pass
             try:
-              movie["votes"] = u"%s" % format(int(row[4].text.replace(",", "")), ",d").replace(",", gConfig.IMDB_GROUPING)
+              if gConfig.JSON_VOTES_HAVE_NO_GROUPING:
+                movie["votes"] = u"%s" % int(MyUtility.getDigits(row[4].text))
+              else:
+                movie["votes"] = u"%s" % format(int(MyUtility.getDigits(row[4].text)), ",d").replace(",", gConfig.IMDB_GROUPING)
             except:
               pass
             movies[movie["link"]] = movie
@@ -4175,7 +4184,10 @@ class MyUtility(object):
             if r > 0:
               newdata[newkey] = r
           elif newkey == "votes":
-            newdata[newkey] = format(int(data[key].replace(",","")), ",d").replace(",", gConfig.IMDB_GROUPING)
+            if gConfig.JSON_VOTES_HAVE_NO_GROUPING:
+              newdata[newkey] = "%s" % int(MyUtility.getDigits(data[key]))
+            else:
+              newdata[newkey] = format(int(MyUtility.getDigits(data[key])), ",d").replace(",", gConfig.IMDB_GROUPING)
           else:
             newdata[newkey] = data[key]
         except Exception as e:
@@ -4367,6 +4379,10 @@ class MyUtility(object):
       return unstack
     else:
       return [files]
+
+  @staticmethod
+  def getDigits(text):
+    return MyUtility.RE_NOT_DIGITS.sub("", text)
 
 #
 # Load data using JSON-RPC. In the case of TV shows, also load seasons
@@ -8209,6 +8225,9 @@ def main(argv):
       if argv[1] == "audio": _multi_call = multi_call_a
       if argv[1] == "video": _multi_call = multi_call_v
       if argv[1] == "all":   _multi_call = multi_call
+
+    if _action == "imdb" and _multi_call != []:
+      usage(1)
 
     if _multi_call != [] and not gConfig.HAS_PVR:
       for item in ["pvr.tv", "pvr.radio"]:

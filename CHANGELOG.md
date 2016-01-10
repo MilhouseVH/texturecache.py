@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.2.7 (10/01/2016)
+* Chg: With JSON API 7.1.0 (after PR8080), all `votes` are now returned as digits with no grouping, so respect this.
+
 ##Version 2.2.6 (22/12/2015)
 * Chg: Allow `qaperiod=-1` to disable date added checks
 
