@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.7"
+    self.VERSION = "2.2.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -395,8 +395,10 @@ class MyConfiguration(object):
     self.IMDB_FIELDS_MOVIES = self.getExRepList(config, "imdb.fields.movies", ["rating", "votes", "top250"], True)
     self.IMDB_FIELDS_TVSHOWS = self.getExRepList(config, "imdb.fields.tvshows", ["rating", "votes"], True)
     self.IMDB_IGNORE_TVTITLES = self.getSimpleList(config, "imdb.ignore.tvtitles", "", True, "|")
+    self.IMDB_MAP_TVTITLES = self.getSimpleList(config, "imdb.map.tvtitles", "", True, "|")
     self.IMDB_TRANSLATE_TVTITLES = self.getSimpleList(config, "imdb.translate.tvtitles", "", True, "|", False)
     self.IMDB_TRANSLATE_TVYEARS = self.getSimpleList(config, "imdb.translate.tvyears", "", True, "|")
+    self.IMDB_IGNORE_MISSING_EPISODES = self.getBoolean(config, "imdb.ignore.missing.episodes", "no")
     self.IMDB_THREADS = int(self.getValue(config, "imdb.threads", 10))
     self.IMDB_THREADS = 1 if self.IMDB_THREADS < 1 else self.IMDB_THREADS
     self.IMDB_THREADS = 20 if self.IMDB_THREADS > 20 else self.IMDB_THREADS
@@ -833,8 +835,10 @@ class MyConfiguration(object):
     print("  imdb.fields.movie = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_MOVIES)))
     print("  imdb.fields.tvshows = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_TVSHOWS)))
     print("  imdb.ignore.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_IGNORE_TVTITLES)))
+    print("  imdb.map.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_MAP_TVTITLES)))
     print("  imdb.translate.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_TRANSLATE_TVTITLES)))
     print("  imdb.translate.tvyears = %s" % self.NoneIsBlank("|".join(self.IMDB_TRANSLATE_TVYEARS)))
+    print("  imdb.ignore.missing.episodes = %s" % self.BooleanIsYesNo(self.IMDB_IGNORE_MISSING_EPISODES))
     print("  imdb.threads = %s" % self.IMDB_THREADS)
     print("  imdb.timeout = %s" % self.NoneIsBlank(self.IMDB_TIMEOUT))
     print("  imdb.retry = %s" % self.IMDB_RETRY)
@@ -1216,6 +1220,8 @@ class MyIMDBLoader(threading.Thread):
     # Avoid querying OMDb if we're only updating fields available from Top250 movie list
     self.onlyt250fields = (set(imdbfields).issubset(["top250", "rating", "votes"]))
 
+    self.ignore_missing_episodes = config.IMDB_IGNORE_MISSING_EPISODES
+
     self.timeout = self.config.IMDB_TIMEOUT
     self.retry = self.config.IMDB_RETRY
 
@@ -1227,7 +1233,8 @@ class MyIMDBLoader(threading.Thread):
 
         item = qItem["item"]
 
-        imdbnumber = item.get("imdbnumber", "")
+        imdbnumber = item.get("imdbnumber", None)
+
         title = item.get("title", item["label"])
         original_title = qItem.get("OriginalShowTitle", title)
         year = item.get("year", None)
@@ -1271,14 +1278,14 @@ class MyIMDBLoader(threading.Thread):
           ismultipartquery = False
           while True:
             if isMovie:
-              self.logger.log("Querying OMDb [a=%d, r=%d]: [movie] %s (%s)" % (attempt, self.retry, imdbnumber, title))
-              newimdb = MyUtility.getIMDBInfo(imdbnumber=imdbnumber, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout) if imdbnumber else None
+              self.logger.log("Querying OMDb [a=%d, r=%d]: [movie] %s, imdb=%s" % (attempt, self.retry, imdbnumber, title))
+              newimdb = MyUtility.getIMDBInfo("movie", imdbnumber=imdbnumber, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout) if imdbnumber else None
             elif isTVShow:
-              self.logger.log("Querying OMDb [a=%d, r=%d]: [tvshow] %s, %d" % (attempt, self.retry, title, year))
-              newimdb = MyUtility.getIMDBInfo(title=title, year=year, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
+              self.logger.log("Querying OMDb [a=%d, r=%d]: [tvshow] %s, %d, imdb=%s" % (attempt, self.retry, title, year, MyUtility.nonestr(imdbnumber)))
+              newimdb = MyUtility.getIMDBInfo("tvshow", imdbnumber=imdbnumber, title=title, year=year, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
             elif isEpisode:
-              self.logger.log("Querying OMDb [a=%d, r=%d]: [episode] %s, %d, S%02d, E%02d" % (attempt, self.retry, show_title, show_year, season, episode))
-              newimdb = MyUtility.getIMDBInfo(title=show_title, year=show_year, season=season, episode=episode,
+              self.logger.log("Querying OMDb [a=%d, r=%d]: [episode] %s, %d, S%02d, E%02d, imdb=%s" % (attempt, self.retry, show_title, show_year, season, episode, MyUtility.nonestr(imdbnumber)))
+              newimdb = MyUtility.getIMDBInfo("episode", imdbnumber=imdbnumber, title=show_title, year=show_year, season=season, episode=episode,
                                               plotFull=(self.plotFull and not ismultipartquery), plotOutline=(self.plotOutline and not ismultipartquery), qtimeout=self.timeout)
 
             if newimdb is not None:
@@ -1300,11 +1307,17 @@ class MyIMDBLoader(threading.Thread):
 
           if newimdb is None:
             if isMovie:
-              self.logger.err("Could not obtain OMDb details for [movie] %s (%s)" % (imdbnumber, original_title), newLine=True, log=True)
+              logmsg = "Could not obtain OMDb details for [movie] %s (%s)" % (imdbnumber, original_title)
             elif isTVShow:
-              self.logger.err("Could not obtain OMDb details for [tvshow] %s (%d)" % (original_title, year), newLine=True, log=True)
+              logmsg = "Could not obtain OMDb details for [tvshow] %s (%d)" % (original_title, year)
             elif isEpisode:
-              self.logger.err("Could not obtain OMDb details for [episode] %s S%02dE%02d" % (original_title, season, episode), newLine=True, log=True)
+              logmsg = "Could not obtain OMDb details for [episode] %s S%02dE%02d" % (original_title, season, episode)
+
+            if isEpisode and self.ignore_missing_episodes:
+              self.logger.log(logmsg)
+            else:
+              self.logger.err(logmsg, newLine=True, log=True)
+
             continue
         else:
           self.logger.log("Avoided OMDb query, movies250 has all we need: %s (%s)" % (imdbnumber, original_title))
@@ -4090,19 +4103,22 @@ class MyUtility(object):
       return None
 
   @staticmethod
-  def getIMDBInfo(imdbnumber=None, title=None, year=None, season=None, episode=None, plotFull=False, plotOutline=False, qtimeout=15.0):
+  def getIMDBInfo(mediatype, imdbnumber=None, title=None, year=None, season=None, episode=None, plotFull=False, plotOutline=False, qtimeout=15.0):
     try:
       base_url = "http://www.omdbapi.com"
 
       isMovie = isTVShow = isSeason = isEpisode = False
 
-      if imdbnumber is not None:
+      if mediatype == "movie":
         query_url = "i=%s&type=movie" % imdbnumber
         reference = imdbnumber
         isMovie = True
-      elif title is not None and year is not None:
+      elif mediatype in ["tvshow", "episode"]:
         reference = "tvshow: %s (%d)" % (title, year)
-        query_url = "t=%s&y=%d" % (MyUtility.denormalise(title, False), year)
+        if imdbnumber is not None:
+          query_url = "i=%s" % imdbnumber
+        else:
+          query_url = "t=%s&y=%d" % (MyUtility.denormalise(title, False), year)
         isTVShow = True
         if season:
           query_url = "%s&season=%d" % (query_url, season)
@@ -4188,8 +4204,15 @@ class MyUtility(object):
               newdata[newkey] = "%s" % int(MyUtility.getDigits(data[key]))
             else:
               newdata[newkey] = format(int(MyUtility.getDigits(data[key])), ",d").replace(",", gConfig.IMDB_GROUPING)
+          elif newkey == "rated":
+            newkey = "mpaa"
+            newdata[newkey] = "Rated %s" % data[key]
           else:
             newdata[newkey] = data[key]
+
+          if newkey in newdata:
+            newdata[newkey] = MyUtility.toUnicode(newdata[newkey])
+
         except Exception as e:
           gLogger.log("Exception during IMDb processing: reference [%s], key [%s]. msg [%s]" % (reference, key, str(e)))
           gLogger.log("OMDb API Query [%s?%s]" % (base_url, query_url))
@@ -4198,6 +4221,12 @@ class MyUtility(object):
       gLogger.log("Exception during IMDb processing: reference [%s], timeout [%s], msg [%s]" % (reference, qtimeout, str(e)))
       gLogger.log("OMDb API Query [%s?%s]" % (base_url, query_url))
       return {}
+
+  @staticmethod
+  def nonestr(s):
+    if s is None:
+      return ""
+    return str(s)
 
   @staticmethod
   def is_cache_item_stale(config, jcomms, mediaitem):
@@ -5848,9 +5877,12 @@ def updateIMDb(mediatype, jcomms, data):
       for season in tvshow["seasons"]:
         if season["season"] < 1: continue
         if "episodes" not in season: continue
+
         for episode in season["episodes"]:
           if "title" not in episode:
             episode["title"] = episode["label"]
+
+          episode["imdbnumber"] = tvhash[tvshow["tvshowid"]]["imdbnumber"]
 
           SxE = re.sub("[0-9]*x([0-9]*)\..*", "\\1", episode["label"])
           if SxE == episode["label"] or int(SxE) < 1: continue
@@ -5903,30 +5935,53 @@ def _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdb
       input_queue.put({"item": movie})
   elif mediatype == "tvshows":
     re_ignore_titles = []
+    re_map_titles = []
     re_trans_titles = []
     re_trans_years = []
     re_parenthesis = re.compile("\([a-zA-Z]*\)$")
 
     for ft in gConfig.IMDB_IGNORE_TVTITLES:
       re_ignore_titles.append(re.compile(ft, re.IGNORECASE))
+
+    for ft in gConfig.IMDB_MAP_TVTITLES:
+      ftsplit = ft.split("=")
+      if len(ftsplit) == 2:
+        re_map_titles.append((re.compile(ftsplit[0], re.IGNORECASE), ftsplit[1]))
+
     for ft in gConfig.IMDB_TRANSLATE_TVTITLES:
       ftsplit = ft.split("=")
       if len(ftsplit) == 2:
         re_trans_titles.append((re.compile(ftsplit[0], re.IGNORECASE), ftsplit[1]))
+
     for ft in gConfig.IMDB_TRANSLATE_TVYEARS:
       ftsplit = ft.split("=")
       if len(ftsplit) == 2 and ftsplit[1]:
         re_trans_years.append((re.compile(ftsplit[0], re.IGNORECASE), int(ftsplit[1])))
+
     for tvshow in data:
       ignoreShow = False
       tvshow["tc.title"] = tvshow["title"]
       tvshow["tc.year"] = tvshow["year"]
+
       for ignore in re_ignore_titles:
         if ignore.search(tvshow["title"]):
           gLogger.log("Pre-processing #1 OMDb: Title: [%s] ignoring TV show - matched [%s] in imdb.ignore.tvtitles" % (tvshow["title"], ignore.pattern))
           ignoreShow = True
           break
+
       if not ignoreShow:
+        # Map to imdbnumber?
+        for trans in re_map_titles:
+          if trans[0].search(tvshow["title"]):
+            gLogger.log("Pre-processing #2 OMDb: Title: [%s] mapped to imdbnumber for pattern [%s], assigning [%s]" % (tvshow["title"], trans[0].pattern, trans[1]))
+            tvshow["imdbnumber"] = trans[1]
+            break
+
+        # If we've got an imdbnumber don't bother with remaining translations
+        if "imdbnumber" in tvshow:
+          input_queue.put({"OriginalShowTitle": tvshow["tc.title"], "item": tvshow})
+          continue
+
         # Translate year
         for trans in re_trans_years:
           if trans[0].search(tvshow["title"]):
@@ -5955,6 +6010,7 @@ def _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdb
             gLogger.log("Pre-processing #5 OMDb: Title: [%s] removing trailing parenthesis from title, giving [%s]" % (before_title, tvshow["title"]))
 
         input_queue.put({"OriginalShowTitle": tvshow["tc.title"], "item": tvshow})
+
   elif mediatype == "episodes":
     for episode in data:
       input_queue.put(episode)
@@ -6000,14 +6056,16 @@ def _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdb
 
     gLogger.progress("Processing IMDb: %s..." % infotitle)
 
+    newimdb = qItem["newimdb"]
+
     if mediatype == "movies":
       libid = item["movieid"]
     elif mediatype == "tvshows":
       libid = item["tvshowid"]
+      imdbnumber = newimdb.get("id", "")
     elif mediatype == "episodes":
       libid = item["episodeid"]
-
-    newimdb = qItem["newimdb"]
+      imdbnumber = newimdb.get("id", "")
 
     # Truncate rating to 1 decimal place
     # Keep existing value if difference is likely to be due to platform
@@ -6026,11 +6084,13 @@ def _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdb
     olditems = {"items": {}}
     workitem = {"type": mediatype[:-1],
                 "libraryid": libid,
+                "imdbnumber": imdbnumber,
                 "title": title,
                 "items": {}}
 
     if year is not None:
       workitem["year"] = year,
+
     if mediatype == "episodes":
       workitem["episodetitle"] = item["title"]
 

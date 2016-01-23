@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.2.8 (23/01/2016)
+* Chg: Use imdbnumber to lookup omdbapi.com for tvshows and episodes. Add `@imdb.map.tvtitles=<pattern>=<imdbnumber>[|<pattern>=<imdbnumber>]` to map tvshow titles to specific imdb numbers - useful when the default title+year query matches the wrong tvshow. This mapping should make other translations redundant, although they will continue to work. Once an imdbnumber is available for a tvshow (either from the mapping or title+year lookup), episodes will be queried using the imdbnumber rather than title+year, which might be marginally more efficient.
+
 ##Version 2.2.7 (10/01/2016)
 * Chg: With JSON API 7.1.0 (after PR8080), all `votes` are now returned as digits with no grouping, so respect this.
 
