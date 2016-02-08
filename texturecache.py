@@ -175,7 +175,7 @@ class MyConfiguration(object):
     if UD_SYS_DEFAULT is None: UD_SYS_DEFAULT = self.getdefaultuserdata("XBMC")
     if UD_SYS_DEFAULT is None: UD_SYS_DEFAULT = "~/userdata"
 
-    self.XBMC_BASE = os.path.expanduser(self.getValue(config, "userdata", UD_SYS_DEFAULT))
+    self.KODI_BASE = os.path.expanduser(self.getValue(config, "userdata", UD_SYS_DEFAULT))
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
@@ -199,15 +199,17 @@ class MyConfiguration(object):
     self.DBJSON = self.getValue(config, "dbjson", "auto")
     self.USEJSONDB = self.getBoolean(config, "dbjson", "yes")
 
-    if self.XBMC_BASE[-1:] not in ["/", "\\"]: self.XBMC_BASE += "/"
+    if self.KODI_BASE[-1:] not in ["/", "\\"]: self.KODI_BASE += "/"
     if self.THUMBNAILS[-1:] not in ["/", "\\"]: self.THUMBNAILS += "/"
 
-    self.XBMC_BASE = self.XBMC_BASE.replace("/", os.sep)
+    self.KODI_BASE = self.KODI_BASE.replace("/", os.sep)
     self.TEXTUREDB = self.TEXTUREDB.replace("/", os.sep)
     self.THUMBNAILS = self.THUMBNAILS.replace("/", os.sep)
     self.HAS_THUMBNAILS_FS = os.path.exists(self.getFilePath())
 
-    self.XBMC_HOST = self.getValue(config, "xbmc.host", "localhost")
+    self.KODI_HOST = self.getValue(config, "xbmc.host", None, True)
+    if self.KODI_HOST is None:
+      self.KODI_HOST = self.getValue(config, "kodi.host", "localhost")
     self.WEB_PORT = self.getValue(config, "webserver.port", "8080")
     self.WEB_SINGLESHOT = self.getBoolean(config, "webserver.singleshot", "no")
     self.RPC_PORT = self.getValue(config, "rpc.port", "9090")
@@ -705,17 +707,17 @@ class MyConfiguration(object):
     if os.path.isabs(self.THUMBNAILS):
       return os.path.join(self.THUMBNAILS, filename)
     elif self.PROFILE_DIRECTORY != "":
-      return os.path.join(self.XBMC_BASE, "profiles", self.PROFILE_DIRECTORY, self.THUMBNAILS, filename)
+      return os.path.join(self.KODI_BASE, "profiles", self.PROFILE_DIRECTORY, self.THUMBNAILS, filename)
     else:
-      return os.path.join(self.XBMC_BASE, self.THUMBNAILS, filename)
+      return os.path.join(self.KODI_BASE, self.THUMBNAILS, filename)
 
   def getDBPath(self):
     if os.path.isabs(self.TEXTUREDB):
       return self.TEXTUREDB
     elif self.PROFILE_DIRECTORY != "":
-      return os.path.join(self.XBMC_BASE, "profiles", self.PROFILE_DIRECTORY, self.TEXTUREDB)
+      return os.path.join(self.KODI_BASE, "profiles", self.PROFILE_DIRECTORY, self.TEXTUREDB)
     else:
-      return os.path.join(self.XBMC_BASE, self.TEXTUREDB)
+      return os.path.join(self.KODI_BASE, self.TEXTUREDB)
 
   def NoneIsBlank(self, x):
     return x if x else ""
@@ -753,10 +755,10 @@ class MyConfiguration(object):
     print("Current properties (if exists, read from %s):" % (self.FILENAME))
     print("")
     print("  sep = %s" % self.FSEP)
-    print("  userdata = %s " % self.XBMC_BASE)
+    print("  userdata = %s " % self.KODI_BASE)
     print("  dbfile = %s" % self.TEXTUREDB)
     print("  thumbnails = %s " % self.THUMBNAILS)
-    print("  xbmc.host = %s" % self.XBMC_HOST)
+    print("  kodi.host = %s" % self.KODI_HOST)
     print("  webserver.port = %s" % self.WEB_PORT)
     print("  webserver.ctimeout = %s" % self.NoneIsBlank(self.WEB_CONNECTTIMEOUT))
     print("  rpc.port = %s" % self.RPC_PORT)
@@ -1381,11 +1383,11 @@ class MyHDMIManager(threading.Thread):
 
   def run(self):
     try:
-      self.MonitorXBMC()
+      self.MonitorKodi()
     except:
       pass
 
-  def MonitorXBMC(self):
+  def MonitorKodi(self):
     clientState = {}
     hdmi_on = True
 
@@ -1413,7 +1415,7 @@ class MyHDMIManager(threading.Thread):
           self.logger.debug("Connected to Kodi")
           self.logger.debug("HDMI power management thread - initialising Kodi and HDMI state")
 
-          clientState = self.getXBMCStatus()
+          clientState = self.getKodiStatus()
           hdmi_on = self.getHDMIState()
 
           screensaver_active = clientState["screensaver.active"]
@@ -1466,7 +1468,7 @@ class MyHDMIManager(threading.Thread):
             else:
               hdmi_on = self.enable_hdmi()
               if not self.candisable:
-                self.sendXBMCExit()
+                self.sendKodiExit()
 
         elif method == "Player.OnStop":
           self.EventSet(self.EV_PLAY_STOP)
@@ -1586,12 +1588,12 @@ class MyHDMIManager(threading.Thread):
     for event in self.events:
       self.EventStop(event)
 
-  def sendXBMCExit(self):
+  def sendKodiExit(self):
     self.logger.debug("Sending Application.Quit() to Kodi")
     REQUEST = {"method": "Application.Quit"}
     MyJSONComms(self.config, self.logger).sendJSON(REQUEST, "libExit", checkResult=False)
 
-  def getXBMCStatus(self):
+  def getKodiStatus(self):
     jcomms = MyJSONComms(self.config, self.logger)
 
     statuses = {}
@@ -2008,7 +2010,7 @@ class MyJSONComms(object):
         try:
           self.mysocket = socket.socket(ipversion, socket.SOCK_STREAM)
           self.mysocket.settimeout(self.connecttimeout)
-          self.mysocket.connect((self.config.XBMC_HOST, int(self.config.RPC_PORT)))
+          self.mysocket.connect((self.config.KODI_HOST, int(self.config.RPC_PORT)))
           self.mysocket.settimeout(None)
           self.logger.log("RPC connection established with IPv%s" % ("4" if ipversion == socket.AF_INET else "6"))
           self.config.RPC_IPVERSION = "4" if ipversion == socket.AF_INET else "6"
@@ -2032,7 +2034,7 @@ class MyJSONComms(object):
   def getWeb(self):
     if not self.myweb or self.config.WEB_SINGLESHOT:
       if self.myweb: self.myweb.close()
-      self.myweb = httplib.HTTPConnection("%s:%s" % (self.config.XBMC_HOST, self.config.WEB_PORT), timeout=self.connecttimeout)
+      self.myweb = httplib.HTTPConnection("%s:%s" % (self.config.KODI_HOST, self.config.WEB_PORT), timeout=self.connecttimeout)
       self.WEB_LAST_STATUS = -1
       self.WEB_LAST_REASON = ""
       if self.config.DEBUG: self.myweb.set_debuglevel(1)
@@ -7247,7 +7249,7 @@ def rbphdmi(delay):
   hdmimgr.setDaemon(True)
   hdmimgr.start()
 
-  gLogger.debug("Connecting to Kodi on %s..." % gConfig.XBMC_HOST)
+  gLogger.debug("Connecting to Kodi on %s..." % gConfig.KODI_HOST)
   while True:
     try:
       MyJSONComms(gConfig, gLogger).sendJSON({"method": "JSONRPC.Ping"}, "libListen", callback=rbphdmi_listen, checkResult=False)
@@ -7786,7 +7788,7 @@ def checkConfig(option):
           "       enabled and running on the Kodi system you wish to connect.\n\n" \
           "       A connection cannot be established to the following webserver:\n" \
           "       %s:%s\n\n" \
-          "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.WEB_PORT, gConfig.CONFIG_NAME)
+          "       Check settings in properties file %s\n" % (gConfig.KODI_HOST, gConfig.WEB_PORT, gConfig.CONFIG_NAME)
     gLogger.err(MSG)
     return False
 
@@ -7834,7 +7836,7 @@ def checkConfig(option):
           "            Allow programs on other systems to control Kodi\n\n" \
           "       A connection cannot be established to the following JSON-RPC server:\n" \
           "       %s:%s\n\n" \
-          "       Check settings in properties file %s\n" % (gConfig.XBMC_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
+          "       Check settings in properties file %s\n" % (gConfig.KODI_HOST, gConfig.RPC_PORT, gConfig.CONFIG_NAME)
     gLogger.err(MSG)
     return False
 
