@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 2.2.9 (08/02/2016)
+* Add: Profile directory support, inactive until Kodi PR8196 is merged
+* Chg: Cosmetics from un1versal #35
+* Chg: Rebrand. Support `kodi.host` in addition to `xbmc.host`
+
 ##Version 2.2.8 (23/01/2016)
 * Chg: Use imdbnumber to lookup omdbapi.com for tvshows and episodes. Add `@imdb.map.tvtitles=<pattern>=<imdbnumber>[|<pattern>=<imdbnumber>]` to map tvshow titles to specific imdb numbers - useful when the default title+year query matches the wrong tvshow. This mapping should make other translations redundant, although they will continue to work. Once an imdbnumber is available for a tvshow (either from the mapping or title+year lookup), episodes will be queried using the imdbnumber rather than title+year, which might be marginally more efficient.
 
