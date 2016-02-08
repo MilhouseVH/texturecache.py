@@ -179,7 +179,7 @@ class MyConfiguration(object):
     self.TEXTUREDB = self.getValue(config, "dbfile", "Database/Textures13.db")
     self.THUMBNAILS = self.getValue(config, "thumbnails", "Thumbnails")
 
-    self.CURRENT_PROFILE = {"name": "", "lockmode": 0, "thumbnail": ""} # Not yet known
+    self.CURRENT_PROFILE = {"label": "", "lockmode": 0, "thumbnail": "", "directory": "", "tc.profilepath": self.KODI_BASE} # Not yet known
     self.PROFILE_ENABLED = self.getBoolean(config, "profile.enabled", "yes")
     self.PROFILE_MASTER = self.getValue(config, "profile.master", "Master user")
     self.PROFILE_AUTOLOAD = self.getBoolean(config, "profile.autoload", "yes")
@@ -192,6 +192,9 @@ class MyConfiguration(object):
 
     if self.PROFILE_DIRECTORY == "" and self.PROFILE_NAME != self.PROFILE_MASTER:
       self.PROFILE_DIRECTORY = self.PROFILE_NAME
+
+    if self.PROFILE_DIRECTORY != "":
+      self.PROFILE_DIRECTORY = os.path.join("profiles", self.PROFILE_DIRECTORY)
 
     # Read library and textures data in chunks to minimise server/client memory usage
     self.CHUNKED = self.getBoolean(config, "chunked", "yes")
@@ -706,18 +709,14 @@ class MyConfiguration(object):
   def getFilePath(self, filename=""):
     if os.path.isabs(self.THUMBNAILS):
       return os.path.join(self.THUMBNAILS, filename)
-    elif self.PROFILE_DIRECTORY != "":
-      return os.path.join(self.KODI_BASE, "profiles", self.PROFILE_DIRECTORY, self.THUMBNAILS, filename)
     else:
-      return os.path.join(self.KODI_BASE, self.THUMBNAILS, filename)
+      return os.path.join(self.CURRENT_PROFILE["tc.profilepath"], self.THUMBNAILS, filename)
 
   def getDBPath(self):
     if os.path.isabs(self.TEXTUREDB):
       return self.TEXTUREDB
-    elif self.PROFILE_DIRECTORY != "":
-      return os.path.join(self.KODI_BASE, "profiles", self.PROFILE_DIRECTORY, self.TEXTUREDB)
     else:
-      return os.path.join(self.KODI_BASE, self.TEXTUREDB)
+      return os.path.join(self.CURRENT_PROFILE["tc.profilepath"], self.TEXTUREDB)
 
   def NoneIsBlank(self, x):
     return x if x else ""
@@ -1115,7 +1114,7 @@ class MyImageLoader(threading.Thread):
         self.database.deleteItem(item.dbid, None)
         rowexists = False
 
-    # If PRIME is enabled, request the remote URL directly. If not available, don't bother
+    # If DOWNLOAD_PRIME is enabled, request the remote URL directly. If not available, don't bother
     # retrying call to Files.PrepareDownload as it will surely fail.
     if PDRETRY > 0 and url is None and self.config.DOWNLOAD_PRIME:
       isAvailable = self.prime_the_request(item.decoded_filename)
@@ -4030,6 +4029,18 @@ class MyUtility(object):
       return url.replace("%2f", "%5c")
     else: #fslash < bslash:
       return url.replace("%5c", "%2f")
+
+  # Convert a path or filename from Windows or Linux format, to the "host" OS format
+  @staticmethod
+  def PathToHostOS(filename):
+    # Share (eg. "smb://", "nfs://" etc.)
+    if re.search("^.*://.*", filename):
+      return filename.replace("\\", "/")
+
+    if os.sep == "/":
+      return filename.replace("\\", "/")
+    else:
+      return filename.replace("/", "\\")
 
   @staticmethod
   def Top250MovieList():
@@ -7147,7 +7158,7 @@ def showStatus(idleTime=600):
   STATUS = []
 
   if gConfig.JSON_HAS_PROFILE_SUPPORT:
-    STATUS.append("Current Profile: %s" % gConfig.CURRENT_PROFILE["name"])
+    STATUS.append("Current Profile: %s" % gConfig.CURRENT_PROFILE["label"])
 
   REQUEST = {"method": "XBMC.GetInfoBooleans",
              "params": {"booleans": ["System.ScreenSaverActive", "Library.IsScanningMusic", "Library.IsScanningVideo", "System.HasShutdown", "System.CanSuspend"]}}
@@ -7284,7 +7295,7 @@ def MediaLibraryStats(media_list):
   lmedia_list = [m for m in lmedia_list if m not in ["audio", "video"]]
 
   if gConfig.JSON_HAS_PROFILE_SUPPORT:
-    gLogger.out("%-11s: %s" % ("Profile", gConfig.CURRENT_PROFILE["name"]), newLine=True)
+    gLogger.out("%-11s: %s" % ("Profile", gConfig.CURRENT_PROFILE["label"]), newLine=True)
 
   for m in METHODS:
     media = re.search(".*Get(.*)", m).group(1)
@@ -7576,7 +7587,7 @@ def usage(EXIT_CODE):
   pprint("[s, S] <string> | [x, X, f, F] [sql-filter] | Xd | d <id[id id]>] | \
           c [class [filter]] | nc [class [filter]] | lc [class] | lnc [class] | C class filter | \
           [j, J, jd, Jd, jr, Jr] class [filter] | qa class [filter] | qax class [filter] | [p, P] | [r, R] | \
-          imdb movies [filter] | \
+          imdb movies [filter] | imdb tvshows [filter] | \
           purge hashed;unhashed;all pattern [pattern [pattern]] | \
           purgetest hashed;unhashed;all pattern [pattern [pattern]] | \
           fixurls | \
@@ -7595,6 +7606,7 @@ def usage(EXIT_CODE):
           stress-test view-type numitems [pause] [repeat] [cooldown] | \
           setsetting name value | getsetting name | getsettings [pattern] | debugon | debugoff | \
           play item [playerid] | playw item [playerid] | stop [playerid] | pause [playerid] | \
+          profiles | \
           config | version | update | fupdate")
   print("")
   print("  s          Search URL column for partial movie or TV show title. Case-insensitive.")
@@ -7621,7 +7633,7 @@ def usage(EXIT_CODE):
   print("  P          Prune (automatically remove) cached items that don't exist in the media library")
   print("  r          Reverse search to identify \"orphaned\" Thumbnail files that are not present in the texture cache database")
   print("  R          Same as \"r\" (reverse search) but automatically deletes \"orphaned\" Thumbnail files")
-  print("  imdb       Update IMDb fields (default: ratings and votes) on movies - pipe output into set to apply changes to media library. Specify alternate fields with @imdb.fields")
+  print("  imdb       Update IMDb fields (default: ratings and votes) on movies or tvshows - pipe output into set to apply changes to media library. Specify alternate or additional fields with @imdb.fields.movies and @imdb.fields.tvshows")
   print("  purge      Remove cached artwork with URLs containing specified patterns, with or without hash")
   print("  purgetest  Dry-run version of purge")
   print("  fixurls    Output new URLs for movies, sets and TV shows that have URLs containing both forward and backward slashes. Output suitable as stdin for set option")
@@ -7663,6 +7675,8 @@ def usage(EXIT_CODE):
   print("  playw      Play the specified item (on the specified player: null, default, #), and wait until playback ends")
   print("  stop       Stop playback of the specified player, or all currently active players")
   print("  pause      Toggle pause/playback of the specified player, or all currently active players")
+
+  print("  profiles   List available profiles")
 
   print("")
   print("  config     Show current configuration")
@@ -7730,7 +7744,7 @@ def checkConfig(option):
                 "volume", "readfile", "notify",
                 "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
                 "play", "playw", "stop", "pause",
-                "fixurls", "imdb"]
+                "fixurls", "imdb", "profiles"]
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
   optDb = ["s", "S", "x", "X", "Xd", "f", "F",
@@ -7810,9 +7824,10 @@ def checkConfig(option):
         gLogger.log("JSON CAPABILITIES: %s" % gConfig.dumpJSONCapabilities())
 
       if gConfig.JSON_HAS_PROFILE_SUPPORT:
+        gConfig.ALL_PROFILES = getallprofiles(jcomms)
         gConfig.CURRENT_PROFILE = getcurrentprofile(jcomms)
         gLogger.log("CURRENT PROFILE: %s" % gConfig.CURRENT_PROFILE)
-        if gConfig.PROFILE_ENABLED and gConfig.CURRENT_PROFILE["name"] != gConfig.PROFILE_NAME:
+        if gConfig.PROFILE_ENABLED and gConfig.CURRENT_PROFILE["label"] != gConfig.PROFILE_NAME and option != "profiles":
           if not switchprofile(jcomms): return False
           jcomms = MyJSONComms(gConfig, gLogger)
 
@@ -7949,6 +7964,24 @@ def loadprofile(jcomms):
   else:
     return True
 
+def getallprofiles(jcomms):
+  REQUEST = {"method": "Profiles.GetProfiles", "params": {"properties": ["thumbnail", "lockmode" ]}}
+  if gConfig.JSON_HAS_PROFILE_DIRECTORY:
+    REQUEST["params"]["properties"].extend(["directory"])
+
+  data = jcomms.sendJSON(REQUEST, "libProfile", ignoreSocketError=True)
+
+  profiles = {}
+
+  if "result" in data:
+    master = [p for p in data["result"]["profiles"] if p["label"] == gConfig.PROFILE_MASTER]
+    master = None if master == [] else master[0]
+    for profile in data["result"]["profiles"]:
+      setProfileDirectory(master, profile)
+      profiles[profile["label"]] = profile
+
+  return profiles
+
 def getcurrentprofile(jcomms):
   REQUEST = {"method": "Profiles.GetCurrentProfile", "params": {"properties": ["thumbnail", "lockmode" ]}}
   if gConfig.JSON_HAS_PROFILE_DIRECTORY:
@@ -7957,21 +7990,36 @@ def getcurrentprofile(jcomms):
   data = jcomms.sendJSON(REQUEST, "libProfile", ignoreSocketError=True)
 
   if "result" in data:
-    profile = {}
-    profile["name"] = data["result"]["label"]
-    profile["lockmode"] = data["result"]["lockmode"]
-    profile["thumbnail"] = data["result"]["thumbnail"]
-    profile["directory"] = data["result"].get("directory", "")
+    profile = data["result"]
+    master = gConfig.ALL_PROFILES.get(gConfig.PROFILE_MASTER, gConfig.ALL_PROFILES.get("Master user", None))
+    setProfileDirectory(master, profile)
     return profile
   else:
     return gConfig.CURRENT_PROFILE
 
+def setProfileDirectory(master, profile):
+  if gConfig.JSON_HAS_PROFILE_DIRECTORY:
+    master_dir = master["directory"] if master else "special://masterprofile/"
+    if profile["directory"].startswith(master_dir):
+      mdir = MyUtility.PathToHostOS(master_dir)
+      pdir = MyUtility.PathToHostOS(profile["directory"])
+      profile["tc.profilepath"] = pdir[len(mdir):]
+    else:
+      profile["tc.profilepath"] = profile["directory"]
+  else:
+    profile["directory"] = ""
+    profile["tc.profilepath"] = gConfig.PROFILE_DIRECTORY
+
+  # Prefix with KODI_BASE if profile path is not an absolute path
+  if os.path.isabs(profile["tc.profilepath"]) == False:
+    profile["tc.profilepath"] =  os.path.join(gConfig.KODI_BASE, profile["tc.profilepath"])
+
 def switchprofile(jcomms):
-  if gConfig.CURRENT_PROFILE["name"] == gConfig.PROFILE_NAME:
+  if gConfig.CURRENT_PROFILE["label"] == gConfig.PROFILE_NAME:
     return True
   elif gConfig.PROFILE_AUTOLOAD:
-    gLogger.log("SWITCHING PROFILE FROM \"%s\" to \"%s\"" % (gConfig.CURRENT_PROFILE["name"], gConfig.PROFILE_NAME))
-    gLogger.progress("Switching profile from \"%s\" to \"%s\"..." % (gConfig.CURRENT_PROFILE["name"], gConfig.PROFILE_NAME))
+    gLogger.log("SWITCHING PROFILE FROM \"%s\" to \"%s\"" % (gConfig.CURRENT_PROFILE["label"], gConfig.PROFILE_NAME))
+    gLogger.progress("Switching profile from \"%s\" to \"%s\"..." % (gConfig.CURRENT_PROFILE["label"], gConfig.PROFILE_NAME))
 
     if jcomms is None: jcomms = MyJSONComms(gConfig, gLogger)
 
@@ -7987,7 +8035,7 @@ def switchprofile(jcomms):
         time.sleep(1.0)
         jcomms = MyJSONComms(gConfig, gLogger, connecttimeout=1.0)
         gConfig.CURRENT_PROFILE = getcurrentprofile(jcomms)
-        if gConfig.CURRENT_PROFILE["name"] == gConfig.PROFILE_NAME:
+        if gConfig.CURRENT_PROFILE["label"] == gConfig.PROFILE_NAME:
           gLogger.log("SWITCHED TO PROFILE: %s" % gConfig.CURRENT_PROFILE)
           if gConfig.PROFILE_WAIT != 0:
             gLogger.log("Waiting %d seconds for server to stabilise after loading profile..." % gConfig.PROFILE_WAIT)
@@ -8005,10 +8053,18 @@ def switchprofile(jcomms):
       return False
     gLogger.progress("")
   else:
-    gLogger.err("ERROR: Need to switch profiles from \"%s\" to \"%s\", but profile.autoload is not enabled" % (profile["name"], gConfig.PROFILE_NAME), newLine=True)
+    gLogger.err("ERROR: Need to switch profiles from \"%s\" to \"%s\", but profile.autoload is not enabled" % (gConfig.CURRENT_PROFILE["label"], gConfig.PROFILE_NAME), newLine=True)
     return False
 
   return True
+
+def listProfiles():
+  print("%s  %s  %-20s  %-50s  %s" % ("Active", "Lock", "Name", "Device Path", "Local Path"))
+  for p in gConfig.ALL_PROFILES:
+    profile = gConfig.ALL_PROFILES[p]
+    active = "Yes" if profile["label"] == gConfig.CURRENT_PROFILE["label"] else "No "
+    lockmode = "Yes" if profile["lockmode"] != 0 else "No "
+    print(" %s     %s  %-20s  %-50s  %s" % (active, lockmode, profile["label"], profile["directory"], profile["tc.profilepath"]))
 
 def checkUpdate(argv, forcedCheck=False):
   (remoteVersion, remoteHash) = getLatestVersion(argv)
@@ -8070,7 +8126,7 @@ def getLatestVersion(argv):
                    "duplicates", "fixurls", "imdb", "stats",
                    "input", "screenshot", "volume", "readfile", "notify",
                    "setsetting", "getsetting", "getsettings", "debugon", "debugoff",
-                   "version", "update", "fupdate", "config"]:
+                   "version", "update", "fupdate", "config", "profiles"]:
     USAGE  = argv[0]
 
   analytics_url = gConfig.ANALYTICS_GOOD
@@ -8476,6 +8532,9 @@ def main(argv):
     playerStop(int(argv[1]) if len(argv) == 2 else None)
   elif argv[0] == "pause" and len(argv) in [1, 2]:
     playerPause(int(argv[1]) if len(argv) == 2 else None)
+
+  elif argv[0] == "profiles":
+    listProfiles()
 
   else:
     usage(1)
