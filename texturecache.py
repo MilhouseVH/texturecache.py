@@ -4830,7 +4830,7 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     while not error_queue.empty():
       item = error_queue.get()
       error_queue.task_done()
-      name = item.getFullName()[:40]
+      name = addEllipsis(50, item.getFullName())
       gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
       gLogger.log("ERROR ITEM: %s" % item)
 
