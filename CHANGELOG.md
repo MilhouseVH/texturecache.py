@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.0 (07/04 /2016)
+* Fix: Ensure @filter property is respected when filtering `addons`, `genres`, `sets` etc. that don't have native filtering capability
+
 ##Version 2.2.9 (08/02/2016)
 * Add: Profile directory support, inactive until Kodi PR8196 is merged
 * Chg: Cosmetics from un1versal #35

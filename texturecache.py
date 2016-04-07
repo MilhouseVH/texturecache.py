@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.2.9"
+    self.VERSION = "2.3.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4483,11 +4483,12 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
       (section_name, title_name, id_name, data) = jcomms.getData(action, mediatype, filter, extraFields,
                                                                  lastRun=lastRun, secondaryFields=secondaryFields,
                                                                  subType=subtype)
+      filter_name = gConfig.FILTER_FIELD if gConfig.FILTER_FIELD else title_name
       if data and "result" in data and section_name in data["result"]:
         if filter != "":
           filteredData = []
           for d in data["result"][section_name]:
-            if re.search(filter, d[title_name], re.IGNORECASE):
+            if re.search(filter, d[filter_name], re.IGNORECASE):
               filteredData.append(d)
           data["result"][section_name] = filteredData
         if len(data["result"][section_name]) > 0:
@@ -4506,10 +4507,11 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   # Manually filter these mediatypes as JSON doesn't support filtering
   if data and filter and mediatype in ["addons", "agenres", "sets", "pvr.tv", "pvr.radio"]:
-    gLogger.log("Filtering %s on %s = %s" % (mediatype, title_name, filter))
+    filter_name = gConfig.FILTER_FIELD if gConfig.FILTER_FIELD else title_name
+    gLogger.log("Filtering %s on %s = %s" % (mediatype, filter_name, filter))
     filteredData = []
     for d in data:
-      if re.search(filter, d[title_name], re.IGNORECASE):
+      if re.search(filter, d[filter_name], re.IGNORECASE):
         filteredData.append(d)
     data = filteredData
 
