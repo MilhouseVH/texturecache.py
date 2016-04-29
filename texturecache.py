@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.0"
+    self.VERSION = "2.3.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -344,6 +344,8 @@ class MyConfiguration(object):
     self.CACHE_ARTWORK = self.getSimpleList(config, "cache.artwork", "")
     self.CACHE_IGNORE_TYPES = self.getPatternFromList(config, "cache.ignore.types", embedded_urls, allowundefined=True)
     self.PRUNE_RETAIN_TYPES = self.getPatternFromList(config, "prune.retain.types", "")
+
+    self.CACHE_DROP_INVALID_FILE = self.getValue(config, "cache.dropfile", "")
 
     # Fix patterns as we now strip image:// from the URLs, so we need to remove
     # this prefix from any legacy patterns that may be specified by the user
@@ -811,6 +813,7 @@ class MyConfiguration(object):
     print("  cache.extrathumbs = %s" % self.BooleanIsYesNo(self.CACHE_EXTRA_THUMBS))
     print("  cache.videoextras = %s" % self.BooleanIsYesNo(self.CACHE_VIDEO_EXTRAS))
     print("  cache.refresh = %s%s" % (self.NoneIsBlank(self.CACHE_REFRESH), " (%s)" % self.cache_refresh_date_fmt if self.cache_refresh_date_fmt else ""))
+    print("  cache.dropfile = %s" % self.NoneIsBlank(self.CACHE_DROP_INVALID_FILE))
     print("  prune.retain.types = %s" % self.NoneIsBlank(self.getListFromPattern(self.PRUNE_RETAIN_TYPES)))
     print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
     print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
@@ -3801,6 +3804,9 @@ class MyMediaItem(object):
              self.decoded_filename, self.dbid, cachedurl, \
              self.libraryid, self.missingOK)
 
+  def getTypeSingular(self):
+    return self.mtype[:-1]
+
   def getFullName(self):
     if self.episode:
       if self.mtype == "tvshows":
@@ -4431,7 +4437,7 @@ class MyUtility(object):
 #
 def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, rescan=False, \
                       decode=False, ensure_ascii=True, nodownload=False, lastRun=False, \
-                      labels=None, query="", filename=None, wlBackup=True):
+                      labels=None, query="", filename=None, wlBackup=True, drop_items=None):
   if mediatype not in ["addons", "agenres", "vgenres", "albums", "artists", "songs", "musicvideos",
                        "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
     gLogger.err("ERROR: %s is not a valid media class" % mediatype, newLine=True)
@@ -4620,7 +4626,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 
   if data != []:
     if action == "cache":
-      cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, nodownload)
+      cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, nodownload, drop_items)
     elif action == "qa":
       qaData(mediatype, jcomms, database, data, title_name, id_name, rescan)
     elif action == "dump":
@@ -4658,7 +4664,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
 # 1..n threads. Errors will be added to an error queue by the threads, and
 # subsueqently displayed to the user at the end.
 #
-def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, nodownload):
+def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, nodownload, drop_items):
 
   mediaitems = []
   imagecache = {}
@@ -4832,9 +4838,27 @@ def cacheImages(mediatype, jcomms, database, data, title_name, id_name, force, n
     while not error_queue.empty():
       item = error_queue.get()
       error_queue.task_done()
+
+      # Ignore itypes with a period, eg. "cast.thumb" or "season.banner"
+      if item.mtype in ["sets", "movies", "tvshows", "seasons", "episodes"] and item.itype.find(".") == -1:
+        drop_id = "%s#%d" % (item.mtype, item.libraryid)
+        if drop_id not in drop_items:
+          drop_items[drop_id] = {"libraryid": item.libraryid, "title": item.name, "type": item.getTypeSingular(), "items": {}}
+        drop_item = drop_items[drop_id]
+        artwork_items = drop_item["items"]
+        artwork_items["art.%s" % item.itype] = ""
+        drop_item["items"] = artwork_items
+        drop_items[drop_id] = drop_item
+
       name = addEllipsis(50, item.getFullName())
       gLogger.out("[%-10s] [%-40s] %s\n" % (item.itype, name, item.decoded_filename))
       gLogger.log("ERROR ITEM: %s" % item)
+
+def dump_drop_items(drop_items):
+  if gConfig.CACHE_DROP_INVALID_FILE:
+    outfile = codecs.open(gConfig.CACHE_DROP_INVALID_FILE, "wb", encoding="utf-8")
+    outfile.write(json.dumps(drop_items.values(), indent=2, ensure_ascii=True, sort_keys=True))
+    outfile.close()
 
 def showProgress(tRunning, maxItems, swqs, mwqs, ewqs, remaining=0, completed=0, interval=0.0, history=None):
   c = 0
@@ -8320,6 +8344,7 @@ def main(argv):
 
     _filter     = ""
     _query      = ""
+    _drop_items = {}
 
     if argv[0] != "query":
       _filter     = argv[2] if len(argv) > 2 else ""
@@ -8358,7 +8383,8 @@ def main(argv):
         jsonQuery(_action, mediatype=_media, filter=_filter,
                   force=_force, lastRun=_lastRun, nodownload=_nodownload,
                   rescan=_rescan, decode=_decode, ensure_ascii=_ensure_ascii,
-                  extraFields=_extraFields, query=_query)
+                  extraFields=_extraFields, query=_query, drop_items=_drop_items)
+      if _action == "cache": dump_drop_items(_drop_items)
       if _stats: TOTALS.libraryStats(multi=_multi_call, filter=_filter, lastRun=_lastRun, query=_query)
     else:
       usage(1)
