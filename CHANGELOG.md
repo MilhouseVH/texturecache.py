@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 2.3.2 (29/07 /2016)
+* Fix: Issue with season-all posters when quoted filename is using `%2F` instead of `%2f`
+* Add: Support `Input.ShowPlayerProcessInfo`
+* Add: Support `missing.ignore.patterns` - see issue #38
+
 ##Version 2.3.1 (29/04 /2016)
 * Add: `@cache.dropfile` property - this should be a file name to which any uncacheable artwork items will be written. This file can then be run through `texturecache.py set` in order to drop those items from the media library, allowing the artwork to be replaced by addons such as Artwork Downloader, or `texturecache.py qax`.
 

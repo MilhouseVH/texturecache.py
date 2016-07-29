@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.1"
+    self.VERSION = "2.3.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -357,6 +357,8 @@ class MyConfiguration(object):
     self.PRUNE_RETAIN_PREVIEWS = self.getBoolean(config, "prune.retain.previews", "yes")
     self.PRUNE_RETAIN_PICTURES = self.getBoolean(config, "prune.retain.pictures", "no")
     self.PRUNE_RETAIN_CHAPTERS = self.getBoolean(config, "prune.retain.chapters", "yes")
+
+    self.MISSING_IGNORE_PATTERNS = self.getPatternFromList(config, "missing.ignore.patterns", "", allowundefined=True)
 
     self.picture_filetypes    = m_pictureExtensions.split("|")
     self.PICTURE_FILETYPES_EX = self.getFileExtList(config, "picture.filetypes", "")
@@ -818,6 +820,7 @@ class MyConfiguration(object):
     print("  prune.retain.previews = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PREVIEWS))
     print("  prune.retain.pictures = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_PICTURES))
     print("  prune.retain.chapters = %s" % self.BooleanIsYesNo(self.PRUNE_RETAIN_CHAPTERS))
+    print("  missing.ignore.patterns = %s" % self.NoneIsBlank(self.getListFromPattern(self.MISSING_IGNORE_PATTERNS)))
     print("  logfile = %s" % self.NoneIsBlank(self.LOGFILE))
     print("  logfile.verbose = %s" % self.BooleanIsYesNo(self.LOGVERBOSE))
     print("  logfile.unique = %s" % self.BooleanIsYesNo(self.LOGUNIQUE))
@@ -2894,7 +2897,7 @@ class MyJSONComms(object):
 
     return sorted(source_list)
 
-  def getAllFilesForSource(self, mediatype, labels):
+  def getAllFilesForSource(self, mediatype, labels, ignore_list=None):
     if mediatype == "songs":
       mtype = "music"
       includeList = self.config.audio_filetypes
@@ -2930,7 +2933,15 @@ class MyJSONComms(object):
           if isVIDEOTS and ext != ".vob": continue
           if isBDMV    and ext != ".m2ts": continue
 
-          # Avoiding adding file to list more than once, which is possible
+          if ignore_list is not None:
+            ignore_matched = False
+            for ignore in ignore_list:
+              if ignore.search(os.path.basename(file)):
+                ignore_matched = True
+                break
+            if ignore_matched: continue
+
+          # Avoid adding file to list more than once, which is possible
           # if a folder appears within multiple different sources, or the
           # same source is processed more than once...
           if not file in fileList:
@@ -3975,7 +3986,7 @@ class MyUtility(object):
     # Could use dirname() here but the path is quoted
     # and we need to know which slash is being used so
     # that it can be re-appended
-    for qslash in ["%2f", "%5c"]:
+    for qslash in ["%2f", "%2F", "%5c", "%5C"]:
       pos = qpath.rfind(qslash)
       if pos != -1:
         directory = "%s%s" % (qpath[:pos], qslash)
@@ -4018,23 +4029,6 @@ class MyUtility(object):
       return filename.replace("/", "\\")
     else: #fslash < bslash:
       return filename.replace("\\", "/")
-
-  # Same as above, but URL is quoted
-  @staticmethod
-  def fixSlashesQuoted(url):
-    # Share (eg. "smb://", "nfs://" etc.)
-    if re.search("^.*%3a%2f%2f.*", url):
-      return url.replace("%5c", "%2f")
-
-    bslash = url.find("%5c")
-    fslash = url.find("%2f")
-
-    if bslash == -1 or fslash == -1:
-      return url
-    elif bslash < fslash:
-      return url.replace("%2f", "%5c")
-    else: #fslash < bslash:
-      return url.replace("%5c", "%2f")
 
   # Convert a path or filename from Windows or Linux format, to the "host" OS format
   @staticmethod
@@ -4632,7 +4626,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     elif action == "dump":
       jcomms.dumpJSON(data, decode, ensure_ascii)
     elif action == "missing":
-      fileList = jcomms.getAllFilesForSource(mediatype, labels)
+      fileList = jcomms.getAllFilesForSource(mediatype, labels, gConfig.MISSING_IGNORE_PATTERNS)
       missingFiles(mediatype, data, fileList, title_name, id_name)
     elif action == "query":
       queryLibrary(mediatype, query, data, title_name, id_name)
@@ -7336,7 +7330,7 @@ def ProcessInput(args):
   ACTIONS = ["Back", "ContextMenu", "Down",
              "ExecuteAction", "Home", "Info",
              "Left", "Right", "Select",
-             "SendText", "ShowCodec", "ShowOSD",
+             "SendText", "ShowCodec", "ShowOSD", "ShowPlayerProcessInfo",
              "Up", "Pause"]
 
   actionparam = []
