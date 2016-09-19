@@ -1,14 +1,18 @@
 #Changelog
 
-##Version 2.3.2 (29/07 /2016)
+##Version 2.3.3 (19/09/2016)
+* Chg: Remove support for `Input.ShowCodec` after JSON 7.20.1 (see https://github.com/xbmc/xbmc/pull/10192). Currently no replacement...
+* Fix: Allow semicolons in directory names during `qax`, fixes #39
+
+##Version 2.3.2 (29/07/2016)
 * Fix: Issue with season-all posters when quoted filename is using `%2F` instead of `%2f`
 * Add: Support `Input.ShowPlayerProcessInfo`
 * Add: Support `missing.ignore.patterns` - see issue #38
 
-##Version 2.3.1 (29/04 /2016)
+##Version 2.3.1 (29/04/2016)
 * Add: `@cache.dropfile` property - this should be a file name to which any uncacheable artwork items will be written. This file can then be run through `texturecache.py set` in order to drop those items from the media library, allowing the artwork to be replaced by addons such as Artwork Downloader, or `texturecache.py qax`.
 
-##Version 2.3.0 (07/04 /2016)
+##Version 2.3.0 (07/04/2016)
 * Fix: Ensure @filter property is respected when filtering `addons`, `genres`, `sets` etc. that don't have native filtering capability
 
 ##Version 2.2.9 (08/02/2016)

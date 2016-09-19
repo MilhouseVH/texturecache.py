@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.2"
+    self.VERSION = "2.3.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -96,6 +96,8 @@ class MyConfiguration(object):
                                   "exitcode":         (6, 21, 0),
                                   "refreshrefactor":  (6, 27, 0),
                                   "votesnogrouping":  (7,  1, 0),
+                                  "playerprocessinfo":(7, 20, 0),
+                                  "codecinforemoved": (7, 21, 0),
                                   "profiledirectory": (999, 99, 9)
                                  }
 
@@ -534,6 +536,9 @@ class MyConfiguration(object):
 
     #https://github.com/xbmc/xbmc/pull/8080
     self.JSON_VOTES_HAVE_NO_GROUPING = self.HasJSONCapability("votesnogrouping")
+
+    self.JSON_PLAYER_PROCESS_INFO = self.HasJSONCapability("playerprocessinfo")
+    self.JSON_CODEC_INFO_REMOVED = self.HasJSONCapability("codecinforemoved")
 
     # https://github.com/xbmc/xbmc/pull/8196
     self.JSON_HAS_PROFILE_DIRECTORY = self.HasJSONCapability("profiledirectory")
@@ -2514,11 +2519,11 @@ class MyJSONComms(object):
     sources = self.getSources("video")
 
     for directory in sorted(workItems):
-      (mediatype, dpath) = directory.split(";")
+      (mediatype, dpath) = directory.split(";", 1)
       if dpath in sources: rootScan = True
 
     for directory in sorted(workItems):
-      (mediatype, dpath) = directory.split(";")
+      (mediatype, dpath) = directory.split(";", 1)
 
       for disc_folder in [".BDMV$", ".VIDEO_TS$"]:
         re_match = re.search(disc_folder, dpath, flags=re.IGNORECASE)
@@ -7330,8 +7335,14 @@ def ProcessInput(args):
   ACTIONS = ["Back", "ContextMenu", "Down",
              "ExecuteAction", "Home", "Info",
              "Left", "Right", "Select",
-             "SendText", "ShowCodec", "ShowOSD", "ShowPlayerProcessInfo",
+             "SendText", "ShowOSD",
              "Up", "Pause"]
+
+  if not gConfig.JSON_CODEC_INFO_REMOVED:
+    ACTIONS.append("ShowCodec")
+
+  if gConfig.JSON_PLAYER_PROCESS_INFO:
+    ACTIONS.append("ShowPlayerProcessInfo")
 
   actionparam = []
 
