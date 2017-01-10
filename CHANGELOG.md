@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.4 (10/01/2017)
+* Chg: `pvrmanager.enabled` is no longer supported in Kodi 18 - use alternative method to determine if PVR is enabled or not. Should be backward compatible.
+
 ##Version 2.3.3 (19/09/2016)
 * Chg: Remove support for `Input.ShowCodec` after JSON 7.20.1 (see https://github.com/xbmc/xbmc/pull/10192). Currently no replacement...
 * Fix: Allow semicolons in directory names during `qax`, fixes #39

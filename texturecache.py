@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.3"
+    self.VERSION = "2.3.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -7862,10 +7862,10 @@ def checkConfig(option):
           if not switchprofile(jcomms): return False
           jcomms = MyJSONComms(gConfig, gLogger)
 
-      REQUEST = {"method": "XBMC.GetInfoBooleans",
-                 "params": {"booleans": ["System.GetBool(pvrmanager.enabled)"]}}
+      REQUEST = {"method": "PVR.GetProperties",
+                 "params": {"properties": ["available"]}}
       data = jcomms.sendJSON(REQUEST, "libPVR", checkResult=False)
-      gConfig.HAS_PVR = ("result" in data and data["result"].get("System.GetBool(pvrmanager.enabled)", False))
+      gConfig.HAS_PVR = ("result" in data and data["result"].get("available", False))
 
     except socket.error:
       pass
