@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.5 (16/01/2017)
+* Fix: Some PVR channels don't have `channelid`s
+
 ##Version 2.3.4 (10/01/2017)
 * Chg: `pvrmanager.enabled` is no longer supported in Kodi 18 - use alternative method to determine if PVR is enabled or not. Should be backward compatible.
 

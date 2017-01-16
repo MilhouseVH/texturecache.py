@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.4"
+    self.VERSION = "2.3.5"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2100,8 +2100,8 @@ class MyJSONComms(object):
       if not line: break
 
       # Remove trailing newline and - if present, ie. Windows/DOS file format - carriage return
-      if line[-1] in ["\n", "\r"]: line = line[0:-1]
-      if line[-1] in ["\n", "\r"]: line = line[0:-1]
+      if len(line) != 0 and line[-1] in ["\n", "\r"]: line = line[0:-1]
+      if len(line) != 0 and line[-1] in ["\n", "\r"]: line = line[0:-1]
 
       if useWebServer:
         match = self.web_re_result.match(line)
@@ -5059,6 +5059,8 @@ def parseURLData(jcomms, mediatype, mediaitems, imagecache, data, title_name, id
         season = title
         longName = "%s, %s" % (pvrGroup, title)
         episode = None
+        # channelid may be missing for some reason
+        item["channelid"] = item.get("channelid",0)
     else:
       name = title
       longName = name
