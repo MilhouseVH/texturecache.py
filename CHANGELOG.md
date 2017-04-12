@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.6 (12/04/2017)
+* Fix: Handle seasons without episodes
+
 ##Version 2.3.5 (16/01/2017)
 * Fix: Some PVR channels don't have `channelid`s
 

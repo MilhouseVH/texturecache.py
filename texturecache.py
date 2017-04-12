@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.5"
+    self.VERSION = "2.3.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -6822,6 +6822,8 @@ def getAllFiles(keyFunction):
                                "properties":["cast", "art", "file"]}}
 
           episodedata = jcomms.getDataProxy("episodes", REQUEST, uniquecast=UCAST)
+          if "episode" not in episodedata["result"]:
+            continue # ignore seasons without episodes
 
           for episode in episodedata["result"]["episodes"]:
             episodeid = episode["episodeid"]
