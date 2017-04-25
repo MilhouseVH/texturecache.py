@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.6"
+    self.VERSION = "2.3.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2588,7 +2588,7 @@ class MyJSONComms(object):
 
     self.sendJSON(REQUEST, "libClean", callback=self.jsonWaitForCleanFinished, checkResult=False)
 
-  def getDirectoryList(self, path, mediatype="files", properties=["file","lastmodified"], use_cache=True, timestamp=False):
+  def getDirectoryList(self, path, mediatype="files", properties=["file","lastmodified"], use_cache=True, timestamp=False, honour_nomedia=False):
     data = MyUtility.getDirectoryCacheItem(properties, path)
 
     if not data:
@@ -2617,6 +2617,12 @@ class MyJSONComms(object):
 
       if use_cache:
         MyUtility.setDirectoryCacheItem(data, properties, path)
+
+    if honour_nomedia and data and "result" in data and "files" in data["result"]:
+      for f in data["result"]["files"]:
+        if f["label"] == ".nomedia" or f["label"] == ".nomedia.":
+          data["result"]["files"] = []
+          break
 
     return data
 
@@ -2902,7 +2908,7 @@ class MyJSONComms(object):
 
     return sorted(source_list)
 
-  def getAllFilesForSource(self, mediatype, labels, ignore_list=None):
+  def getAllFilesForSource(self, mediatype, labels, ignore_list=None, honour_nomedia=False):
     if mediatype == "songs":
       mtype = "music"
       includeList = self.config.audio_filetypes
@@ -2926,7 +2932,7 @@ class MyJSONComms(object):
       for path in sources:
         self.logger.progress("Walking source: %s" % path)
 
-        for file in self.getFiles(path):
+        for file in self.getFiles(path, honour_nomedia):
           ext = os.path.splitext(file)[1].lower()
           if ext not in includeList: continue
 
@@ -2959,20 +2965,20 @@ class MyJSONComms(object):
 
     return fileList
 
-  def getFiles(self, path):
+  def getFiles(self, path, honour_nomedia=False):
     fileList = []
-    self.getFilesForPath(fileList, path)
+    self.getFilesForPath(fileList, path, honour_nomedia)
     return fileList
 
-  def getFilesForPath(self, fileList, path):
-    data = self.getDirectoryList(path, use_cache=False)
+  def getFilesForPath(self, fileList, path, honour_nomedia=False):
+    data = self.getDirectoryList(path, use_cache=False, honour_nomedia=honour_nomedia)
     if not "result" in data: return
     if not "files" in data["result"]: return
 
     for file in data["result"]["files"]:
       if "file" in file:
         if file["filetype"] == "directory":
-          self.getFilesForPath(fileList, os.path.dirname(file["file"]))
+          self.getFilesForPath(fileList, os.path.dirname(file["file"]), honour_nomedia)
         else:
           fileList.append(file["file"])
 
@@ -4631,7 +4637,7 @@ def jsonQuery(action, mediatype, filter="", force=False, extraFields=False, resc
     elif action == "dump":
       jcomms.dumpJSON(data, decode, ensure_ascii)
     elif action == "missing":
-      fileList = jcomms.getAllFilesForSource(mediatype, labels, gConfig.MISSING_IGNORE_PATTERNS)
+      fileList = jcomms.getAllFilesForSource(mediatype, labels, gConfig.MISSING_IGNORE_PATTERNS, True)
       missingFiles(mediatype, data, fileList, title_name, id_name)
     elif action == "query":
       queryLibrary(mediatype, query, data, title_name, id_name)

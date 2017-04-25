@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.7 (25/04/2017)
+* Chg: Honour `.nomedia` (`.nomedia.` in Windows) file when processing `missing` files - ignore all files and sub-directories in folder. Requires `Settings` > `Media` > `General` > `Show hidden files and directories` to be enabled otherwise hidden files will not be returned by JSON methods.
+
 ##Version 2.3.6 (12/04/2017)
 * Fix: Handle seasons without episodes
 
