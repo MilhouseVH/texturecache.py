@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.7"
+    self.VERSION = "2.3.8"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -1145,16 +1145,23 @@ class MyImageLoader(threading.Thread):
   # Directly request the remote URL returning True if still available
   def prime_the_request(self, url):
     if url is None: return False
-    if not url.startswith("http://"): return True
 
-    domain = url.replace("http://", "").split("/")[0]
-    page = "/" + "/".join(url.replace("http://", "").split("/")[1:])
+    if url.startswith("http://"):
+      domain = url.replace("http://", "").split("/")[0]
+      page = "/" + "/".join(url.replace("http://", "").split("/")[1:])
+      issecure = False
+    elif url.startswith("https://"):
+      domain = url.replace("https://", "").split("/")[0]
+      page = "/" + "/".join(url.replace("https://", "").split("/")[1:])
+      issecure = True
+    else:
+      return True
 
     isAvailable = True
     try:
       PAYLOAD = self.json.sendWeb("GET", page, "primeImage", headers={"User-agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0"}, \
-                                  readAmount=1024, rawData=True, domain=domain)
-      self.logger.log("Primed request of: Domain [%s] with URL [%s], result [%d, %s]" % (domain, page, self.json.WEB_LAST_STATUS, self.json.WEB_LAST_REASON))
+                                  readAmount=1024, rawData=True, domain=domain, useSSL=issecure)
+      self.logger.log("Primed request of: HTTPS=%s, Domain [%s] with URL [%s], result [%d, %s]" % (issecure, domain, page, self.json.WEB_LAST_STATUS, self.json.WEB_LAST_REASON))
       isAvailable = (self.json.WEB_LAST_STATUS == 200 or 300 <= self.json.WEB_LAST_STATUS < 400)
     except:
       isAvailable = False
@@ -2117,13 +2124,16 @@ class MyJSONComms(object):
     self.LOG_REPLAYFILE.close()
     raise IOEndOfReplayLog("End of replay log data")
 
-  def sendWeb(self, request_type, url, id, request=None, headers={}, readAmount=0, timeout=15.0, rawData=False, domain=None):
+  def sendWeb(self, request_type, url, id, request=None, headers={}, readAmount=0, timeout=15.0, rawData=False, domain=None, useSSL=False):
     if request is not None:
       sdata = json.dumps(request)
       self.logger.log("%s.JSON WEB REQUEST: [%s]" % (id, sdata))
     else:
       sdata = None
-      self.logger.log("%s.DIRECT WEB REQUEST: [%s], [%s]" % (id, request_type, url))
+      if domain is not None:
+        self.logger.log("%s.DIRECT WEB REQUEST: [%s], HTTPS=%s, [%s] [%s]" % (id, request_type, useSSL, domain, url))
+      else:
+        self.logger.log("%s.DIRECT WEB REQUEST: [%s], [%s]" % (id, request_type, url))
 
     if self.config.LOG_REPLAY_FILENAME:
       data = self.logreplay(url, True)
@@ -2131,12 +2141,14 @@ class MyJSONComms(object):
       if MyUtility.isPython3 and not rawData:
         data = data.decode("utf-8")
     else:
-      if self.config.WEB_AUTH_TOKEN:
-        headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
-
       if domain:
-        web = httplib.HTTPConnection(domain)
+        if useSSL:
+          web = httplib.HTTPSConnection(domain)
+        else:
+          web = httplib.HTTPConnection(domain)
       else:
+        if self.config.WEB_AUTH_TOKEN:
+          headers.update({"Authorization": "Basic %s" % self.config.WEB_AUTH_TOKEN})
         web = self.getWeb()
 
       web.request(request_type, url, sdata, headers)

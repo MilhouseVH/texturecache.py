@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.8 (29/04/2017)
+* Chg: Add `https` support for web requests (used by primed requests)
+
 ##Version 2.3.7 (25/04/2017)
 * Chg: Honour `.nomedia` (`.nomedia.` in Windows) file when processing `missing` files - ignore all files and sub-directories in folder. Requires `Settings` > `Media` > `General` > `Show hidden files and directories` to be enabled otherwise hidden files will not be returned by JSON methods.
 
