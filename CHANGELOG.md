@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.3.9 (07/05/2017)
+* Fix: Bug introduced in prune by d6ce1b2
+
 ##Version 2.3.8 (29/04/2017)
 * Chg: Add `https` support for web requests (used by primed requests)
 
