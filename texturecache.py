@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.0"
+    self.VERSION = "2.4.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4143,7 +4143,7 @@ class MyUtility(object):
     try:
       omdb_url = "http://www.omdbapi.com/"
       base_url = "%s?apikey=%s" % (omdb_url, apikey)
-      secure_url = "%s?apikey=%s" % (omdb_url, "<yourkey>")
+      redacted_url = "%s?apikey=%s" % (omdb_url, "<yourkey>")
 
       isMovie = isTVShow = isSeason = isEpisode = False
 
@@ -4180,7 +4180,7 @@ class MyUtility(object):
 
       # For TV shows and Episodes, we only need the full plot and fields.
       if not isMovie or plotFull:
-        f = urllib2.urlopen("%s&%s&%s&plot=full" % (base_url, query_url), timeout=qtimeout)
+        f = urllib2.urlopen("%s&%s&plot=full" % (base_url, query_url), timeout=qtimeout)
         data_full = json.loads(f.read().decode("utf-8"))
         f.close()
 
@@ -4195,9 +4195,9 @@ class MyUtility(object):
         data["Plot"] = data_full.get("Plot", None)
 
       if "Response" not in data or data["Response"] == "False":
-        gLogger.log("Failed OMDb API Query [%s&%s] => [%s]" % (secure_url, query_url, data))
+        gLogger.log("Failed OMDb API Query [%s&%s] => [%s]" % (redacted_url, query_url, data))
         if isTVShow and not isEpisode:
-          gLogger.log("Try OMDb API Query [%s&s=%s&type=series] to see possible available titles (hint: year of tvshow is %d)" %(secure_url, title, year))
+          gLogger.log("Try OMDb API Query [%s&s=%s&type=series] to see possible available titles (hint: year of tvshow is %d)" %(redacted_url, title, year))
         return {}
 
       # Convert omdbapi.com fields to Kodi fields - mostly just a case
@@ -4253,11 +4253,11 @@ class MyUtility(object):
 
         except Exception as e:
           gLogger.log("Exception during IMDb processing: reference [%s], key [%s]. msg [%s]" % (reference, key, str(e)))
-          gLogger.log("OMDb API Query [%s&%s]" % (secure_url, query_url))
+          gLogger.log("OMDb API Query [%s&%s]" % (redacted_url, query_url))
       return newdata
     except Exception as e:
       gLogger.log("Exception during IMDb processing: reference [%s], timeout [%s], msg [%s]" % (reference, qtimeout, str(e)))
-      gLogger.log("OMDb API Query [%s&%s]" % (secure_url, query_url))
+      gLogger.log("OMDb API Query [%s&%s]" % (redacted_url, query_url))
       return {}
 
   @staticmethod

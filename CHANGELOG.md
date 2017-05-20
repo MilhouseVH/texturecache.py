@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.4.1 (20/05/2017)
+* Fix: Typo
+
 ##Version 2.4.0 (20/05/2017)
 * Add: Support OMDB API Key, and don't allow `imdb` to be run without a `@omodb.apikey`. Visit www.omdbapi.com to sign up for a non-free API key.
 
