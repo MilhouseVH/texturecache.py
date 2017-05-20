@@ -3,7 +3,7 @@
 
 ################################################################################
 #
-#  Copyright (C) 2013 Neil MacLeod (texturecache@nmacleod.com)
+#  Copyright (C) 2013-present Neil MacLeod (texturecache@nmacleod.com)
 #
 #  This Program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.3.9"
+    self.VERSION = "2.4.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -402,6 +402,8 @@ class MyConfiguration(object):
     self.ADD_SONG_MEMBERS = self.getBoolean(config, "songmembers", "no")
 
     self.PURGE_MIN_LEN = int(self.getValue(config, "purge.minlen", "5"))
+
+    self.OMDB_API_KEY = self.getValue(config, "omdb.apikey", None, True)
 
     self.IMDB_FIELDS_MOVIES = self.getExRepList(config, "imdb.fields.movies", ["rating", "votes", "top250"], True)
     self.IMDB_FIELDS_TVSHOWS = self.getExRepList(config, "imdb.fields.tvshows", ["rating", "votes"], True)
@@ -1243,6 +1245,7 @@ class MyIMDBLoader(threading.Thread):
 
     self.timeout = self.config.IMDB_TIMEOUT
     self.retry = self.config.IMDB_RETRY
+    self.apikey = self.config.OMDB_API_KEY
 
   def run(self):
     while not stopped.is_set():
@@ -1298,13 +1301,13 @@ class MyIMDBLoader(threading.Thread):
           while True:
             if isMovie:
               self.logger.log("Querying OMDb [a=%d, r=%d]: [movie] %s, imdb=%s" % (attempt, self.retry, imdbnumber, title))
-              newimdb = MyUtility.getIMDBInfo("movie", imdbnumber=imdbnumber, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout) if imdbnumber else None
+              newimdb = MyUtility.getIMDBInfo("movie", self.apikey, imdbnumber=imdbnumber, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout) if imdbnumber else None
             elif isTVShow:
               self.logger.log("Querying OMDb [a=%d, r=%d]: [tvshow] %s, %d, imdb=%s" % (attempt, self.retry, title, year, MyUtility.nonestr(imdbnumber)))
-              newimdb = MyUtility.getIMDBInfo("tvshow", imdbnumber=imdbnumber, title=title, year=year, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
+              newimdb = MyUtility.getIMDBInfo("tvshow", self.apikey, imdbnumber=imdbnumber, title=title, year=year, plotFull=self.plotFull, plotOutline=self.plotOutline, qtimeout=self.timeout)
             elif isEpisode:
               self.logger.log("Querying OMDb [a=%d, r=%d]: [episode] %s, %d, S%02d, E%02d, imdb=%s" % (attempt, self.retry, show_title, show_year, season, episode, MyUtility.nonestr(imdbnumber)))
-              newimdb = MyUtility.getIMDBInfo("episode", imdbnumber=imdbnumber, title=show_title, year=show_year, season=season, episode=episode,
+              newimdb = MyUtility.getIMDBInfo("episode", self.apikey, imdbnumber=imdbnumber, title=show_title, year=show_year, season=season, episode=episode,
                                               plotFull=(self.plotFull and not ismultipartquery), plotOutline=(self.plotOutline and not ismultipartquery), qtimeout=self.timeout)
 
             if newimdb is not None:
@@ -4136,9 +4139,11 @@ class MyUtility(object):
       return None
 
   @staticmethod
-  def getIMDBInfo(mediatype, imdbnumber=None, title=None, year=None, season=None, episode=None, plotFull=False, plotOutline=False, qtimeout=15.0):
+  def getIMDBInfo(mediatype, apikey, imdbnumber=None, title=None, year=None, season=None, episode=None, plotFull=False, plotOutline=False, qtimeout=15.0):
     try:
-      base_url = "http://www.omdbapi.com"
+      omdb_url = "http://www.omdbapi.com/"
+      base_url = "%s?apikey=%s" % (omdb_url, apikey)
+      secure_url = "%s?apikey=%s" % (omdb_url, "<yourkey>")
 
       isMovie = isTVShow = isSeason = isEpisode = False
 
@@ -4169,13 +4174,13 @@ class MyUtility(object):
 
       # For movie, get both short plot, and optionally the full plot. Use fields from short query.
       if isMovie:
-        f = urllib2.urlopen("%s?%s&plot=short" % (base_url, query_url), timeout=qtimeout)
+        f = urllib2.urlopen("%s&%s&plot=short" % (base_url, query_url), timeout=qtimeout)
         data_short = json.loads(f.read().decode("utf-8"))
         f.close()
 
       # For TV shows and Episodes, we only need the full plot and fields.
       if not isMovie or plotFull:
-        f = urllib2.urlopen("%s?%s&plot=full" % (base_url, query_url), timeout=qtimeout)
+        f = urllib2.urlopen("%s&%s&%s&plot=full" % (base_url, query_url), timeout=qtimeout)
         data_full = json.loads(f.read().decode("utf-8"))
         f.close()
 
@@ -4190,9 +4195,9 @@ class MyUtility(object):
         data["Plot"] = data_full.get("Plot", None)
 
       if "Response" not in data or data["Response"] == "False":
-        gLogger.log("Failed OMDb API Query [%s?%s] => [%s]" % (base_url, query_url, data))
+        gLogger.log("Failed OMDb API Query [%s&%s] => [%s]" % (secure_url, query_url, data))
         if isTVShow and not isEpisode:
-          gLogger.log("Try OMDb API Query [%s?s=%s&type=series] to see possible available titles (hint: year of tvshow is %d)" %(base_url, title, year))
+          gLogger.log("Try OMDb API Query [%s&s=%s&type=series] to see possible available titles (hint: year of tvshow is %d)" %(secure_url, title, year))
         return {}
 
       # Convert omdbapi.com fields to Kodi fields - mostly just a case
@@ -4248,11 +4253,11 @@ class MyUtility(object):
 
         except Exception as e:
           gLogger.log("Exception during IMDb processing: reference [%s], key [%s]. msg [%s]" % (reference, key, str(e)))
-          gLogger.log("OMDb API Query [%s?%s]" % (base_url, query_url))
+          gLogger.log("OMDb API Query [%s&%s]" % (secure_url, query_url))
       return newdata
     except Exception as e:
       gLogger.log("Exception during IMDb processing: reference [%s], timeout [%s], msg [%s]" % (reference, qtimeout, str(e)))
-      gLogger.log("OMDb API Query [%s?%s]" % (base_url, query_url))
+      gLogger.log("OMDb API Query [%s&%s]" % (secure_url, query_url))
       return {}
 
   @staticmethod
@@ -8397,6 +8402,13 @@ def main(argv):
 
     if _action == "imdb" and _multi_call != []:
       usage(1)
+
+    if _action == "imdb" and not gConfig.OMDB_API_KEY:
+      gLogger.err("ERROR: imdb functionality is no longer available without a valid API key.", newLine=True)
+      gLogger.err("Visit www.omdbapi.com to sign up for an API key, then add", newLine=True)
+      gLogger.err("  omdb.apikey=<yourkey>", newLine=True)
+      gLogger.err("to texturecaceh.cfg", newLine=True)
+      sys.exit(2)
 
     if _multi_call != [] and not gConfig.HAS_PVR:
       for item in ["pvr.tv", "pvr.radio"]:
