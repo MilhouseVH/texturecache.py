@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.4.2 (20/05/2017)
+* Fix: Another typo
+
 ##Version 2.4.1 (20/05/2017)
 * Fix: Typo
 

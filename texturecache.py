@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.1"
+    self.VERSION = "2.4.2"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -8407,7 +8407,7 @@ def main(argv):
       gLogger.err("ERROR: imdb functionality is no longer available without a valid API key.", newLine=True)
       gLogger.err("Visit www.omdbapi.com to sign up for an API key, then add", newLine=True)
       gLogger.err("  omdb.apikey=<yourkey>", newLine=True)
-      gLogger.err("to texturecaceh.cfg", newLine=True)
+      gLogger.err("to texturecache.cfg", newLine=True)
       sys.exit(2)
 
     if _multi_call != [] and not gConfig.HAS_PVR:
