@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.2"
+    self.VERSION = "2.4.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -7680,6 +7680,7 @@ def usage(EXIT_CODE):
   print("  nc         Same as c, but don't actually cache anything (ie. see what is missing). Class can be movies, tags, sets, tvshows, artists, albums or songs.")
   print("  lc         Like c, but only for content added since the modification date of the file specficied in property lastrunfile")
   print("  lnc        Like nc, but only for content added since the modification date of the file specficied in property lastrunfile")
+  print("  lC         Like C, but only for content added since the modification date of the file specficied in property lastrunfile")
   print("  j          Query library by class (movies, tags, sets, tvshows, artists, albums or songs) with optional filter, return JSON results.")
   print("  J          Same as \"j\", but includes extra JSON audio/video fields as defined in properties file.")
   print("  jd, Jd     Functionality equivalent to j/J, but all URLs are decoded")
@@ -7793,7 +7794,7 @@ def checkConfig(option):
   optWeb = ["c", "C", "readfile"]
 
   # Socket (JSON RPC) access
-  optSocket = ["c", "C", "nc", "lc", "lnc", "j", "J", "jd", "Jd", "jr", "Jr",
+  optSocket = ["c", "C", "nc", "lc", "lnc", "lC", "j", "J", "jd", "Jd", "jr", "Jr",
                 "qa","qax","query", "p","P",
                 "remove", "vscan", "ascan", "vclean", "aclean",
                 "directory", "rdirectory", "sources",
@@ -7806,7 +7807,7 @@ def checkConfig(option):
 
   # Database access (could be SQLite, could be JSON - needs to be determined later)
   optDb = ["s", "S", "x", "X", "Xd", "f", "F",
-           "c", "C", "nc", "lc", "lnc", "d",
+           "c", "C", "nc", "lc", "lnc", "lC", "d",
            "r", "R", "p", "P", "purge", "purgetest"]
 
   # These options require direct filesystem access
@@ -8155,7 +8156,7 @@ def getLatestVersion(argv):
 
   # Construct "referer" to indicate usage:
   USAGE = "unknown"
-  if argv[0] in ["c", "C", "nc", "lc", "lnc"]:
+  if argv[0] in ["c", "C", "nc", "lc", "lnc", "lC"]:
     USAGE = "cache"
   elif argv[0] in ["j", "J", "jd", "Jd", "jr", "Jr"]:
     USAGE  = "dump"
@@ -8351,7 +8352,7 @@ def main(argv):
   elif argv[0] == "F" and len(argv) == 2:
     sqlExtract("STATS", filter=argv[1], silent=True)
 
-  elif argv[0] in ["c", "C", "nc", "lc", "lnc",
+  elif argv[0] in ["c", "C", "nc", "lc", "lnc", "lC",
                    "j", "J", "jd", "Jd", "jr", "Jr",
                    "qa", "qax", "query", "imdb"]:
     _stats  = False
@@ -8366,9 +8367,9 @@ def main(argv):
       _action = "cache"
       _stats  = True
 
-    _force      = True if argv[0] == "C" else False
+    _force      = True if argv[0] in ["C", "lC"] else False
     _rescan     = True if argv[0] == "qax" else False
-    _lastRun    = True if argv[0] in ["lc", "lnc"] else False
+    _lastRun    = True if argv[0] in ["lc", "lnc", "lC"] else False
     _nodownload = True if argv[0] in ["nc", "lnc"] else False
     _decode     = True if argv[0] in ["jd", "Jd", "jr", "Jr"] else False
     _ensure_ascii=False if argv[0] in ["jr", "Jr"] else True

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.4.3 (24/05/2017)
+* Add: `lC` option
+
 ##Version 2.4.2 (20/05/2017)
 * Fix: Another typo
 
