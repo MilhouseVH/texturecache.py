@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.3"
+    self.VERSION = "2.4.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2130,7 +2130,7 @@ class MyJSONComms(object):
   def sendWeb(self, request_type, url, id, request=None, headers={}, readAmount=0, timeout=15.0, rawData=False, domain=None, useSSL=False):
     if request is not None:
       sdata = json.dumps(request)
-      self.logger.log("%s.JSON WEB REQUEST: [%s]" % (id, sdata))
+      self.logger.log("%s.JSON WEB REQUEST: [%s] [%s]" % (id, request_type, sdata))
     else:
       sdata = None
       if domain is not None:

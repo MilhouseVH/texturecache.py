@@ -33,7 +33,7 @@
 #
 ################################################################################
 
-#version 0.2.5
+#version 0.2.6
 
 from __future__ import print_function
 import sys, os, codecs, json, argparse, re, shutil
@@ -517,8 +517,8 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
     warning(args, "**UNAVAILABLE**", atype, title, "Prior download failed: %4d" % NOT_AVAILABLE_CACHE[source], source)
     return None
 
-  # Try the filesystem copy if not http...
-  if not source.startswith("http://"):
+  # Try the filesystem copy if not http/https...
+  if not source.startswith("http://") and not source.startswith("https://"):
     newsource = source
     found_file = os.path.exists(newsource)
     debug2(atype, "Lookup non-HTTP file using current URL:", newsource, (" [%s]" % ("SUCCESS" if found_file else "FAIL")))

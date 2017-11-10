@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 2.4.4 (10/11/2017)
+* Add: Additional log information when logging json web requests
+
 ##Version 2.4.3 (24/05/2017)
 * Add: `lC` option
 
