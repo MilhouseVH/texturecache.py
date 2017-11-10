@@ -426,7 +426,7 @@ def processItem(args, mediatype, media, download_items, showTitle=None, showPath
     for artitem in clist:
       if artitem in art:
         aname = art[artitem][8:-1]
-        if aname.startswith("http"):
+        if aname.startswith("http://") or aname.startswith("https://"):
           info(args, "**REMOTE FILE**", artitem, mediatitle, "Remote URL found", aname)
 
   return workitem
@@ -508,7 +508,7 @@ def getImage(args, mediatype, media, title, atype, filename, source, target):
 
   # If it's not a remote file, maybe we just need to copy it from
   # the alt local folder to our output folder?
-  if LOCAL_ALT and not source.startswith("http://"):
+  if LOCAL_ALT and not source.startswith("http://") and not source.startswith("https://"):
     source = pathToAltLocal(source)
 
   # We've already failed to download this URL before, so fail quickly
@@ -732,7 +732,7 @@ def init():
 
   parser.add_argument("-c", "--check", nargs="+", metavar="TYPE", \
                       help="Check the named artwork TYPE(s) - or \"all\" - and warn if any internet \
-                            (http) URLs are detected")
+                            (http/https) URLs are detected")
 
   parser.add_argument("-s", "--season", nargs="*", metavar="TYPE", \
                       help="For TV shows, process season items (default: poster banner landscape)")
