@@ -41,7 +41,7 @@
 #
 ################################################################################
 
-#version 0.2.0
+#version 0.2.1
 
 from __future__ import print_function
 import sys, os, codecs, json, re, argparse
@@ -74,7 +74,7 @@ def processitems(data, keepart, patterns):
   for item in data:
     items = {}
     for a in item.get("art", []):
-      if not a.startswith("tvshow.") and a not in keepart:
+      if not (a.startswith("tvshow.") or a.startswith("season.")) and a not in keepart:
         if not patterns:
           debug("Not Keep: [%-12s] %-50s [%s]" % (a, addEllipsis(50, item.get("title", item.get("label", None))), item["art"][a]))
           items["art.%s" % a] = None
