@@ -1,5 +1,7 @@
+# Changelog
 
-#Changelog
+## 15/05/2018
+* Fix: `discart` and `clearlogo` artwork types now use `-discart` and `-clearlogo` suffix. Use `discart:disc`/`clearart:logo` mappings for old behaviour.
 
 ## 10/11/2017
 * Add: Support for https

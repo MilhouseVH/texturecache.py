@@ -190,8 +190,6 @@ def itemList(aList):
   if aList:
     for aname in aList:
       (aname, value) = (aname, aname) if aname.find(":") == -1 else aname.split(":")
-      if aname == "clearlogo" and value == "clearlogo": value = "logo"
-      if aname == "discart" and value == "discart": value = "disc"
       newList.append({"type": aname, "suffix": value})
   return newList
 
