@@ -109,7 +109,7 @@ class MyConfiguration(object):
     embedded_urls = "^video, ^music"
 
     if MyUtility.isPython3:
-      config = ConfigParser.SafeConfigParser(strict=False)
+      config = ConfigParser.ConfigParser(strict=False)
     else:
       config = ConfigParser.SafeConfigParser()
     self.config = config
