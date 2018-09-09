@@ -98,6 +98,7 @@ class MyConfiguration(object):
                                   "votesnogrouping":  (7,  1, 0),
                                   "playerprocessinfo":(7, 20, 0),
                                   "codecinforemoved": (7, 21, 0),
+                                  "musichasart":      (9, 4,  2),
                                   "profiledirectory": (999, 99, 9)
                                  }
 
