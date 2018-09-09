@@ -147,7 +147,10 @@ class MyConfiguration(object):
       cfg.write("\n")
 
     cfg.seek(0, os.SEEK_SET)
-    config.readfp(cfg)
+    if MyUtility.isPython3:
+      config.read_file(cfg)
+    else:
+      config.readfp(cfg)
 
     # If a specific section is not passed on the command line, check the config
     # to see if there is a default section property, and if not then default to
