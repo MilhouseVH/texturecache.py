@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.4.6 (28/9/2018)
+* Fix: Garbage encoding in Top250 data table
+
+## Version 2.4.5 (9/9/2018)
+* Fix: Compatability issues with Python 3.7.0
+
 ## Version 2.4.4 (10/11/2017)
 * Add: Additional log information when logging json web requests
 

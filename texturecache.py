@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.5"
+    self.VERSION = "2.4.6"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4104,7 +4104,13 @@ class MyUtility(object):
         data = data[spos+8:spos+8+epos+8]
         gLogger.log("Top250: Table data found, %d bytes" % len(data))
 
-        table = ET.fromstring(data)
+        # Clean up garbage encodings
+        newdata = ""
+        for c in data:
+          if ord(c) <= 127:
+            newdata += c
+
+        table = ET.fromstring(newdata)
 
         RE_IMDB = re.compile("/movie/\?([0-9]*)")
 
