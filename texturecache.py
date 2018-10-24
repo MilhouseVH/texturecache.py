@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.6"
+    self.VERSION = "2.4.7"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4107,8 +4107,9 @@ class MyUtility(object):
         # Clean up garbage encodings
         newdata = ""
         for c in data:
-          if ord(c) <= 127:
-            newdata += c
+          if c != "&":
+            if ord(c) <= 127:
+              newdata += c
 
         table = ET.fromstring(newdata)
 

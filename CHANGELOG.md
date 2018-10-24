@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 2.4.7 (24/10/2018)
+* Fix: More garbage encodings in Top250 data table
+
 ## Version 2.4.6 (28/9/2018)
 * Fix: Garbage encoding in Top250 data table
 
