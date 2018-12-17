@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 2.4.8 (17/12/2018)
+* Fix: Resolve Python 3 compatibility issues (fixes #53)
+
 ## Version 2.4.7 (24/10/2018)
 * Fix: More garbage encodings in Top250 data table
 
