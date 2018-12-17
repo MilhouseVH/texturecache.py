@@ -238,7 +238,7 @@ class MyConfiguration(object):
     if (web_user and web_pass):
       token = "%s:%s" % (web_user, web_pass)
       if MyUtility.isPython3:
-        self.WEB_AUTH_TOKEN = base64.encodestring(bytes(token, "utf-8")).decode()
+        self.WEB_AUTH_TOKEN = base64.encodebytes(bytes(token, "utf-8")).decode()
       else:
         self.WEB_AUTH_TOKEN = base64.encodestring(token)
       self.WEB_AUTH_TOKEN = self.WEB_AUTH_TOKEN.replace("\n", "")
