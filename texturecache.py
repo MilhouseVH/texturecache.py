@@ -7144,7 +7144,7 @@ def getDirectoryFiles(jcomms, path, nodirmsg=True, recurse=False):
       gLogger.out("Directory \"%s\" is empty." % path, newLine=True)
     return
 
-  for file in sorted(data["result"]["files"]):
+  for file in sorted(data["result"]["files"], key=(lambda x: x["file"]), reverse=False):
     if "file" in file:
       ftype = file["filetype"]
       fname = file["file"]
