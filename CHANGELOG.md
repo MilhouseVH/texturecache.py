@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 2.4.9 (26/02/2019)
+* Fix: Removal of musicvideos (fixes #54)
+
 ## Version 2.4.8 (17/12/2018)
 * Fix: Resolve Python 3 compatibility issues (fixes #53)
 

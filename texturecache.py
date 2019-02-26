@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.8"
+    self.VERSION = "2.4.9"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -2851,7 +2851,7 @@ class MyJSONComms(object):
 
   def getMusicVideoName(self, videoid):
     REQUEST = {"method":"VideoLibrary.GetMusicVideoDetails",
-               "params":{"movieid": videoid, "properties":["title"]}}
+               "params":{"musicvideoid": videoid, "properties":["title"]}}
     data = self.sendJSON(REQUEST, "libMusicVideo", checkResult=False)
     if "result" in data and "musicvideodetails" in data["result"]:
       m = data["result"]["musicvideodetails"]
