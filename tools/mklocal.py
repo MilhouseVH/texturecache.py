@@ -457,24 +457,34 @@ def processArtwork(args, mediatype, media, title, atype, filename, currentname, 
   # See if we already have a file of the desired artwork type, either in
   # jpg or png format. If found, use it as the source for this artwork type.
 
+  existinglocal = False
+
   # First, check folder using single-file naming convention (if enabled)
   if args.singlefolders:
     for source_type in [".png", ".jpg"]:
       target = "%s%s" % (pathname_single, source_type)
       if os.path.exists(target):
         debug2(atype, "Found pre-existing local file:", target)
-        target = pathToXBMC(target)
-        debug2(atype, "Converting local filename to Kodi path:", target)
-        return target
+        if args.overwrite:
+          existinglocal = True
+          break
+        else:
+          target = pathToXBMC(target)
+          debug2(atype, "Converting local filename to Kodi path:", target)
+          return target
 
-  # Next, check folder using multi-file naming convention
-  for source_type in [".png", ".jpg"]:
-    target = "%s%s" % (pathname_multi, source_type)
-    if os.path.exists(target):
-      debug2(atype, "Found pre-existing local file:", target)
-      target = pathToXBMC(target)
-      debug2(atype, "Converting local filename to Kodi path:", target)
-      return target
+  if not existinglocal:
+    # Next, check folder using multi-file naming convention
+    for source_type in [".png", ".jpg"]:
+      target = "%s%s" % (pathname_multi, source_type)
+      if os.path.exists(target):
+        debug2(atype, "Found pre-existing local file:", target)
+        if args.overwrite:
+          break
+        else:
+          target = pathToXBMC(target)
+          debug2(atype, "Converting local filename to Kodi path:", target)
+          return target
 
   # If we don't currently have a remote source, return nothing
   if not currentname: return None
@@ -721,6 +731,9 @@ def init():
   parser.add_argument("--ignorebadprefix", action="store_true", \
                       help="Don't display a warning for media files with a path that does not match \
                             that set by --prefix")
+
+  parser.add_argument("--overwrite", action="store_true", \
+                      help="Overwrite existing local artwork if the remote file download is successful")
 
   parser.add_argument("-a", "--artwork", nargs="+", metavar="TYPE", \
                       help="Artwork TYPE(s) for download, eg. \"--artwork  discart banner\" \

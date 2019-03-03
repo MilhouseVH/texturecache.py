@@ -1,5 +1,8 @@
 # Changelog
 
+## 03/03/2019
+* Add: `--overwrite` option to download then overwrite existing artwork files. Fixes #56.
+
 ## 15/05/2018
 * Fix: `discart` and `clearlogo` artwork types now use `-discart` and `-clearlogo` suffix. Use `discart:disc`/`clearart:logo` mappings for old behaviour.
 
