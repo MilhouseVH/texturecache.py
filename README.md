@@ -3,7 +3,7 @@ texturecache.py
 
 Utility to manage and update the local Kodi texture cache (Texture##.db and Thumbnails folder), view content of the Kodi media library using JSON calls (so works with MySQL too), and also cross reference cache with library to identify space saving opportunities or problems.
 
-##Summary of features
+## Summary of features
 
 *Typically a lower case option is harmless, an uppercase version may delete/modify data*
 
@@ -95,17 +95,18 @@ Utility to manage and update the local Kodi texture cache (Texture##.db and Thum
 
 **[update]** Manually update to latest available version if not already installed. Only required if `checkupdate` or `autoupdate` properties are set to `no` as by default the script will automatically update itself (if required) to the latest version whenever it is executed.
 
-##Installation instructions
+## Installation instructions
 
-####Installation from distro packages
+#### Installation from distro packages
+
 * ![logo](http://www.monitorix.org/imgs/archlinux.png "arch logo")Arch: in the [AUR](https://aur.archlinux.org/packages/xbmc-texturecache).
 
-####Installation from source
+#### Installation from source
 Download the single Python file required from Github. A default properties file is available on Github, rename this to texturecache.cfg in order to use it.
 
 To download the script at the command line:
-####Code:
-```
+
+```bash
 wget https://raw.githubusercontent.com/MilhouseVH/texturecache.py/master/texturecache.py -O texturecache.py
 chmod +x ./texturecache.py
 ```
@@ -114,18 +115,18 @@ If you experience a certificate error, try adding "--no-check-certificate" to th
 
 If you are using OpenELEC which has a pretty basic wget that doesn't support HTTPS downloads, instead use `curl`:
 
-####Code:
-```
+```bash
 curl https://raw.githubusercontent.com/MilhouseVH/texturecache.py/master/texturecache.py -o texturecache.py
 chmod +x ./texturecache.py
 ```
 
-#####ATV2 (iOS) users
+##### ATV2 (iOS) users
 
 Python 2.6+ is required to run this script, and although Python can be installed on iOS using `apt-get install python`, the version installed (typically v2.5.1 - check with `python --version`) is very old and lacks language features required by the script. It is possible to install a more recent [Python 2.7.3 package](http://code.google.com/p/yangapp/downloads/detail?name=python_2.7.3-3_iphoneos-arm.deb&can=2&q=) as follows:
 
-####Code:
-```
+#### Code:
+
+```bash
 ssh root@YOUR.ATV2.IP.ADDRESS
 rm -f python*.deb
 wget http://yangapp.googlecode.com/files/python_2.7.3-3_iphoneos-arm.deb
@@ -133,7 +134,7 @@ dpkg -i python*.deb
 rm python*.deb
 ```
 
-##Basic Example usage
+## Basic Example usage
 Let's say the poster image for the "Dr. No" movie is corrupted, and it needs to be deleted so that Kodi will automatically re-cache it (hopefully correctly) next time it is displayed:
 
 1) Execute: `./texturecache.py s "Dr. No"` to search for my Dr. No related artwork
@@ -152,7 +153,7 @@ Now it's simply a matter of browsing the Dr. No movie in the Kodi GUI, and the i
 
 But wait, there's more... another method is to force images to be re-cached, automatically. `./texturecache.py C movies "Dr. No"` will achieve the same result as the above three steps, including re-caching the deleted items so that it is already there for you in the GUI.
 
-##Media Classes
+## Media Classes
 
 The utility has several options that operate on media library items grouped into classes:
 
@@ -175,111 +176,111 @@ The following "meta" media classes can also be used in place of one of the above
 * all _(equivalent to: `addons` + `agenres` + `vgenres` + `pvr.tv` + `pvr.radio` + `albums` + `artists` + `songs` + `movies` + `sets` + `tvshows`)_
 
 In most cases, when performing an operation it is possible to specify a filter to further restrict processing/selection of particular items, for example, to extract the default media library details for all movies whose name contains "zombie":
-####Code:
-```
+
+```bash
 ./texturecache.py j movies zombie
 ```
 
-##Tag Support
+## Tag Support
 When using the tags media class, you can apply a filter that uses logical operators such as `and` and `or` to restrict the selection criteria.
 
 For example, to cache only those movies tagged with either action and adventure:
-####Code:
-```
+
+```bash
 ./texturecache.py c tags "action and adventure"
 ```
 
 Or, only those movies tagged with either comedy or family:
-####Code:
-```
+
+```bash
 ./texturecache.py c tags "comedy or family"
 ```
 
 If no filter is specified, all movies with a tag will be selected.
 
 
-##Format of database records
+## Format of database records
 
 When displaying rows from the texture cache database, the following fields (columns) are shown:
-####Code:
-```
+
+```csv
 rowid, cachedurl, height, width, usecount, lastusetime, lasthashcheck, url
 ```
 
-##Additional usage examples
+## Additional usage examples
 
-#####Caching all of the artwork for your TV shows
-####Code:
-```
+##### Caching all of the artwork for your TV shows
+
+```bash
 ./texturecache.py c tvshows
 ```
 
-#####Viewing your most recently accessed artwork
-####Code:
-```
+##### Viewing your most recently accessed artwork
+```bash
 ./texturecache.py x | sort -t"|" -k6
 ```
+
 or
-####Code:
-```
+
+```bash
 ./texturecache.py x "order by lastusetime asc"
 ```
 
-#####Viewing your Top 10 accessed artwork
-####Code:
-```
+##### Viewing your Top 10 accessed artwork
+
+```bash
 ./texturecache.py x | sort -t"|" -k5r | head -10
 ```
 or
-####Code:
-```
+```bash
 ./texturecache.py x "order by usecount desc" 2>/dev/null | head -10
 ```
 
-#####Identifying cached artwork for deletion
+##### Identifying cached artwork for deletion
 
 Use texturecache.py to identify artwork for deletion, then cutting and pasting the matched ids into the "d" option or via a script:
 
 For example, to delete those small remote thumbnails you might have viewed when downloading artwork (and which still clutter up your cache):
-####Code:
-```
+
+```bash
 ./texturecache.py s "size=thumb"
 ```
 
 then cut & paste the ids as an argument to `./texturecache.py d id [id id]`
 
 And the same, but automatically:
-####Code:
-```
+
+```bash
 IDS=$(./texturecache.py s "size=thumb" 2>&1 1>/dev/null | cut -b19-)
 [ -n "$IDS" ] && ./texturecache.py d $IDS
 ```
 
 Or when removing artwork that is no longer needed, simply let texturecache.py work it all out:
-####Code:
+
 ```./texturecache.py P```
 
-#####Delete artwork that has not been accessed after a particular date
-####Code:
+##### Delete artwork that has not been accessed after a particular date
+
 ```
 ./texturecache.py x "where lastusetime <= '2013-03-05'"
 ```
 
 or hasn't been accessed more than once:
-####Code:
+#### Code:
+
 ```
 ./texturecache.py x "where usecount <= 1"
 ```
 
-#####Query the media library, returning JSON results
+##### Query the media library, returning JSON results
 
 First, let's see the default fields for a particular media class (movies), filtered for a specific item (avatar):
-####Code:
+
 ```
 ./texturecache.py jd movies "avatar"
 ```
-####Result:
-```
+#### Result:
+```json
 [
   {
     "movieid": 22,
@@ -296,12 +297,12 @@ First, let's see the default fields for a particular media class (movies), filte
 ```
 
 With `extrajson.movies = trailer, streamdetails, file` in the properties file, here is the same query but now returning the extra fields too:
-####Code:
+
 ```
 ./texturecache.py Jd movies "Avatar"
 ```
-####Result:
-```
+#### Result:
+```json
 [
   {
     "movieid": 22,
@@ -338,10 +339,10 @@ With `extrajson.movies = trailer, streamdetails, file` in the properties file, h
 ]
 ```
 
-##Setting fields in the media library
+## Setting fields in the media library
 
 Specify values on the command line to set fields for a single media library item. For example:
-```
+```shell
 ./texturecache.py set movie 312 art.clearlogo "nfs://myserver/movies/thismovie-logo.png" \
                                 art.clearart "nfs://myserver/movies/thismovie-clearart.png" \
                                 playcount 12 \
@@ -352,7 +353,7 @@ Specify values on the command line to set fields for a single media library item
 Specify a value of null or None for a field value to remove that field from the database.
 
 Updates may also be batched. Create an input file using JSON notation, for example:
-```
+```json
 [
   {
     "libraryid": 1,
@@ -386,13 +387,13 @@ Updates may also be batched. Create an input file using JSON notation, for examp
 
 then pipe the file as input to texturecache.py with the set or testset option (no other parameters required - all additional information will be read from stdin).
 
-```
+```bash
 cat /tmp/movies.dat | ./texturecache.py set
 ```
 
 Required fields are `libraryid`, `type` and `items`. `title` is optional. Fields within `items` will be updated in the media library as per the command line equivalent.
 
-##Directory Paths
+## Directory Paths
 In addition to physical (smb://, nfs:// etc.) paths, the following virtual paths (or their sub-directories) can be used when calling the `directory` and `rdirectory` options:
 * virtualpath://upnproot/
 * musicdb://
@@ -408,13 +409,13 @@ In addition to physical (smb://, nfs:// etc.) paths, the following virtual paths
 * upnp://
 * plugin://
 
-##Optional Properties File
+## Optional Properties File
 
 By default the script will run fine on distributions where the `.xbmc/userdata` folder is within the users Home folder (ie. `userdata=~/.xbmc/userdata`). To override this default, specify a properties file with a different value for the `userdata` property.
 
 The properties file should be called `texturecache.cfg`, and will be looked for in the current working directory, then in the same directory as the texturecache.py script. What follows is an example properties file showing the default values:
 
-```
+```properties
 sep = |
 userdata = ~/.xbmc/userdata
 dbfile = Database/Textures13.db
@@ -528,7 +529,7 @@ Specify a comma delimited list of pattherns in `singlethread.urls` to force down
 
 When identifying `missing` media files (ie. files that are not present in the media library), additional audio and video file types can be included by specifying a comma delimited list of file extensions for `audio.filetypes` and `video.filetypes` respectively (eg. `wmv, ogg`). All current Kodi audio and video file extensions are supported by default.
 
-##Command Line Properties
+## Command Line Properties
 
 As an alterantive or in addition to a properties file, properties may be specified on the command line, using the syntax `@<key>=<value>` - such command line property values will override any matching property retrieved from the properties file.
 
@@ -536,25 +537,28 @@ In addition, the name of the properties file may be specified using the `@config
 
 Also, a specific property section may be used, `@section=name`, allowing multiple clients to be configured within a single property file, sharing a "global" (default, un-named) section with unique properties specified within each section. For example:
 
-  <pre>webserver.port = 8080
-  webserver.username = username
-  webserver.password = password
-  extrajson.movies = streamdetails, file, mpaa, rating, plot
+```ini
+webserver.port = 8080
+webserver.username = username
+webserver.password = password
+extrajson.movies = streamdetails, file, mpaa, rating, plot
 
-  [lounge]
-  xbmc.host = 192.168.0.4
-  download.threads = 10
-  cache.castthumb = yes
-  lastrunfile=/tmp/lrf_lounge.dat
+[lounge]
+xbmc.host = 192.168.0.4
+download.threads = 10
+cache.castthumb = yes
+lastrunfile=/tmp/lrf_lounge.dat
 
-  [bedroom]
-  xbmc.host = 192.168.0.8
-  download.threads = 2
-  cache.castthumb = no
-  lastrunfile=/tmp/lrf_bedroom.dat</pre>
-
-  then: `texturecache.py lc movies @config=/home/user/cache.cfg @section=lounge`
-
+[bedroom]
+xbmc.host = 192.168.0.8
+download.threads = 2
+cache.castthumb = no
+lastrunfile=/tmp/lrf_bedroom.dat</pre>
+```
+then: 
+```bash
+texturecache.py lc movies @config=/home/user/cache.cfg @section=lounge
+```
 
 Run the script without arguments for basic usage, and with `config` option to view current configuration information.
 
