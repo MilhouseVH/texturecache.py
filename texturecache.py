@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.4.9"
+    self.VERSION = "2.5.0"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -4256,6 +4256,9 @@ class MyUtility(object):
           elif newkey == "rated":
             newkey = "mpaa"
             newdata[newkey] = "Rated %s" % data[key]
+          elif newkey == "released":
+            newkey = "premiered"
+            newdata[newkey] = datetime.datetime.strptime(data[key].replace(" ","-"), '%d-%b-%Y').strftime("%Y-%m-%d")
           else:
             newdata[newkey] = data[key]
 
@@ -8624,6 +8627,9 @@ def main(argv):
   sys.exit(EXIT_CODE)
 
 if __name__ == "__main__":
+  #https://mail.python.org/pipermail/python-list/2015-October/697689.html - threading bug in Python2
+  tmp = datetime.datetime.strptime('01-01-1970', '%d-%m-%Y')
+
   try:
     stopped = threading.Event()
     main(sys.argv[1:])

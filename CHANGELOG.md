@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 2.5.0 (12/04/2019)
+* Add: Support OMDB `Released` field (`premiered` in Kodi). Enable with `@imdb.fields.movie=+premiered`.
+
 ## Version 2.4.9 (26/02/2019)
 * Fix: Removal of musicvideos (fixes #54)
 
