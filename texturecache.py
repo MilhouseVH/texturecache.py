@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.5.0"
+    self.VERSION = "2.5.1"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -850,7 +850,7 @@ class MyConfiguration(object):
     print("  subtitle.filetypes = %s" % self.NoneIsBlank(", ".join(self.SUBTITLE_FILETYPES_EX)))
     print("  watched.overwrite = %s" % self.BooleanIsYesNo(self.WATCHEDOVERWRITE))
     print("  network.mac = %s" % self.NoneIsBlank(self.MAC_ADDRESS))
-    print("  imdb.fields.movie = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_MOVIES)))
+    print("  imdb.fields.movies = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_MOVIES)))
     print("  imdb.fields.tvshows = %s" % self.NoneIsBlank(", ".join(self.IMDB_FIELDS_TVSHOWS)))
     print("  imdb.ignore.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_IGNORE_TVTITLES)))
     print("  imdb.map.tvtitles = %s" % self.NoneIsBlank("|".join(self.IMDB_MAP_TVTITLES)))
@@ -4255,7 +4255,10 @@ class MyUtility(object):
               newdata[newkey] = format(int(MyUtility.getDigits(data[key])), ",d").replace(",", gConfig.IMDB_GROUPING)
           elif newkey == "rated":
             newkey = "mpaa"
-            newdata[newkey] = "Rated %s" % data[key]
+            if data[key] == None or data[key] in ["Not Rated", "Unrated"]:
+              newdata[newkey] = "Not Rated"
+            else:
+              newdata[newkey] = "Rated %s" % data[key]
           elif newkey == "released":
             newkey = "premiered"
             newdata[newkey] = datetime.datetime.strptime(data[key].replace(" ","-"), '%d-%b-%Y').strftime("%Y-%m-%d")
@@ -6171,8 +6174,13 @@ def _ProcessIMDB(mediatype, jcomms, data, plotFull, plotOutline, movies250, imdb
     for field in imdbfields:
       # Don't attempt to change title of tvshows
       if mediatype == "tvshows" and field in ["title"]: continue
+
       # Don't attempt to set genre for episodes - only works at the tvshow level
       if mediatype == "episodes" and field in ["genre"]: continue
+
+      # Don't overwrite a movie rating if the movie already has a rating (eg. foreign movie with manually assigned rating)
+      if mediatype == "movies" and field == "mpaa":
+        if item.get(field, None) not in ["Rated Not Rated", "Not Rated", "Rated Unrated", "Unrated", "NR", "null"]: continue
 
       if field in newimdb:
         if field not in item or item[field] != newimdb[field] and newimdb[field] is not None:

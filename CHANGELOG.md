@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 2.5.1 (21/04/2019)
+* Fix: `mpaa` rating when `Not Rated` - don't prefix with `Rated `
+* Chg: Do not overwrite an existing movie rating when the imdb rating is `Not Rated` (or some similar variation)
+
 ## Version 2.5.0 (12/04/2019)
 * Add: Support OMDB `Released` field (`premiered` in Kodi). Enable with `@imdb.fields.movie=+premiered`.
 
