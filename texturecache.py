@@ -2297,7 +2297,10 @@ class MyJSONComms(object):
           messages = []
           for m in self.parseResponse(udata):
             if self.logger.LOGGING and messages == []:
-              self.logger.log2("%s.PARSING JSON DATA: " % id, udata, maxLen=256)
+              if udata.find("\n") != -1:
+                self.logger.log2("%s.PARSING JSON DATA: " % id, udata.replace("\t", "").replace("\n", ""), maxLen=256)
+              else:
+                self.logger.log2("%s.PARSING JSON DATA: " % id, udata, maxLen=256)
             messages.append(m)
 
           # Discard these buffers which could potentially be very large, as they're no longer required
