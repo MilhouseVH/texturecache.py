@@ -258,7 +258,7 @@ class MyConfiguration(object):
     self.DOWNLOAD_PAYLOAD = self.getBoolean(config, "download.payload","yes")
 
     self.DOWNLOAD_THREADS = {}
-    for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "pvr.tv", "pvr.radio"]:
+    for x in ["addons", "albums", "artists", "songs", "movies", "sets", "tags", "tvshows", "musicvideos", "pvr.tv", "pvr.radio"]:
       temp = int(self.getValue(config, "download.threads.%s" % x, self.DOWNLOAD_THREADS_DEFAULT))
       self.DOWNLOAD_THREADS["download.threads.%s" % x] = temp
 
