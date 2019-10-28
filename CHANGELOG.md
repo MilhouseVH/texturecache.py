@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 2.5.2 (28/10/2019)
+* Fix: missing musicvideos key
+* Add: support pretty formatted JSON responses
+
 ## Version 2.5.1 (21/04/2019)
 * Fix: `mpaa` rating when `Not Rated` - don't prefix with `Rated `
 * Chg: Do not overwrite an existing movie rating when the imdb rating is `Not Rated` (or some similar variation)
