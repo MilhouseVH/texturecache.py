@@ -4005,6 +4005,18 @@ class MyUtility(object):
 
     return data
 
+  # Cross-platform basename
+  # os.path.basename() doesn't work when
+  # processing a Windows filename on Linux
+  @staticmethod
+  def basename(filename):
+    # If X:\ then assume a Windows filename
+    if filename[1:].startswith(':\\'):
+      return filename.split('\\')[-1]
+
+    # Otherwise assume Linux or network (smb:// etc.) based filename
+    return filename.split('/')[-1]
+
   # Join an unquoted filename to a quoted path,
   # returning a quoted result.
   #
@@ -4029,7 +4041,7 @@ class MyUtility(object):
     else:
       return None
 
-    fname = urllib2.quote(os.path.basename(filename), "")
+    fname = urllib2.quote(MyUtility.basename(filename), "")
 
     return "%s%s/" % (directory, fname)
 
