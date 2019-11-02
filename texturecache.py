@@ -2631,8 +2631,10 @@ class MyJSONComms(object):
             # Real directories won't have extensions, but .m3u and .pls playlists will
             # leading to infinite recursion, so fix the filetype so as not to try and
             # traverse playlists.
-            if f["filetype"] == "directory" and os.path.splitext(f["file"])[1] != "":
-              f["filetype"] = "file"
+            if f["filetype"] == "directory":
+              extension = os.path.splitext(f["file"])[1]
+              if extension and extension.find("/") != -1 and extension.find("\\") != -1:
+                f["filetype"] = "file"
 
             # Convert last modified date/time to epoch
             if timestamp: self.setTimeStamp(f)
