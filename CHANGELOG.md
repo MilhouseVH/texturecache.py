@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 2.5.3 (01/03/2020)
+* Fix: ignore/don't cache icon artwork type (ie. ^DefaultVideo.png) until there's a better solution
+
 ## Version 2.5.2 (28/10/2019)
 * Fix: missing musicvideos key
 * Add: support pretty formatted JSON responses

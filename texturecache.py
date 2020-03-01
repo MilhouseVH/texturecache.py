@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.5.2"
+    self.VERSION = "2.5.3"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -106,7 +106,7 @@ class MyConfiguration(object):
 
     namedSection = False
     serial_urls = "assets\.fanart\.tv"
-    embedded_urls = "^video, ^music"
+    embedded_urls = "^video, ^music, ^DefaultVideo.png"
 
     if MyUtility.isPython3:
       config = ConfigParser.ConfigParser(strict=False)
