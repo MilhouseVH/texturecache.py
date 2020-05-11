@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 2.5.4 (11/05/2020)
+* Fix: Fix isatty() when attribute not available
+
 ## Version 2.5.3 (01/03/2020)
 * Fix: ignore/don't cache icon artwork type (ie. ^DefaultVideo.png) until there's a better solution
 

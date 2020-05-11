@@ -60,7 +60,7 @@ lock = threading.RLock()
 class MyConfiguration(object):
   def __init__(self, argv):
 
-    self.VERSION = "2.5.3"
+    self.VERSION = "2.5.4"
 
     self.GITHUB = "https://raw.github.com/MilhouseVH/texturecache.py/master"
     self.ANALYTICS_GOOD = "http://goo.gl/BjH6Lj"
@@ -912,7 +912,10 @@ class MyLogger():
     self.DEBUG = False
     self.VERBOSE = False
 
-    self.ISATTY = sys.stdout.isatty()
+    try:
+      self.ISATTY = sys.stdout.isatty()
+    except:
+      self.ISATTY = False
 
     #Ensure stdout/stderr use utf-8 encoding...
     if MyUtility.isPython3_1:
